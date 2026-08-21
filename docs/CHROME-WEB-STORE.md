@@ -563,13 +563,50 @@ exposes, and the override only selects among them — say so if asked.
 - [x] Store assets regenerated — the drawn explainer that said "two modes" is
       gone entirely, and the listing is down to one poster and one real
       capture (§2)
-- [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
+- [ ] `npm test` green, then `npm run pack`
 
-The upload zip only needs what the extension actually loads: `manifest.json`,
-`src/`, `icons/`, `_locales/`. The backend and the tooling are for you, not for
-Chrome, and shipping them only widens what a reviewer has to read. `_locales/`
-is not optional: a manifest declaring `default_locale` without it is refused at
-load, so an upload that leaves it out fails before anyone reads a line of it.
+### Building the upload
+
+```
+npm run pack        # -> dist/clone-blocker-<version>.zip
+```
+
+**The store takes a ZIP, not a CRX.** A CRX is the self-hosting format: it
+carries a signature made with a key you generate, and the extension id is
+derived from that key. The store issues its own key and its own id, so a CRX
+is rejected at upload — and generating one locally would only create a private
+key somebody then has to keep safe, for no benefit. (If you ever want one for
+sideloading, `chrome.exe --pack-extension=<dir>` makes it from the same files.)
+
+`tools/pack.js` includes an **allowlist** — `manifest.json`, `src/`, `icons/`,
+`_locales/` — rather than the tree minus exclusions. That is everything the
+extension loads and nothing else. An exclusion list is the wrong way round for
+this job: it ships whatever nobody thought to name, and the things nobody
+thinks to name are exactly the `.env` files and the keys. The backend and the
+tooling are for you, not for Chrome, and shipping them only widens what a
+reviewer has to read. `_locales/` is not optional: a manifest declaring
+`default_locale` without it is refused at load, so an upload that leaves it out
+fails before anyone reads a line of it.
+
+It refuses to write anything unless all of this holds:
+
+- `tools/check.js` passes (pass `--skip-check` only if you know why)
+- `manifest_version` is 3, the version is a store-legal dotted integer, and
+  there is no `key` or `update_url` — both fight the id the store assigns
+- every locale defines `appName` and `appDesc`, within 45 and 132 characters.
+  The store reads the listing name and description straight off the manifest,
+  so a `__MSG__` that does not resolve ships an empty listing in that language
+- every path the manifest names is actually in the zip, and every
+  `web_accessible_resources` glob matches something
+- no shipped file contains a value read out of `.env`, a token or key shape, a
+  `localhost`/`127.0.0.1` address, or the emulator project id
+- the built-in list URL is `https` and points at production
+
+The zip is deterministic — entries sorted, timestamps fixed — so the same tree
+builds byte-identically and the printed sha256 is worth comparing.
+
+`dist/` is gitignored. A stale zip in the tree is a zip somebody eventually
+uploads by mistake.
 
 ---
 

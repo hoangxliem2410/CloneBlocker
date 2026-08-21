@@ -30,3 +30,7 @@ hosting/blocklist.json
 # The same, from blocklist/publicView: the transparency page's data, mirrored
 # to the CDN so a visitor costs no database read. Regenerated on every deploy.
 hosting/transparency.json
+
+# Release artefacts from tools/pack.js. Rebuildable from any commit, and a
+# stale zip in the tree is a zip somebody eventually uploads by mistake.
+dist/

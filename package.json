@@ -1,10 +1,11 @@
 {
   "name": "cloneblocker",
   "version": "1.0.0",
-  "description": "Chrome MV3 extension: fetch a profile-ID blocklist from your server and apply it on Facebook and Threads.",
+  "description": "Chrome MV3 extension: report a clone once, and when it is approved every Clone Blocker user blocks that account on Facebook and Threads.",
   "private": true,
   "scripts": {
     "test": "node tools/check.js && node tools/queue-test.js && node tools/firebase-test.js && node tools/e2e-test.js",
+    "pack": "node tools/pack.js",
     "test:headful": "node tools/e2e-test.js --headful",
     "icons": "node tools/make-icons.js",
     "check": "node tools/check.js",

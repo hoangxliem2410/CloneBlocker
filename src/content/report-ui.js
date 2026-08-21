@@ -344,6 +344,12 @@
           <span data-i18n="report_alsoBlock"></span>
         </label>
         <div class="blocknote note" hidden></div>
+        <!-- What sending this actually leads to, said BEFORE the button
+             rather than only on the confirmation afterwards. It was only in
+             the success state, which meant the one fact that might persuade
+             somebody to bother reporting was shown exclusively to people who
+             already had. -->
+        <div class="note" data-i18n="report_adminReviews"></div>
         <div class="note" data-i18n="report_disclaimer"></div>
         <div class="err" hidden></div>
       </div>

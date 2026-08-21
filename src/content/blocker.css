@@ -6,26 +6,26 @@
  * unknown data-* attributes alone, so an attribute selector survives re-renders
  * that an inline style would not.
  *
- * `data-tq-hidden="revealed"` is the escape hatch the placeholder's Show button
+ * `data-cb-hidden="revealed"` is the escape hatch the placeholder's Show button
  * sets; it deliberately matches none of the hiding rules.
  */
 
-[data-tq-hidden="1"][data-tq-mode="collapse"] {
+[data-cb-hidden="1"][data-cb-mode="collapse"] {
   display: none !important;
 }
 
-[data-tq-hidden="1"][data-tq-mode="blur"] {
+[data-cb-hidden="1"][data-cb-mode="blur"] {
   filter: blur(14px) saturate(0.4) !important;
   pointer-events: none !important;
   user-select: none !important;
   transition: filter 120ms ease-out;
 }
 
-[data-tq-hidden="1"][data-tq-mode="placeholder"] {
+[data-cb-hidden="1"][data-cb-mode="placeholder"] {
   display: none !important;
 }
 
-.tq-placeholder {
+.cb-placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -40,13 +40,13 @@
   opacity: 0.75;
 }
 
-.tq-placeholder-text {
+.cb-placeholder-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tq-placeholder-btn {
+.cb-placeholder-btn {
   flex: 0 0 auto;
   padding: 5px 12px;
   border: 1px solid rgba(128, 128, 128, 0.4);
@@ -57,6 +57,6 @@
   cursor: pointer;
 }
 
-.tq-placeholder-btn:hover {
+.cb-placeholder-btn:hover {
   background: rgba(128, 128, 128, 0.16);
 }

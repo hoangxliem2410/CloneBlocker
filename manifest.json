@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "3Que Blocker",
+  "name": "Clone Blocker",
   "version": "1.0.0",
   "description": "Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.",
   "minimum_chrome_version": "120",
@@ -60,7 +60,7 @@
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "3Que Blocker",
+    "default_title": "Clone Blocker",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

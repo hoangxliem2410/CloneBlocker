@@ -87,8 +87,8 @@ async function reset(settings) {
 }
 
 (async () => {
-  // TQ_SW lets the regression check below point this at a modified copy.
-  const swFile = process.env.TQ_SW || path.join(__dirname, '..', 'src', 'background', 'service-worker.js');
+  // CB_SW lets the regression check below point this at a modified copy.
+  const swFile = process.env.CB_SW || path.join(__dirname, '..', 'src', 'background', 'service-worker.js');
   const swPath = pathToFileURL(swFile).href;
   await import(swPath);
   if (!messageHandler) { check('service worker registered a message handler', false); finish(); return; }

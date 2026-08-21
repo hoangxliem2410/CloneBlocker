@@ -12,7 +12,7 @@
 
   const PROTOCOL = {
     // window.postMessage envelope marker. Every bridge frame carries this.
-    MARK: '__3que_bridge__',
+    MARK: '__cloneblocker_bridge__',
 
     // Handshake. MAIN announces readiness; ISOLATED replies with a session
     // nonce that both sides then require on every subsequent frame.
@@ -121,7 +121,7 @@
     debug: false
   };
 
-  globalThis.TQ_PROTOCOL = PROTOCOL;
-  globalThis.TQ_KEYS = KEYS;
-  globalThis.TQ_DEFAULT_SETTINGS = DEFAULT_SETTINGS;
+  globalThis.CB_PROTOCOL = PROTOCOL;
+  globalThis.CB_KEYS = KEYS;
+  globalThis.CB_DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 })();

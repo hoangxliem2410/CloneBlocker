@@ -13,7 +13,7 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
+  const P = globalThis.CB_PROTOCOL;
   const MARK = P.MARK;
 
   // A per-page-load nonce. The bridge runs over window.postMessage, which the
@@ -39,7 +39,7 @@
     debug: false
   };
 
-  function log(...a) { if (state.debug) console.debug('[3Que/iso]', ...a); }
+  function log(...a) { if (state.debug) console.debug('[CloneBlocker/iso]', ...a); }
 
   // -- MAIN world -----------------------------------------------------------
 
@@ -107,7 +107,7 @@
     const set = listeners.get(type);
     if (!set) return;
     for (const fn of set) {
-      try { fn(payload); } catch (e) { console.warn('[3Que] listener error', e); }
+      try { fn(payload); } catch (e) { console.warn('[CloneBlocker] listener error', e); }
     }
   }
 
@@ -167,7 +167,7 @@
     swListeners.get(type).add(fn);
   }
 
-  globalThis.TQ_BRIDGE = {
+  globalThis.CB_BRIDGE = {
     state, nonce,
     send, request, on,
     sw, onSw,

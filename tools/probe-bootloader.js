@@ -59,7 +59,7 @@ class CDP {
           const finish = (v) => { if (!done) { done = true; resolve(v); } };
           setTimeout(() => finish('timeout'), 12000);
           try {
-            BL.loadModules([NAME], function () { finish('callback fired'); }, '3que');
+            BL.loadModules([NAME], function () { finish('callback fired'); }, 'cloneblocker');
           } catch (e) { finish('threw: ' + (e && e.message)); }
         });
         out.afterLoadModules = !!req(NAME);

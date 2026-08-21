@@ -12,16 +12,16 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
-  const bridge = globalThis.TQ_BRIDGE;
-  const identity = globalThis.TQ_IDENTITY;
-  const dom = globalThis.TQ_DOM;
-  const report = globalThis.TQ_REPORT;
+  const P = globalThis.CB_PROTOCOL;
+  const bridge = globalThis.CB_BRIDGE;
+  const identity = globalThis.CB_IDENTITY;
+  const dom = globalThis.CB_DOM;
+  const report = globalThis.CB_REPORT;
 
-  let settings = Object.assign({}, globalThis.TQ_DEFAULT_SETTINGS);
+  let settings = Object.assign({}, globalThis.CB_DEFAULT_SETTINGS);
   let workerRunning = false;
 
-  function log(...a) { if (settings.debug) console.debug('[3Que]', ...a); }
+  function log(...a) { if (settings.debug) console.debug('[CloneBlocker]', ...a); }
 
   async function boot() {
     bridge.beginHandshake();
@@ -122,8 +122,8 @@
     // React to settings edits made in the options page.
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'sync' || !changes[globalThis.TQ_KEYS.SETTINGS]) return;
-        settings = Object.assign(settings, changes[globalThis.TQ_KEYS.SETTINGS].newValue || {});
+        if (area !== 'sync' || !changes[globalThis.CB_KEYS.SETTINGS]) return;
+        settings = Object.assign(settings, changes[globalThis.CB_KEYS.SETTINGS].newValue || {});
         bridge.setDebug(settings.debug);
         dom.updateSettings(settings);
         if (report) report.updateSettings(settings);
@@ -368,5 +368,5 @@
     });
   } catch (e) { /* ignore */ }
 
-  boot().catch((e) => console.warn('[3Que] boot failed', e));
+  boot().catch((e) => console.warn('[CloneBlocker] boot failed', e));
 })();

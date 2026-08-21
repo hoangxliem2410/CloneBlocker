@@ -115,7 +115,7 @@ async function evalIn(cdp, sessionId, expression, awaitPromise) {
 // setup
 // ---------------------------------------------------------------------------
 function buildTestExtension() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tq-ext-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-ext-'));
   const copy = (rel) => {
     const src = path.join(ROOT, rel);
     const dst = path.join(dir, rel);
@@ -233,7 +233,7 @@ function findChrome() {
 // ---------------------------------------------------------------------------
 (async function main() {
   const extDir = buildTestExtension();
-  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tq-profile-'));
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-profile-'));
   console.log('extension:', extDir);
 
   const emulator = startEmulator();
@@ -494,9 +494,9 @@ function findChrome() {
   try {
     hideInfo = await evalIn(browser, pageSession, `
       (() => {
-        const hidden = document.querySelectorAll('[data-tq-hidden="1"]');
+        const hidden = document.querySelectorAll('[data-cb-hidden="1"]');
         const who = new Set();
-        hidden.forEach(n => who.add(n.getAttribute('data-tq-who')));
+        hidden.forEach(n => who.add(n.getAttribute('data-cb-who')));
         const containers = document.querySelectorAll('[data-pressable-container]');
         // How many of those containers are visible to a reader right now?
         let visible = 0;
@@ -552,7 +552,7 @@ function findChrome() {
     const out = await evalIn(browser, pageSession, `
       (() => {
         const q = (s) => document.querySelector(s);
-        const hidden = (el) => !!el && el.getAttribute('data-tq-hidden') === '1';
+        const hidden = (el) => !!el && el.getAttribute('data-cb-hidden') === '1';
         const mention = q('[data-tqtest="mention"]');
         return JSON.stringify({
           postWithMentionHidden: hidden(mention),
@@ -585,8 +585,8 @@ function findChrome() {
     await sleep(6000);
     const raw = await evalIn(browser, pageSession, `
       JSON.stringify({
-        placeholders: document.querySelectorAll('.tq-placeholder').length,
-        placeholderMode: document.querySelectorAll('[data-tq-hidden="1"][data-tq-mode="placeholder"]').length
+        placeholders: document.querySelectorAll('.cb-placeholder').length,
+        placeholderMode: document.querySelectorAll('[data-cb-hidden="1"][data-cb-mode="placeholder"]').length
       })
     `, false);
     const ph = JSON.parse(raw);
@@ -608,8 +608,8 @@ function findChrome() {
     await sleep(4000);
     const raw = await evalIn(browser, pageSession, `
       JSON.stringify({
-        stillHidden: document.querySelectorAll('[data-tq-hidden="1"]').length,
-        leftoverBars: document.querySelectorAll('.tq-placeholder').length
+        stillHidden: document.querySelectorAll('[data-cb-hidden="1"]').length,
+        leftoverBars: document.querySelectorAll('.cb-placeholder').length
       })
     `, false);
     const off = JSON.parse(raw);
@@ -644,7 +644,7 @@ function findChrome() {
   try {
     const dry = await evalIn(browser, pageSession, `
       (async () => {
-        const MARK = '__3que_bridge__';
+        const MARK = '__cloneblocker_bridge__';
         // Reuse the isolated world's nonce by asking the content script to
         // relay for us is not possible from here, so drive the MAIN world
         // directly the way the isolated world does: it already completed a

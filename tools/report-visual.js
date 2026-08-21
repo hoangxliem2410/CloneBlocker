@@ -77,7 +77,7 @@ async function shot(c, s, file) {
 
   const chip = await ev(c, sessionId, `
     (() => {
-      var h = document.querySelector('[data-3que-ui]');
+      var h = document.querySelector('[data-cloneblocker-ui]');
       var ch = h && h.shadowRoot && h.shadowRoot.querySelector('.chip');
       if (!ch) return null;
       var b = ch.getBoundingClientRect();
@@ -90,11 +90,11 @@ async function shot(c, s, file) {
 
   // Open the sheet (click inside the shadow root; no submission).
   await ev(c, sessionId,
-    `(() => { document.querySelector('[data-3que-ui]').shadowRoot.querySelector('.chip').click(); return 1; })()`);
+    `(() => { document.querySelector('[data-cloneblocker-ui]').shadowRoot.querySelector('.chip').click(); return 1; })()`);
   await sleep(1200);
   const sheet = await ev(c, sessionId, `
     (() => {
-      var r = document.querySelector('[data-3que-ui]').shadowRoot;
+      var r = document.querySelector('[data-cloneblocker-ui]').shadowRoot;
       var s = r.querySelector('.sheet');
       return s ? JSON.stringify({ who: r.querySelector('.who .n').textContent.trim(),
                                   meta: r.querySelector('.who .m').textContent.trim() }) : null;
@@ -104,7 +104,7 @@ async function shot(c, s, file) {
 
   // Close without sending anything.
   await ev(c, sessionId,
-    `(() => { var b = document.querySelector('[data-3que-ui]').shadowRoot.querySelector('.cancel'); if (b) b.click(); return 1; })()`);
+    `(() => { var b = document.querySelector('[data-cloneblocker-ui]').shadowRoot.querySelector('.cancel'); if (b) b.click(); return 1; })()`);
   console.log('closed without submitting');
   setTimeout(() => process.exit(0), 200);
 })().catch(e => { console.error(e.message); process.exit(1); });

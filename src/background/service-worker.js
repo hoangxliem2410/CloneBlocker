@@ -16,15 +16,15 @@
  * state round-trips through chrome.storage.
  */
 
-// Executing this module publishes TQ_PROTOCOL / TQ_KEYS / TQ_DEFAULT_SETTINGS
+// Executing this module publishes CB_PROTOCOL / CB_KEYS / CB_DEFAULT_SETTINGS
 // onto globalThis, so the wire format has exactly one definition.
 import '../common/protocol.js';
 
-const P = globalThis.TQ_PROTOCOL;
-const KEYS = globalThis.TQ_KEYS;
-const DEFAULTS = globalThis.TQ_DEFAULT_SETTINGS;
+const P = globalThis.CB_PROTOCOL;
+const KEYS = globalThis.CB_KEYS;
+const DEFAULTS = globalThis.CB_DEFAULT_SETTINGS;
 
-const ALARM_REFRESH = 'tq-refresh-blocklist';
+const ALARM_REFRESH = 'cb-refresh-blocklist';
 const LEASE_MS = 90 * 1000;          // a claimed target is reserved this long
 const MAX_TARGET_FAILURES = 5;       // stop retrying a target after this many errors
 const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
@@ -778,6 +778,10 @@ async function installAlarm() {
   // Leave an existing alarm alone when the period is unchanged. Recreating it
   // on every settings save would push the next refresh back a minute each time,
   // so editing unrelated options could starve the refresh indefinitely.
+  // The rebrand renamed this alarm. Alarms persist per extension install, so
+  // the old name would keep firing (and being ignored) forever in installs
+  // that predate it -- clear it once.
+  try { await chrome.alarms.clear('tq-refresh-blocklist'); } catch (e) { /* ignore */ }
   let existing = null;
   try { existing = await chrome.alarms.get(ALARM_REFRESH); } catch (e) { /* ignore */ }
   if (existing && existing.periodInMinutes === minutes) return;
@@ -872,7 +876,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
 
       case P.SW.LOG:
-        if (payload && payload.msg) console.debug('[3Que/sw]', payload.msg);
+        if (payload && payload.msg) console.debug('[CloneBlocker/sw]', payload.msg);
         respond({ ok: true });
         break;
 

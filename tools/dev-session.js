@@ -24,6 +24,8 @@ const CDP_PORT = parseInt(argOf('port', '9333'), 10);
 const FRESH = args.includes('--fresh');
 
 const ROOT = path.join(__dirname, '..');
+// The slug mirrors the workspace folder (C:\srcqueblocker), not the brand --
+// the long-lived Chrome profile with its signed-in sessions lives under it.
 const SESSION_DIR = path.join(os.tmpdir(), 'claude', 'C--src-3queblocker', 'dev-session');
 const PROFILE = path.join(SESSION_DIR, 'chrome-profile');
 const DATA_DIR = path.join(SESSION_DIR, 'firestore-data');

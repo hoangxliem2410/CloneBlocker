@@ -1,5 +1,5 @@
 {
-  "name": "3queblocker",
+  "name": "cloneblocker",
   "version": "1.0.0",
   "description": "Chrome MV3 extension: fetch a profile-ID blocklist from your server and apply it on Facebook and Threads.",
   "private": true,

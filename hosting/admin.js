@@ -14,7 +14,7 @@
  * here, four collections read and two documents written.
  *
  * All intelligence lives in logic.js (loaded before this module as a classic
- * script, so globalThis.TQ_LOGIC is ready). This file only fetches documents,
+ * script, so globalThis.CB_LOGIC is ready). This file only fetches documents,
  * feeds them to the pure compute, renders, and writes decisions back.
  */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
@@ -24,7 +24,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const LOGIC = globalThis.TQ_LOGIC;
+const LOGIC = globalThis.CB_LOGIC;
 
 const LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 

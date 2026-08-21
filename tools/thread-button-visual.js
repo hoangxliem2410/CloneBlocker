@@ -45,7 +45,7 @@ async function shot(c,s,f){const r=await c.send('Page.captureScreenshot',{format
 
   const report = await ev(c, sessionId, `
     (() => {
-      var btns = document.querySelectorAll('[data-3que-report-btn]');
+      var btns = document.querySelectorAll('[data-cloneblocker-report-btn]');
       var rows = [];
       for (var i = 0; i < btns.length && rows.length < 4; i++) {
         var b = btns[i];
@@ -58,7 +58,7 @@ async function shot(c,s,f){const r=await c.send('Page.captureScreenshot',{format
           for (var j = 0; j < svgs.length; j++) labels.push(svgs[j].getAttribute('aria-label'));
         }
         rows.push({
-          post: b.getAttribute('data-3que-post'),
+          post: b.getAttribute('data-cloneblocker-post'),
           x: Math.round(rect.x), y: Math.round(rect.y),
           w: Math.round(rect.width), h: Math.round(rect.height),
           rowLabels: labels
@@ -77,11 +77,11 @@ async function shot(c,s,f){const r=await c.send('Page.captureScreenshot',{format
   if (OPEN) {
     // Click the first button and screenshot the confirmation dialog.
     await ev(c, sessionId,
-      `(() => { document.querySelector('[data-3que-report-btn]').click(); return 1; })()`);
+      `(() => { document.querySelector('[data-cloneblocker-report-btn]').click(); return 1; })()`);
     await sleep(1500);
     const sheet = await ev(c, sessionId, `
       (() => {
-        var h = document.querySelector('[data-3que-ui]');
+        var h = document.querySelector('[data-cloneblocker-ui]');
         var r = h && h.shadowRoot;
         if (!r || !r.querySelector('.sheet')) return null;
         return JSON.stringify({
@@ -94,7 +94,7 @@ async function shot(c,s,f){const r=await c.send('Page.captureScreenshot',{format
     console.log('dialog: ' + sheet);
     await shot(c, sessionId, path.join(OUT, 'thread-report-dialog.png'));
     await ev(c, sessionId,
-      `(() => { var b = document.querySelector('[data-3que-ui]').shadowRoot.querySelector('.cancel'); if (b) b.click(); return 1; })()`);
+      `(() => { var b = document.querySelector('[data-cloneblocker-ui]').shadowRoot.querySelector('.cancel'); if (b) b.click(); return 1; })()`);
     console.log('closed without submitting');
   }
   setTimeout(() => process.exit(0), 200);

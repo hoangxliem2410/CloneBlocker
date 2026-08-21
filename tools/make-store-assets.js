@@ -185,7 +185,7 @@ function tileHtml(w, h, opts) {
   <div class="wrap">
     <div class="mark"></div>
     <div>
-      <div class="name">3Que Blocker</div>
+      <div class="name">Clone Blocker</div>
       <div class="rule"></div>
       <div class="tag">${opts.tagline}</div>
     </div>
@@ -309,7 +309,7 @@ function heroHtml() {
   <div class="page">
     <div class="mark"></div>
     <h1>Someone is pretending<br>to be <em>you</em>.</h1>
-    <p>3Que Blocker hides every impersonator on your list the moment a page loads &mdash;
+    <p>Clone Blocker hides every impersonator on your list the moment a page loads &mdash;
        and blocks the ones that are actually active near you.</p>
     <div class="pills">
       <span class="pill">Facebook &amp; Threads</span>

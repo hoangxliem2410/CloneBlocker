@@ -25,7 +25,7 @@
 (function () {
   'use strict';
 
-  const MARK = '__3que_bridge__';
+  const MARK = '__cloneblocker_bridge__';
   const MSG = {
     MAIN_READY: 'main:ready',
     HELLO: 'iso:hello',
@@ -56,7 +56,7 @@
   // timeout.
   const peerNonces = new Set();
   let debug = false;
-  const log = (...a) => { if (debug) console.debug('[3Que/main]', ...a); };
+  const log = (...a) => { if (debug) console.debug('[CloneBlocker/main]', ...a); };
 
   // ==========================================================================
   // 1. Module registry hook.
@@ -132,7 +132,7 @@
         set(v) { realD = v; }
       });
     } catch (e) {
-      console.warn('[3Que] could not hook __d:', e);
+      console.warn('[CloneBlocker] could not hook __d:', e);
     }
   }
 
@@ -1178,7 +1178,7 @@
           error: 'response payload was not cloneable: ' + String((e && e.message) || e).slice(0, 200)
         });
       } catch (e3) {
-        console.warn('[3Que] could not post a reply at all', e3);
+        console.warn('[CloneBlocker] could not post a reply at all', e3);
       }
     }
   }
@@ -1300,7 +1300,7 @@
           const reqs = (d.payload && d.payload.nodes) || [];
           const answers = [];
           for (const r of reqs) {
-            const node = document.querySelector('[data-tq-probe="' + cssEscape(r.probe) + '"]');
+            const node = document.querySelector('[data-cb-probe="' + cssEscape(r.probe) + '"]');
             if (!node) { answers.push({ probe: r.probe, identities: [] }); continue; }
             let ids = identifyNode(node);
             if (!ids.length) ids = identityFromHrefs(node);

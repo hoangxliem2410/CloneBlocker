@@ -1,8 +1,8 @@
-# Privacy policy — 3Que Blocker
+# Privacy policy — Clone Blocker
 
 *Last updated: 21 August 2026*
 
-3Que Blocker is a browser extension that hides and blocks accounts
+Clone Blocker is a browser extension that hides and blocks accounts
 impersonating you on Facebook and Threads. This policy describes every piece of
 data it handles and where that data goes.
 

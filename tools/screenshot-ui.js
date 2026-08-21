@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const OUT = process.argv[2] || path.join(os.tmpdir(), 'tq-shots');
+const OUT = process.argv[2] || path.join(os.tmpdir(), 'cb-shots');
 const CDP_PORT = 9355;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -49,7 +49,7 @@ function findChrome() {
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tq-shot-'));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-shot-'));
   const chrome = spawn(findChrome(), [
     `--remote-debugging-port=${CDP_PORT}`,
     `--user-data-dir=${profile}`,

@@ -176,7 +176,7 @@
   function idForUsername(u) { return aliasToId.get(norm(u)) || null; }
   function usernameForId(id) { return idToAlias.get(String(id)) || null; }
 
-  globalThis.TQ_IDENTITY = {
+  globalThis.CB_IDENTITY = {
     setBlocklist, loadAliases, learn, learnMany,
     match, matchAny, blockableIds, unresolvedUsernames,
     idForUsername, usernameForId,

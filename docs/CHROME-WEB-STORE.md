@@ -70,10 +70,10 @@ that screen.
 
 ## 3. Listing copy
 
-### Name (45 max) — 12 used
+### Name (45 max) — 13 used
 
 ```
-3Que Blocker
+Clone Blocker
 ```
 
 ### Short description (132 max) — 120 used
@@ -92,7 +92,7 @@ mismatches, and this is not a productivity tool.)
 ### Detailed description
 
 ```
-Someone is running accounts that pretend to be you. 3Que Blocker deals with
+Someone is running accounts that pretend to be you. Clone Blocker deals with
 them in two ways, because the two cost very different things.
 
 HIDE THEM — free, and covers everything
@@ -120,7 +120,7 @@ Hover a name in the feed, or open the profile, and file a report with the
 posts that prove it.
 
 YOU RUN THE LIST
-3Que Blocker does not ship a blocklist and does not host one. It fetches from
+Clone Blocker does not ship a blocklist and does not host one. It fetches from
 a backend you own — your own Firebase project (the included setup provisions
 it in one command, on the free plan, with no server code) or any URL serving
 plain JSON. Reports arrive in your own moderation dashboard, ranked by

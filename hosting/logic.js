@@ -478,5 +478,5 @@
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
-  if (typeof globalThis !== 'undefined') globalThis.TQ_LOGIC = API;
+  if (typeof globalThis !== 'undefined') globalThis.CB_LOGIC = API;
 })();

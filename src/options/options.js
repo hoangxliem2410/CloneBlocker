@@ -2,8 +2,8 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
-  const KEYS = globalThis.TQ_KEYS;
+  const P = globalThis.CB_PROTOCOL;
+  const KEYS = globalThis.CB_KEYS;
   const $ = (id) => document.getElementById(id);
 
   const TEXT_FIELDS = ['listUrl', 'listAuthHeader', 'apiBase', 'submitToken'];

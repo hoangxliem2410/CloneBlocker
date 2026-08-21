@@ -13,9 +13,9 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
-  const bridge = globalThis.TQ_BRIDGE;
-  const identity = globalThis.TQ_IDENTITY;
+  const P = globalThis.CB_PROTOCOL;
+  const bridge = globalThis.CB_BRIDGE;
+  const identity = globalThis.CB_IDENTITY;
 
   const IS_THREADS = bridge.state.platform === 'threads';
 
@@ -54,7 +54,7 @@
   let identityInflight = false;
   let stats = { hidden: 0, scanned: 0 };
 
-  function log(...a) { if (bridge.state.debug) console.debug('[3Que/dom]', ...a); }
+  function log(...a) { if (bridge.state.debug) console.debug('[CloneBlocker/dom]', ...a); }
 
   // -- signatures -----------------------------------------------------------
   // React reuses DOM nodes as the feed virtualises, so "already decided" must
@@ -132,15 +132,15 @@
 
   // -- hiding ---------------------------------------------------------------
   function applyHide(node, matchInfo) {
-    if (node.getAttribute('data-tq-hidden') === '1') return;
+    if (node.getAttribute('data-cb-hidden') === '1') return;
     // "revealed" means the reader explicitly clicked Show. Re-hiding it on the
     // next rescan would silently undo a deliberate choice, so that decision
     // sticks for as long as the node keeps showing the same content.
-    if (node.getAttribute('data-tq-hidden') === 'revealed') return;
-    node.setAttribute('data-tq-hidden', '1');
-    node.setAttribute('data-tq-mode', settings.hideMode);
+    if (node.getAttribute('data-cb-hidden') === 'revealed') return;
+    node.setAttribute('data-cb-hidden', '1');
+    node.setAttribute('data-cb-mode', settings.hideMode);
     const who = matchInfo && (matchInfo.username ? '@' + matchInfo.username : matchInfo.id) || 'blocked profile';
-    node.setAttribute('data-tq-who', String(who));
+    node.setAttribute('data-cb-who', String(who));
     stats.hidden++;
 
     if (settings.hideMode === 'placeholder') {
@@ -157,30 +157,30 @@
    *   old decision no longer applies to it.
    */
   function unhide(node, includeRevealed) {
-    const state = node.getAttribute('data-tq-hidden');
+    const state = node.getAttribute('data-cb-hidden');
     if (state !== '1' && !(includeRevealed && state === 'revealed')) return;
-    node.removeAttribute('data-tq-hidden');
-    node.removeAttribute('data-tq-mode');
-    node.removeAttribute('data-tq-who');
+    node.removeAttribute('data-cb-hidden');
+    node.removeAttribute('data-cb-mode');
+    node.removeAttribute('data-cb-who');
     const ph = node.previousElementSibling;
-    if (ph && ph.classList && ph.classList.contains('tq-placeholder')) ph.remove();
+    if (ph && ph.classList && ph.classList.contains('cb-placeholder')) ph.remove();
   }
 
   function insertPlaceholder(node, who) {
     const prev = node.previousElementSibling;
-    if (prev && prev.classList && prev.classList.contains('tq-placeholder')) return;
+    if (prev && prev.classList && prev.classList.contains('cb-placeholder')) return;
     const bar = document.createElement('div');
-    bar.className = 'tq-placeholder';
+    bar.className = 'cb-placeholder';
     const label = document.createElement('span');
-    label.className = 'tq-placeholder-text';
+    label.className = 'cb-placeholder-text';
     label.textContent = 'Hidden — ' + who;
     const btn = document.createElement('button');
-    btn.className = 'tq-placeholder-btn';
+    btn.className = 'cb-placeholder-btn';
     btn.type = 'button';
     btn.textContent = 'Show';
     btn.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
-      node.setAttribute('data-tq-hidden', 'revealed');
+      node.setAttribute('data-cb-hidden', 'revealed');
       bar.remove();
     });
     bar.appendChild(label);
@@ -212,7 +212,7 @@
     for (const node of nodes) {
       if (!node.isConnected) continue;
       // Skip nested containers whose ancestor is already hidden.
-      if (node.parentElement && node.parentElement.closest('[data-tq-hidden="1"]')) continue;
+      if (node.parentElement && node.parentElement.closest('[data-cb-hidden="1"]')) continue;
 
       const sig = signature(node);
       const prev = decisions.get(node);
@@ -263,7 +263,7 @@
         // burn a try for all thirty nodes at once, and three such batches would
         // permanently give up on content that was never actually examined.
         const probe = 'p' + (++probeSeq);
-        node.setAttribute('data-tq-probe', probe);
+        node.setAttribute('data-cb-probe', probe);
         inflight.set(probe, node);
         needRemote.push({ probe });
       }
@@ -284,7 +284,7 @@
       identityInflight = false;
       // Clean up probe attributes so the page DOM stays tidy.
       for (const [probe, node] of inflight) {
-        try { if (node.getAttribute('data-tq-probe') === probe) node.removeAttribute('data-tq-probe'); }
+        try { if (node.getAttribute('data-cb-probe') === probe) node.removeAttribute('data-cb-probe'); }
         catch (e) { /* detached */ }
       }
       inflight.clear();
@@ -335,8 +335,8 @@
 
   /** Re-evaluate everything from scratch, e.g. after the blocklist changes. */
   function rescanAll() {
-    for (const node of document.querySelectorAll('[data-tq-hidden]')) unhide(node);
-    for (const node of document.querySelectorAll('[data-tq-probe]')) node.removeAttribute('data-tq-probe');
+    for (const node of document.querySelectorAll('[data-cb-hidden]')) unhide(node);
+    for (const node of document.querySelectorAll('[data-cb-probe]')) node.removeAttribute('data-cb-probe');
     invalidateDecisions();
     scan(document);
   }
@@ -390,7 +390,7 @@
 
     if (!settings.hideEnabled) {
       if (before.hideEnabled) {
-        for (const node of document.querySelectorAll('[data-tq-hidden]')) unhide(node, true);
+        for (const node of document.querySelectorAll('[data-cb-hidden]')) unhide(node, true);
       }
       return;
     }
@@ -404,7 +404,7 @@
     if (changed) rescanAll();
   }
 
-  globalThis.TQ_DOM = {
+  globalThis.CB_DOM = {
     start, scan: queueScan, rescanAll, invalidateDecisions, updateSettings,
     stats: () => Object.assign({}, stats)
   };

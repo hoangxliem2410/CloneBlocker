@@ -50,7 +50,7 @@ function checkSyntax(file) {
     return;
   }
   const tmp = path.join(os.tmpdir(),
-    'tq-syntax-' + process.pid + '-' + path.basename(file, '.js') + '.mjs');
+    'cb-syntax-' + process.pid + '-' + path.basename(file, '.js') + '.mjs');
   fs.writeFileSync(tmp, src);
   try { execFileSync(process.execPath, ['--check', tmp], { stdio: 'pipe' }); }
   finally { try { fs.unlinkSync(tmp); } catch (e) {} }

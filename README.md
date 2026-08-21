@@ -1,4 +1,4 @@
-# 3Que Blocker
+# Clone Blocker
 
 A Chrome (Manifest V3) extension that fetches a profile-ID blocklist from a backend
 **you** own — a Firebase project on the free plan, or any URL serving plain JSON —

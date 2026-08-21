@@ -17,8 +17,8 @@ const PORT = 9444;
 
 function newestTestExt() {
   const tmp = os.tmpdir();
-  const dirs = fs.readdirSync(tmp).filter(d => d.startsWith('tq-ext-'));
-  if (!dirs.length) throw new Error('no tq-ext-* dir; run the e2e test with --keep first');
+  const dirs = fs.readdirSync(tmp).filter(d => d.startsWith('cb-ext-'));
+  if (!dirs.length) throw new Error('no cb-ext-* dir; run the e2e test with --keep first');
   return dirs.map(d => ({ d: path.join(tmp, d), t: fs.statSync(path.join(tmp, d)).mtimeMs }))
              .sort((a, b) => b.t - a.t)[0].d;
 }

@@ -21,9 +21,9 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
-  const bridge = globalThis.TQ_BRIDGE;
-  const identity = globalThis.TQ_IDENTITY;
+  const P = globalThis.CB_PROTOCOL;
+  const bridge = globalThis.CB_BRIDGE;
+  const identity = globalThis.CB_IDENTITY;
 
   const PLATFORM = bridge.state.platform;
   const settings = { reportUiEnabled: true, reportHoverDelayMs: 350, debug: false };
@@ -37,7 +37,7 @@
     ['other', 'Something else']
   ];
 
-  function log(...a) { if (settings.debug) console.debug('[3Que/report]', ...a); }
+  function log(...a) { if (settings.debug) console.debug('[CloneBlocker/report]', ...a); }
 
   // -- identity of a hovered anchor -----------------------------------------
   const FB_RESERVED = /^(profile\.php|photo|photo\.php|watch|groups|pages|events|marketplace|reel|reels|stories|share|permalink|posts|videos|hashtag|search|messages|notifications|friends|settings|privacy|help|policies|login|reg|home|gaming|weather|fundraisers|saved|memories|bookmarks|ads|business|legal|terms|about|careers|people|places|games|live|media|story\.php|browse|allactivity|pages_feed|pg|me)$/i;
@@ -189,7 +189,7 @@
   function ensureHost() {
     if (host && host.isConnected) return;
     host = document.createElement('div');
-    host.setAttribute('data-3que-ui', '');
+    host.setAttribute('data-cloneblocker-ui', '');
     // Keep the host itself inert; only children inside the shadow root paint.
     host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647';
     root = host.attachShadow({ mode: 'open' });
@@ -473,7 +473,7 @@
   // action row next to Share, and the report it raises includes the permalink
   // and a summary of the content.
   // ==========================================================================
-  const MARK_ATTR = 'data-3que-report-btn';
+  const MARK_ATTR = 'data-cloneblocker-report-btn';
   const SHARE_LABELS = /^(share|send to|send)$/i;
   const ACTION_LABELS = /^(like|reply|repost|share|send to|send)$/i;
 
@@ -615,11 +615,11 @@
       const existing = row.querySelector('[' + MARK_ATTR + ']');
       const ctx = extractPostContext(c);
       if (existing) {
-        if (existing.getAttribute('data-3que-post') === (ctx.postUrl || '')) continue;
+        if (existing.getAttribute('data-cloneblocker-post') === (ctx.postUrl || '')) continue;
         existing.remove();
       }
       const btn = buildThreadButton(c);
-      btn.setAttribute('data-3que-post', ctx.postUrl || '');
+      btn.setAttribute('data-cloneblocker-post', ctx.postUrl || '');
       slot.insertAdjacentElement('afterend', btn);
       added++;
     }
@@ -678,7 +678,7 @@
     startThreadButtons();
   }
 
-  globalThis.TQ_REPORT = {
+  globalThis.CB_REPORT = {
     start, updateSettings, reportCurrentProfile, currentProfileInfo, openModal
   };
 })();

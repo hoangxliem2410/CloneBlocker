@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  const P = globalThis.TQ_PROTOCOL;
+  const P = globalThis.CB_PROTOCOL;
   const $ = (id) => document.getElementById(id);
   const show = (id, on) => $(id).classList.toggle('hidden', !on);
 

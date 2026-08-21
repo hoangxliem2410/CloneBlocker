@@ -262,7 +262,7 @@ async function swapRules(uid) {
   emu.stdout.on('data', () => {});
   emu.stderr.on('data', d => console.error('[emulator]', String(d).trim()));
 
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tq-dash-prof-'));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-dash-prof-'));
   let chrome = null;
   const cleanup = () => {
     try { if (chrome) chrome.kill(); } catch (e) {}

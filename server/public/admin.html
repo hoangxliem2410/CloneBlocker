@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3Que — Moderation</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <!-- Sign-in gate. Credentials are exchanged for an HttpOnly session cookie,
+       so nothing readable by scripts is left behind in this browser. -->
+  <div id="gate" class="gate hidden">
+    <form class="gatebox" id="gateForm">
+      <h1>Moderation</h1>
+      <p class="note">Sign in with the credentials this server was started with.</p>
+      <input type="text" id="gateUser" placeholder="username" autocomplete="username" autofocus>
+      <input type="password" id="gatePass" placeholder="password" autocomplete="current-password">
+      <button class="btn primary" type="submit">Sign in</button>
+      <p id="gateErr" class="err" hidden></p>
+      <p id="gateWarn" class="warn" hidden></p>
+    </form>
+  </div>
+
+  <main id="app" class="hidden">
+    <header class="dash-hd">
+      <h1>Moderation dashboard</h1>
+      <div class="row-inline">
+        <span id="conn" class="status"></span>
+        <button id="refresh" class="btn primary">Refresh</button>
+        <button id="signout" class="btn">Sign out</button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><div class="sv" id="statPending">—</div><div class="sk">Pending</div></div>
+      <div class="stat"><div class="sv" id="statApproved">—</div><div class="sk">Approved</div></div>
+      <div class="stat"><div class="sv" id="statRejected">—</div><div class="sk">Rejected</div></div>
+      <div class="stat"><div class="sv" id="statSubmissions">—</div><div class="sk">Submissions</div></div>
+      <div class="stat"><div class="sv" id="statBlocked">—</div><div class="sk">On blocklist</div></div>
+      <div class="stat"><div class="sv" id="statEvidence">—</div><div class="sk">With evidence</div></div>
+      <div class="stat"><div class="sv" id="statHeld">—</div><div class="sk">Held</div></div>
+      <div class="stat"><div class="sv" id="statReporters">—</div><div class="sk" id="statReportersK">Known reporters</div></div>
+    </section>
+
+    <section class="card">
+      <h2>Reports per day</h2>
+      <div id="spark" class="spark"></div>
+      <div class="breakdowns">
+        <div><h3>By platform</h3><div id="byPlatform" class="bars"></div></div>
+        <div><h3>By reason</h3><div id="byReason" class="bars"></div></div>
+        <div><h3>Top reporters</h3><div id="topReporters" class="bars"></div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Where clones are active</h2>
+      <div id="trendMatrix"></div>
+      <div id="trendTop" class="trendtop"></div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <div class="tabs">
+          <button class="tab active" data-status="pending">Pending</button>
+          <button class="tab" data-status="approved">Approved</button>
+          <button class="tab" data-status="rejected">Rejected</button>
+          <button class="tab" data-status="">All</button>
+          <button class="tab" data-status="__blocklist">Blocklist</button>
+        </div>
+        <input type="search" id="filter" placeholder="Filter by name, @username, id, reason…">
+      </div>
+
+      <div class="bulkbar hidden" id="bulkbar">
+        <label class="toggle"><input type="checkbox" id="selectAll"><span id="selCount">0 selected</span></label>
+        <div class="row-inline">
+          <button id="bulkApprove" class="btn good">Approve selected</button>
+          <button id="bulkReject" class="btn danger">Reject selected</button>
+        </div>
+      </div>
+
+      <div id="rows"></div>
+      <p id="empty" class="note hidden">Nothing here.</p>
+    </section>
+  </main>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

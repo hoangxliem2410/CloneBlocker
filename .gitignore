@@ -1,0 +1,13 @@
+node_modules/
+.playwright-mcp/
+server/blocklist.json
+*.log
+server/reports.json
+
+# Never commit local secrets (admin/submit tokens, API keys).
+.env
+.env.*
+
+# Per-server HMAC salt for reporter pseudonyms. Losing it resets every
+# reporter to a stranger; leaking it de-anonymises the report store.
+server/.reporter-salt

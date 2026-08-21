@@ -1,0 +1,62 @@
+/*
+ * Suppression styles.
+ *
+ * Driven by attributes rather than injected inline styles: React reconciliation
+ * routinely overwrites the style property on nodes it owns, but it leaves
+ * unknown data-* attributes alone, so an attribute selector survives re-renders
+ * that an inline style would not.
+ *
+ * `data-tq-hidden="revealed"` is the escape hatch the placeholder's Show button
+ * sets; it deliberately matches none of the hiding rules.
+ */
+
+[data-tq-hidden="1"][data-tq-mode="collapse"] {
+  display: none !important;
+}
+
+[data-tq-hidden="1"][data-tq-mode="blur"] {
+  filter: blur(14px) saturate(0.4) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  transition: filter 120ms ease-out;
+}
+
+[data-tq-hidden="1"][data-tq-mode="placeholder"] {
+  display: none !important;
+}
+
+.tq-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.08);
+  font: 500 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.tq-placeholder-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tq-placeholder-btn {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tq-placeholder-btn:hover {
+  background: rgba(128, 128, 128, 0.16);
+}

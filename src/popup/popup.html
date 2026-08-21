@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>3Que Blocker</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="popup">
+  <header class="hd">
+    <h1>3Que Blocker</h1>
+    <span id="platform" class="pill">—</span>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <span class="k">Blocklist</span>
+      <span class="v" id="listCount">—</span>
+    </div>
+    <div class="row">
+      <span class="k">Last refresh</span>
+      <span class="v" id="listAge">—</span>
+    </div>
+    <div class="row">
+      <span class="k">Hidden on this page</span>
+      <span class="v" id="hiddenCount">—</span>
+    </div>
+    <div id="listError" class="err hidden"></div>
+    <button id="refresh" class="btn">Refresh list now</button>
+  </section>
+
+  <section class="card">
+    <label class="toggle">
+      <input type="checkbox" id="hideEnabled">
+      <span>Hide content from blocked profiles</span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="platformBlockEnabled">
+      <span>Also block them on the platform</span>
+    </label>
+    <label class="toggle sub">
+      <input type="checkbox" id="platformBlockDryRun">
+      <span>Dry run (simulate, send nothing)</span>
+    </label>
+    <p class="note" id="queueNote">—</p>
+  </section>
+
+  <section class="card">
+    <button id="reportProfile" class="btn">Report this profile as a clone</button>
+    <p class="note" id="reportNote">Open someone's profile to report it, or hover any
+      name in the feed and use the Report chip.</p>
+  </section>
+
+  <section class="card">
+    <h2>Page capability</h2>
+    <div class="row"><span class="k">Bridge</span><span class="v" id="capBridge">—</span></div>
+    <div class="row"><span class="k">Signed in as</span><span class="v" id="capViewer">—</span></div>
+    <div class="row"><span class="k">Relay store</span><span class="v" id="capRelay">—</span></div>
+    <div class="row"><span class="k">Block mutation</span><span class="v" id="capMutation">—</span></div>
+    <p class="note" id="capNote"></p>
+  </section>
+
+  <footer>
+    <a href="#" id="openOptions">Settings</a>
+  </footer>
+
+  <script src="../common/protocol.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

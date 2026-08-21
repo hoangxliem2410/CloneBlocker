@@ -150,5 +150,30 @@ for (const rel of ['src/popup/popup.html', 'src/options/options.html']) {
   }
 }
 
+// ---- 6. every element the popup reaches for must exist --------------------
+//
+// Same failure as the options check above, in the file people actually open.
+// $('someId') on a missing element returns null and the next property access
+// throws, which blanks the whole popup -- and both files stay individually
+// valid, so nothing else here would catch it.
+{
+  const jsPath = path.join(ROOT, 'src', 'popup', 'popup.js');
+  const htmlPath = path.join(ROOT, 'src', 'popup', 'popup.html');
+  try {
+    const js = fs.readFileSync(jsPath, 'utf8');
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    const ids = new Set();
+    for (const m of js.matchAll(/\$\(\s*['"]([A-Za-z0-9_-]+)['"]\s*\)/g)) ids.add(m[1]);
+    for (const m of js.matchAll(/\bshow\(\s*['"]([A-Za-z0-9_-]+)['"]/g)) ids.add(m[1]);
+    const list = [...ids];
+    const missing = list.filter(f => !html.includes('id="' + f + '"'));
+    report(missing.length === 0,
+      'popup.js elements all exist in popup.html (' + list.length + ')',
+      missing.length ? 'missing: ' + missing.join(', ') : '');
+  } catch (e) {
+    report(false, 'popup elements', e.message);
+  }
+}
+
 console.log('\n' + (failures ? `${failures} problem(s)` : 'all checks passed'));
 process.exitCode = failures ? 1 : 0;

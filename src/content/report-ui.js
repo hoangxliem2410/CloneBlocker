@@ -416,21 +416,45 @@
     sel.focus();
   }
 
-  // -- public entry point (used by the popup) -------------------------------
-  /** Report whatever profile this page is currently showing. */
-  function reportCurrentProfile() {
-    let ident = null, anchor = null;
+  // -- public entry points (used by the popup) ------------------------------
+
+  /** Whose profile is this page showing, from the URL alone? */
+  function identityFromLocation() {
     if (PLATFORM === 'threads') {
       const m = location.pathname.match(/^\/@([A-Za-z0-9._]+)/);
-      if (m) ident = { profileId: null, username: m[1] };
-    } else {
-      const m = location.search.match(/[?&]id=(\d+)/);
-      if (m) ident = { profileId: m[1], username: null };
-      else {
-        const seg = location.pathname.split('/').filter(Boolean)[0];
-        if (seg && !FB_RESERVED.test(seg)) ident = { profileId: null, username: seg };
-      }
+      return m ? { profileId: null, username: m[1] } : null;
     }
+    const m = location.search.match(/[?&]id=(\d+)/);
+    if (m) return { profileId: m[1], username: null };
+    const seg = location.pathname.split('/').filter(Boolean)[0];
+    if (seg && !FB_RESERVED.test(seg)) return { profileId: null, username: seg };
+    return null;
+  }
+
+  /**
+   * What the popup needs to offer an action for this page, without opening
+   * anything. Reporting and blocking are both about a specific profile, so a
+   * popup that cannot name the profile can only offer generic settings -- which
+   * is what it used to do.
+   */
+  function currentProfileInfo() {
+    const ident = identityFromLocation();
+    if (!ident) return null;
+    const enriched = enrich(ident);
+    const hit = identity.match({ id: enriched.profileId, username: enriched.username });
+    return {
+      profileId: enriched.profileId || null,
+      username: enriched.username || null,
+      isViewer: isViewer(enriched),
+      listed: !!hit,
+      listedBy: hit ? hit.by : null
+    };
+  }
+
+  /** Report whatever profile this page is currently showing. */
+  function reportCurrentProfile() {
+    let anchor = null;
+    const ident = identityFromLocation();
     if (!ident) return { ok: false, error: 'This page is not a profile.' };
     const enriched = enrich(ident);
     if (isViewer(enriched)) return { ok: false, error: 'That is your own profile.' };
@@ -654,5 +678,7 @@
     startThreadButtons();
   }
 
-  globalThis.TQ_REPORT = { start, updateSettings, reportCurrentProfile, openModal };
+  globalThis.TQ_REPORT = {
+    start, updateSettings, reportCurrentProfile, currentProfileInfo, openModal
+  };
 })();

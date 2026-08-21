@@ -356,6 +356,9 @@
         handshake: bridge.isHandshakeDone(),
         identity: identity.stats(),
         dom: dom.stats(),
+        // Who this page is about, so the popup can offer an action for it
+        // rather than a page of switches.
+        profile: report ? report.currentProfileInfo() : null,
         unresolved: identity.unresolvedUsernames().slice(0, 25)
       };
       bridge.request(P.PROBE_CAPABILITY, {}, 5000)

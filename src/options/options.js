@@ -136,6 +136,47 @@
       parts.length ? 'ok' : '');
   }
 
+  /**
+   * Page capability, read from a real tab.
+   *
+   * This used to occupy a quarter of the popup -- Bridge, Relay store, Block
+   * mutation, doc_ids -- which is diagnostics, not something anyone acts on.
+   * The options page cannot use the active tab (that is this page), so it
+   * looks for the first supported tab that is open.
+   */
+  async function pageCapability() {
+    let tabs = [];
+    try {
+      tabs = await chrome.tabs.query({
+        url: ['*://*.facebook.com/*', '*://*.threads.net/*', '*://*.threads.com/*']
+      });
+    } catch (e) { return { error: String((e && e.message) || e) }; }
+    const tab = tabs && tabs[0];
+    if (!tab) return 'no Facebook or Threads tab open';
+    const status = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tab.id, { type: 'tab:status' }, (res) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(res || null);
+      });
+    });
+    if (!status) return 'tab is open but the content script did not answer -- reload it';
+
+    const cap = status.capability || {};
+    const cands = cap.blockMutationCandidates || [];
+    return {
+      tab: tab.url ? tab.url.slice(0, 90) : null,
+      platform: status.platform,
+      bridge: status.handshake ? 'connected' : 'not connected',
+      signedInAs: status.viewerId || 'signed out',
+      relayStore: cap.hasRelay ? `${cap.relayEnv} (${cap.relayRecords} records)` : 'unavailable',
+      blockMutation: cands.length
+        ? (cands[0].params ? `${cands[0].params.name} (doc_id ${cands[0].params.id})` : cands[0].name)
+        : (cap.hasLearnedTemplate ? 'learned from a captured request' : 'not loaded on this page yet'),
+      hiddenOnPage: status.dom ? status.dom.hidden : null,
+      profile: status.profile || null
+    };
+  }
+
   async function refreshDiag() {
     const state = await sw(P.SW.GET_STATE);
     if (!state.ok) { $('diag').textContent = state.error || 'unavailable'; return; }
@@ -160,6 +201,7 @@
     if (view.stats.pausedUntil) {
       view.stats.pausedUntil = new Date(view.stats.pausedUntil).toLocaleString();
     }
+    view.page = await pageCapability();
     $('diag').textContent = JSON.stringify(view, null, 2);
   }
 

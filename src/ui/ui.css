@@ -101,7 +101,32 @@ h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing
 .warn { color: var(--warn); }
 .hidden { display: none; }
 
-footer { text-align: center; margin-top: 4px; }
+/* popup: the action card names the profile the page is showing, so it has to
+   read as a heading rather than as another status row. */
+.who {
+  font-size: 16px; font-weight: 650; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.state {
+  font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 6px;
+  color: var(--muted);
+}
+.state::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px;
+  background: currentColor; flex: 0 0 auto;
+}
+.state:empty { display: none; }
+.state.listed { color: var(--danger); }
+.state.clear  { color: var(--muted); }
+.state.you    { color: var(--accent); }
+
+footer {
+  margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+}
+.foot-note { color: var(--muted); font-size: 11px; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+.foot-links { flex: 0 0 auto; display: flex; gap: 10px; }
 footer a { color: var(--accent); font-size: 12px; text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 

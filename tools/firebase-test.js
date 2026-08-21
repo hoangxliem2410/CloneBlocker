@@ -1006,9 +1006,29 @@ async function swapRules() {
       `http://${HOST}/emulator/v1/projects/${PROJECT}:securityRules`,
       { method: 'PUT', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rules: { files: [{ name: 'firestore.rules', content }] } }) });
-    await putRules(rulesSrc.split(pinned).join('nobody-at-all'));
 
     const ALICE = 'claim-alice', BOB = 'claim-bob';
+    const claimBody0 = (uid) => ({ fields: {
+      uids: { arrayValue: { values: [{ stringValue: uid }] } },
+      claimedAt: { stringValue: new Date().toISOString() },
+      claimedBy: { stringValue: 'test' } } });
+
+    // First: with somebody pinned -- the normal state of a provisioned
+    // project -- the claim must be shut. This is the guard that stops a second
+    // account taking a project that already has an owner.
+    await putRules(rulesSrc.split(pinned).join(ADMIN_UID));
+    check('with an admin already pinned, nobody can claim the project',
+      (await api('POST', '/admin?documentId=allowlist',
+        claimBody0(ALICE), bearer(ALICE))).status === 403);
+
+    // Now empty the pinned list, which is the only state the claim is for.
+    // Cut between the 'return [' that opens the list and the '];' that closes
+    // it, rather than matching across lines with a regex -- the shape is the
+    // one firestore.rules documents for the --add-admin rewriter.
+    const openAt = rulesSrc.indexOf('return [', rulesSrc.indexOf('function adminUids()'));
+    const closeAt = rulesSrc.indexOf('];', openAt);
+    const unpinned = rulesSrc.slice(0, openAt + 'return ['.length) + rulesSrc.slice(closeAt);
+    await putRules(unpinned);
     const claimBody = (uid) => ({ fields: {
       uids: { arrayValue: { values: [{ stringValue: uid }] } },
       claimedAt: { stringValue: new Date().toISOString() },

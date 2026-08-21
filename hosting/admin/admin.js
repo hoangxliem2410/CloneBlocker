@@ -20,7 +20,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
   getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut,
-  onAuthStateChanged, signInWithPopup, GoogleAuthProvider
+  onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
@@ -478,25 +478,6 @@ function unauthorized() {
   showDenied(auth && auth.currentUser);
 }
 
-$('gateGoogle').addEventListener('click', async () => {
-  $('gateErr').hidden = true;
-  if (!auth) { showGate('Firebase is not configured.'); return; }
-  try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
-  } catch (err) {
-    const code = (err && err.code) || '';
-    // A closed or blocked popup is the user's own doing, not a failure worth
-    // shouting about; anything else is worth naming, because the usual cause
-    // is a provider nobody enabled yet.
-    if (/popup-closed-by-user|cancelled-popup-request/.test(code)) return;
-    showGate(/popup-blocked/.test(code)
-      ? 'The browser blocked the sign-in popup. Allow popups for this site and try again.'
-      : /operation-not-allowed|configuration-not-found/.test(code)
-        ? 'Google sign-in is not enabled on this project. Run: node tools/firebase-setup.js'
-        : 'Google sign-in failed: ' + (code || (err && err.message) || 'unknown error'));
-  }
-  // onAuthStateChanged takes it from here: the admin probe, then the app.
-});
 
 $('gateSignOut').addEventListener('click', async () => {
   if (auth) await signOut(auth).catch(() => {});

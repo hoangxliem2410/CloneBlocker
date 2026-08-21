@@ -4,7 +4,7 @@
  *   node tools/firebase-setup.js [--project clone-blocker2]
  *                                [--location asia-southeast1]
  *                                [--email admin@example.com]
- *                                [--google-client-id ID --google-client-secret SECRET]
+ *                                [--with-google --google-client-id ID --google-client-secret SECRET]
  *                                [--deploy]
  *
  * Two standalone commands maintain the admin allowlist in firestore.rules,
@@ -40,7 +40,7 @@
  *   2. create the (default) Firestore database if the project has none
  *   3. create a web app registration if the project has none
  *   4. enable email/password sign-in
- *   5. enable Google sign-in (or say exactly what to click if it cannot)
+ *   5. enable Google sign-in ONLY with --with-google (off by default)
  *   6. create the admin user (random password -> .env) if missing
  *   7. disable public sign-up, so the admin stays the only account
  *   8. put the admin's UID in the firestore.rules allowlist
@@ -65,6 +65,7 @@ const ROOT = path.join(__dirname, '..');
 // without touching what production runs.
 const ADD_ADMIN = argOf('add-admin', null);
 const LIST_ADMINS = args.includes('--list-admins');
+const WITH_GOOGLE = args.includes('--with-google');
 const CLAIM_STATUS = args.includes('--claim-status');
 const OPEN_CLAIM = args.includes('--open-claim');
 const CLOSE_CLAIM = args.includes('--close-claim');
@@ -499,7 +500,12 @@ async function addAdminCommand(uid) {
 
   // -- 5. Google sign-in -----------------------------------------------------
   //
-  // The dashboard's main door. Identity Toolkit models a provider as a
+  // Off unless asked for. Google sign-in is disabled for now (the moderation
+  // account signs in with a password), and enabling a provider nobody uses
+  // would only widen what this project accepts. --with-google turns the step
+  // back on when that changes.
+  //
+  // Identity Toolkit models a provider as a
   // defaultSupportedIdpConfig, and google.com needs an OAuth client id and
   // secret: the sign-in popup is a Google OAuth consent flow, and consent is
   // granted to a client, not to a Firebase project.
@@ -511,7 +517,9 @@ async function addAdminCommand(uid) {
   // lets the rest of the run continue. Half a provisioned project plus one
   // clear instruction beats a failed run that also skipped the rules and the
   // seed.
-  {
+  if (!WITH_GOOGLE) {
+    console.log('google    : skipped -- password sign-in only (--with-google to enable)');
+  } else {
     const base = `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/defaultSupportedIdpConfigs`;
     const creds = GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
       ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET }

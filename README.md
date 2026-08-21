@@ -155,10 +155,10 @@ the rendering — putting strangers' text about named people on screen through
 ## Moderation dashboard
 
 Served by **Firebase Hosting** from your own project — for this one,
-**https://clone-blocker2.web.app/admin/**. Sign in with Google, or with the
-Firebase Auth email and password the setup script created — either account can
-be an admin, and a Google sign-in mints a different UID than the password
-account, so both UIDs go in the allowlist. The dashboard used to live at the site
+**https://clone-blocker2.web.app/admin/**. Sign in with the Firebase Auth email
+and password the setup script created. (Google sign-in is switched off for now;
+the allowlist holds UIDs, so adding it later is a matter of adding one more.)
+The dashboard used to live at the site
 root and moved under `/admin/` when the root became the public transparency
 page, so an old bookmark needs updating. There is no server of yours to start or
 keep running.
@@ -207,39 +207,39 @@ rather than something a transaction has to defend.
 
 ### Admin access
 
-A short list of UIDs, and nothing else. The setup script creates the admin user
-in Firebase Auth with a random password (written to `.env`, which is
-gitignored), puts that account's UID in the allowlist inside `firestore.rules`,
-and disables public sign-up at the Auth configuration level. There is no user
-database to administer: the security rules recognise the UIDs in that list, and
-nobody else can create an account to try.
+A short list of UIDs, and nothing else. **Sign in with the moderation account's
+email and password.** The setup script creates that account in Firebase Auth
+with a random password (written to `.env`, which is gitignored), pins its UID
+in the allowlist inside `firestore.rules`, and disables public sign-up at the
+Auth configuration level. There is no user database to administer: the rules
+recognise the UIDs in that list, and nobody else can create an account to try.
 
-**The first person to sign in owns the project.** A UID compiled into the rules
-can only be added by editing and deploying that file, which is a chicken and
-egg for anyone signing in with Google: you cannot learn your own UID without
-opening a dashboard you cannot open. So on a project nobody has claimed yet,
-signing in *is* the claim — the dashboard creates `admin/allowlist` with your
-account in it, and from then on it is admin-only like everything else. The
-rules do the deciding: the create succeeds only when the document is absent and
-only when the single UID inside is the caller's own, so a second person gets a
-conflict rather than a takeover, and nobody can install somebody else.
+Google sign-in is switched off for now. The provider is not enabled, the
+dashboard has no Google button, and `firebase-setup.js` only touches the
+provider when asked (`--with-google`). Turning it on later is the only thing
+that makes the rest of this section matter.
 
-Sign-up is disabled by default, so open the window on purpose and shut it again:
+**A project with nobody pinned is claimed by whoever signs in first.** A UID
+compiled into the rules can only be added by editing and deploying that file,
+which is a chicken and egg for a Google sign-in: you cannot learn your own UID
+without opening a dashboard you cannot open. So when `adminUids()` is empty,
+signing in creates `admin/allowlist` with that account inside and it becomes
+the admin. The rules do the deciding — the create succeeds only when the
+document is absent, only when the single UID inside is the caller's own, and
+**only while nobody is pinned**. On a normally provisioned project there is
+already an admin, so that door is shut; a second account cannot take a project
+that has an owner.
+
+Opening the window is deliberate, because sign-up is disabled by default:
 
 ```
 node tools/firebase-setup.js --open-claim     # let an account be created
-#   ... sign in with Google at /admin/ -- that account becomes the admin ...
 node tools/firebase-setup.js --close-claim    # shut it again
 node tools/firebase-setup.js --claim-status   # who has it, is it still open
 ```
 
-Between opening and claiming, anyone who reaches that page could take it
-instead. The window is meant to be seconds long, and `--claim-status` exists so
-"is it still open?" is a question with an answer rather than a memory.
-
-Two ways in, one allowlist. Signing in with Google is the usual door; email and
-password stays as the fallback for when a Google account is not to hand. They
-are different UIDs for the same person, so the list holds both:
+One allowlist, however many ways in. It holds UIDs, not sign-in methods, so a
+Google account added later is one more entry rather than a second mechanism:
 
 ```
 node tools/firebase-setup.js --list-admins            # who can moderate today

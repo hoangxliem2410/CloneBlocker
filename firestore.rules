@@ -193,7 +193,14 @@ service cloud.firestore {
     // so this cannot be used to install somebody else.
     match /admin/allowlist {
       allow read: if isAdmin();
+      // Only on a project that has NOBODY pinned. Once setup has put the
+        // moderation account's uid in adminUids() -- which it does on every
+        // normal run -- there is an admin already and this door is shut, so a
+        // second account signing in cannot claim anything. The claim exists
+        // for the bootstrap case (a Google sign-in on a project with no
+        // pinned uid), not as a standing way in.
       allow create: if request.auth != null
+        && adminUids().size() == 0
         && request.resource.data.keys().hasOnly(['uids', 'claimedAt', 'claimedBy'])
         && request.resource.data.uids is list
         && request.resource.data.uids.size() == 1

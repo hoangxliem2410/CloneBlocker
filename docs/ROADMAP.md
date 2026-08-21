@@ -233,6 +233,9 @@ uid was the failure mode worth engineering against.
 
 - Enable the Google provider (`firebase-setup.js` gains the Identity Toolkit
   `defaultSupportedIdpConfigs` call; console fallback documented).
+- (Since switched OFF at the owner's request, 2026-08-21: password sign-in
+  only, no Google button, `--with-google` re-enables the provider step, and
+  the claim below is restricted to projects with nobody pinned.)
 - Dashboard gate grows a "Sign in with Google" button
   (`signInWithPopup(GoogleAuthProvider)`); email/password stays as fallback.
 - Rules `isAdmin()` becomes a UID *list*. A Google sign-in mints a different

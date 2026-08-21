@@ -121,7 +121,7 @@ that screen.
 Clone Blocker
 ```
 
-### Short description (132 max) — 120 used
+### Short description (132 max) — 117 used
 
 Also the extension's own description; the store reads it from there. Since the
 i18n phase that is `appDesc` in `_locales/en/messages.json` (and its Vietnamese
@@ -129,20 +129,23 @@ counterpart), reached from `manifest.json` as `__MSG_appDesc__` — the store
 serves whichever one matches the shopper's language.
 
 ```
-Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.
+Report a clone once. When it is approved, everyone running Clone Blocker blocks that account on Facebook and Threads.
 ```
 
 The Vietnamese the store serves to a Vietnamese shopper, from
-`_locales/vi/messages.json`, at 118 characters:
+`_locales/vi/messages.json`, at 124 characters:
 
 ```
-Ẩn các tài khoản giả mạo bạn trên Facebook và Threads, rồi chặn những tài khoản hoạt động mạnh nhất theo nhịp an toàn.
+Báo cáo một tài khoản giả mạo. Được duyệt xong, mọi người dùng Clone Blocker đều chặn tài khoản đó trên Facebook và Threads.
 ```
 
-It leads with hiding, which now ships switched off — worth revisiting, but not
-on its own: this string is `appDesc` in both locale files, so any rewrite has to
-change all three in the same commit and land under 132 characters in every
-language. Left alone here deliberately rather than by oversight.
+It used to lead with hiding, which ships switched off — so the first thing a
+shopper read was the one feature that does nothing until they find a tick box.
+It now leads with the shared list, which is the actual product: one person
+reports, a human approves, and every installed copy blocks that account. Both
+strings are `appDesc`, reached from the manifest as `__MSG_appDesc__`, so any
+rewrite has to change both locales together and land under 132 characters in
+each.
 
 ### Category
 
@@ -155,6 +158,14 @@ mismatches, and this is not a productivity tool.)
 Someone is running accounts that pretend to be you. Clone Blocker blocks them
 for real — through Facebook's and Threads' own block mechanism, at a pace that
 keeps your own account out of trouble.
+
+ONE REPORT PROTECTS EVERYBODY
+This is the part that matters. When you report a clone, it does not just get
+blocked for you. It goes to a human reviewer, and once it is approved that
+account joins the shared blocklist that every copy of Clone Blocker follows —
+so everybody running the extension blocks them too, whether or not they ever
+laid eyes on that account. The list is one list, built out of reports that
+people sent and a person approved. You are not maintaining your own.
 
 What you choose is where it looks. Two switches, both on to begin with, and
 each one works on its own.
@@ -186,12 +197,14 @@ and comments disappear as the page loads. It happens entirely in your browser,
 sends nothing, changes nothing on your account, has no limit, and covers the
 whole list rather than a budgeted slice.
 
-REPORT A CLONE IN TWO CLICKS
+REPORTING TAKES TWO CLICKS
 Hover a name in the feed, or open the profile, and file a report with the
-posts that prove it. Reports go to a human reviewer, and nothing reaches the
-blocklist until it is approved. Some reviewed accounts are additionally named
-on a public page we publish — that is a separate decision a person makes about
-each one, and nothing about you as the reporter is ever published.
+posts that prove it. "Block this profile too" is ticked already, so the block
+goes out for you straight away while the report goes off to be read. Nothing
+reaches the shared blocklist until a person approves it. Some reviewed accounts
+are additionally named on a public page we publish — that is a separate
+decision a person makes about each one, and nothing about you as the reporter
+is ever published.
 
 NOTHING TO SET UP
 The blocklist address is built into the extension and the list itself is
@@ -420,14 +433,29 @@ pretending they are not there would waste a review cycle.
 
 ### a. A reviewer installs it and nothing happens — *most likely*
 
-A fresh install now fetches a real list, but hiding ships **off** and blocking
-is silent and paced, so there is still nothing on screen for a reviewer to
-point at in the first minute. This is a common rejection reason and it is not
-really a policy problem, just an unlucky first impression. The reviewer-notes
-text in §4 exists for exactly this, and its first paragraph is the one that
-matters: tell them where the hide switch is. If it gets rejected on these
-grounds anyway, the cheapest answer is a listing screenshot of a real feed with
-hiding on, not a change to the defaults.
+A fresh install fetches a real list, but hiding ships **off** and blocking is
+silent and paced, so there is nothing on screen for a reviewer to point at in
+the first minute. This is a common rejection reason and it is not really a
+policy problem, just an unlucky first impression.
+
+**What now answers it: `src/welcome/welcome.html`.** Installing opens it in a
+tab, once. It teaches exactly one thing — find the profile, click the block
+button, it is blocked — and then says what approval leads to, which is the
+product. A reviewer who reads it knows what to try within thirty seconds, and
+the two buttons on it open Facebook and Threads so they can try it without
+typing an address.
+
+It fires from `chrome.runtime.onInstalled` only when `reason === 'install'`,
+and is additionally gated on a `welcomedAt` flag in `chrome.storage.local`.
+The flag is what stops an unpacked reload — which reports itself as an install
+— from opening a tab every time somebody saves a file. Local storage is wiped
+on uninstall, so a genuine reinstall does show it again, which is right.
+`chrome.tabs.create` needs no permission beyond what the manifest already
+declares, so this added nothing to the permission list.
+
+The reviewer-notes text in §4 still matters for the hide switch. If it gets
+rejected on these grounds anyway, the cheapest answer is a listing screenshot
+of a real feed with hiding on, not a change to the defaults.
 
 ### b. List-nominated blocks and "related user action"
 
@@ -512,6 +540,7 @@ exposes, and the override only selects among them — say so if asked.
 - [x] Small promo tile 440×280
 - [x] Marquee tile 1400×560
 - [x] At least one 1280×800 screenshot (two)
+- [x] First-run guide opens on install and says what a report leads to (§6a)
 - [x] No real accounts, real names or real reports in any asset
 - [x] Privacy policy written and in the repo
 - [ ] Developer account registered, $5 paid, email verified

@@ -118,7 +118,8 @@ if (manifest) {
 }
 
 // ---- 3. HTML asset references --------------------------------------------
-for (const rel of ['src/popup/popup.html', 'src/options/options.html']) {
+for (const rel of ['src/popup/popup.html', 'src/options/options.html',
+                   'src/welcome/welcome.html']) {
   const file = path.join(ROOT, rel);
   if (!fs.existsSync(file)) { report(false, 'exists ' + rel); continue; }
   const src = fs.readFileSync(file, 'utf8');
@@ -165,7 +166,7 @@ for (const rel of ['src/popup/popup.html', 'src/options/options.html']) {
 // $('someId') on a missing element returns null and the next property access
 // throws, which blanks the whole page -- and both files stay individually
 // valid, so nothing else here would catch it.
-for (const page of ['popup', 'activity']) {
+for (const page of ['popup', 'activity', 'welcome']) {
   const jsPath = path.join(ROOT, 'src', page, page + '.js');
   const htmlPath = path.join(ROOT, 'src', page, page + '.html');
   try {

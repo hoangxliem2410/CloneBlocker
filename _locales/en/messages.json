@@ -256,7 +256,7 @@
     "description": "Caption under the counter tile showing how many profiles are queued for a block."
   },
   "appDesc": {
-    "message": "Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.",
+    "message": "Report a clone once. When it is approved, everyone running Clone Blocker blocks that account on Facebook and Threads.",
     "description": "The one-line store description, under the name in the Chrome Web Store listing and on chrome://extensions. Hard limit of 132 characters."
   },
   "appName": {
@@ -344,8 +344,8 @@
     "description": "Heading of the settings card that reports where the downloaded blocklist stands."
   },
   "options_blocklistNote": {
-    "message": "Served by the Clone Blocker project. Every report is reviewed by hand before a profile reaches the list, and there is nothing here to set up.",
-    "description": "Explains the blocklist card. 'Clone Blocker' is the product name and is not translated."
+    "message": "Served by the Clone Blocker project: one shared list, built from reports that people sent and a human approved. Everyone running the extension follows it, and there is nothing here to set up.",
+    "description": "Note under the blocklist section of the options page."
   },
   "options_checking": {
     "message": "Checking…",
@@ -552,8 +552,8 @@
     "description": "Heading of the card controlling the in-page reporting affordance and where reports are sent."
   },
   "options_reportingNote": {
-    "message": "Lets people flag clone accounts from the page itself. Reports go in for review; nothing reaches the blocklist until an admin approves it.",
-    "description": "Explains what in-page reporting does."
+    "message": "Lets people report clone accounts from the page itself. Every report is read by a person, and an approved one goes on the shared blocklist that every copy of the extension follows.",
+    "description": "Note under the reporting section of the options page."
   },
   "options_resetQueue": {
     "message": "Reset queue & stats",
@@ -812,20 +812,12 @@
     "description": "Status line under the profile name in the popup when the open profile is the signed-in user's own."
   },
   "report_adminReviews": {
-    "message": "An admin reviews it before anything is added to the blocklist.",
-    "description": "Note on the report dialog's confirmation screen."
+    "message": "A person reads it first. Once it is approved this account joins the shared blocklist, and everyone running Clone Blocker blocks them too.",
+    "description": "Shown in the report sheet, under the reason picker. Says what approval leads to."
   },
   "report_alsoBlock": {
     "message": "Block this profile too",
     "description": "Tick box in the report sheet, on by default: block the reported account immediately as well as reporting it."
-  },
-  "report_alsoBlockNoId": {
-    "message": "This profile has not revealed a numeric ID yet, so it can only be reported.",
-    "description": "Shown under the block tick box when the profile has no numeric id. Blocking is issued against an id, never a username."
-  },
-  "report_alsoBlockOff": {
-    "message": "Blocking is switched off in Settings, so this report will not block anyone.",
-    "description": "Shown under the block tick box when platform blocking is disabled, which is why the box is greyed out."
   },
   "report_alsoBlockQueued": {
     "message": "Blocking is paused in Settings, so this will wait in the queue until you switch it back on.",
@@ -868,8 +860,8 @@
     "description": "Badge on the report dialog's confirmation screen when this account has been reported exactly once."
   },
   "report_disclaimer": {
-    "message": "This is sent to your own review server, not to Facebook or Threads. An admin decides whether it goes on the blocklist.",
-    "description": "Note at the foot of the report dialog, saying where the report actually goes."
+    "message": "This goes to the Clone Blocker project, not to Facebook or Threads.",
+    "description": "Shown in the report sheet. Names who receives the report."
   },
   "report_done": {
     "message": "Done",
@@ -932,11 +924,11 @@
     "description": "The Send report button while the report is in flight."
   },
   "report_sent": {
-    "message": "Report sent. Thank you.",
-    "description": "Shown in place of the report form once the report went through."
+    "message": "Report sent. If it is approved, everyone running Clone Blocker blocks this account too.",
+    "description": "Confirmation after a report is sent without an immediate block."
   },
   "report_sentAndBlocked": {
-    "message": "Reported, and queued for blocking.",
+    "message": "Blocked, and sent for review. If it is approved, everyone running Clone Blocker blocks them too.",
     "description": "Confirmation after a report that also queued a block."
   },
   "report_sheetTitle": {
@@ -1106,5 +1098,73 @@
   "time_secondsAgo": {
     "message": "$1s ago",
     "description": "How long ago something happened, in seconds. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "welcome_aside": {
+    "message": "From then on it keeps going on its own: accounts already on the list get blocked as you come across them, and the rest are worked through slowly in the background. The toolbar icon says what it has done on the page you are looking at — pin it if you want it close by.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_heading": {
+    "message": "Clone Blocker is on.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_later": {
+    "message": "Everything else — how fast it works, what it hides, whose list it follows — lives in Settings. You do not need any of it yet.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_lede": {
+    "message": "Nothing to set up. There is one thing worth learning, and this is it: how to block somebody.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_openFacebook": {
+    "message": "Open Facebook",
+    "description": "Button on the welcome page."
+  },
+  "welcome_openThreads": {
+    "message": "Open Threads",
+    "description": "Button on the welcome page."
+  },
+  "welcome_pageTitle": {
+    "message": "Clone Blocker",
+    "description": "Browser tab title of the welcome page."
+  },
+  "welcome_settingsLink": {
+    "message": "Settings",
+    "description": "Link to the options page from the welcome page."
+  },
+  "welcome_sharedBody": {
+    "message": "Every report goes to a person who reads it. Once it is approved, that account joins the shared blocklist — and everyone running Clone Blocker blocks them too. One report, and the herd is one smaller for all of us.",
+    "description": "Body of the shared-blocklist callout on the welcome page. This is the key feature."
+  },
+  "welcome_sharedTitle": {
+    "message": "And it does not stop with you",
+    "description": "Heading of the shared-blocklist callout on the welcome page."
+  },
+  "welcome_step1Body": {
+    "message": "Open their profile on Facebook or Threads — or just find one of their posts in your feed.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step1Title": {
+    "message": "Find them",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Body": {
+    "message": "Clone Blocker adds it next to Share on posts, and beside profile links. Pick a reason — Bò đỏ is first in the list — and send.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Caption": {
+    "message": "This button.",
+    "description": "Caption beside a drawing of the block button on the welcome page."
+  },
+  "welcome_step2Title": {
+    "message": "Click the block button",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Body": {
+    "message": "“Block this profile too” is already ticked, so the block goes out straight away — through Facebook’s or Threads’ own block, exactly as if you had done it by hand.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Title": {
+    "message": "That is the block done",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
   }
 }

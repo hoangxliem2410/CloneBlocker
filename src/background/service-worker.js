@@ -1086,9 +1086,34 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   refreshBlocklist(false).catch(() => {});
 });
 
-chrome.runtime.onInstalled.addListener(() => {
+/**
+ * The one-time welcome tab.
+ *
+ * Gated on chrome.storage.local rather than on the install reason alone, for
+ * two reasons that point the same way. An unpacked extension fires
+ * onInstalled with reason "install" on every reload, so reason alone would
+ * open a tab every time anyone working on this saved a file. And local
+ * storage is wiped when the extension is removed, so somebody who genuinely
+ * uninstalls and installs again does get the tour again -- which is right,
+ * because for them it is a first run.
+ *
+ * Failures are swallowed on purpose. Not seeing the guide is a small loss;
+ * an unhandled rejection in the install handler is not worth it.
+ */
+async function openWelcomeOnce() {
+  const got = await chrome.storage.local.get('welcomedAt');
+  if (got && got.welcomedAt) return;
+  // Written before the tab is opened, not after. If creating the tab throws,
+  // the flag is still set and the next reload does not try again -- a guide
+  // that cannot open is not a guide worth retrying forever.
+  await chrome.storage.local.set({ welcomedAt: Date.now() });
+  await chrome.tabs.create({ url: chrome.runtime.getURL('src/welcome/welcome.html') });
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
   installAlarm().catch(() => {});
   refreshBlocklist(true).catch(() => {});
+  if (details && details.reason === 'install') openWelcomeOnce().catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => {
   installAlarm().catch(() => {});

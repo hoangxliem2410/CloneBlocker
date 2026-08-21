@@ -256,7 +256,7 @@
     "description": "Caption under the counter tile showing how many profiles are queued for a block."
   },
   "appDesc": {
-    "message": "Ẩn các tài khoản giả mạo bạn trên Facebook và Threads, rồi chặn những tài khoản hoạt động mạnh nhất theo nhịp an toàn.",
+    "message": "Báo cáo một tài khoản giả mạo. Được duyệt xong, mọi người dùng Clone Blocker đều chặn tài khoản đó trên Facebook và Threads.",
     "description": "The one-line store description, under the name in the Chrome Web Store listing and on chrome://extensions. Hard limit of 132 characters."
   },
   "appName": {
@@ -344,8 +344,8 @@
     "description": "Heading of the settings card that reports where the downloaded blocklist stands."
   },
   "options_blocklistNote": {
-    "message": "Do dự án Clone Blocker cung cấp. Mọi báo cáo đều được xét duyệt thủ công trước khi một hồ sơ vào danh sách, và ở đây không có gì phải thiết lập.",
-    "description": "Explains the blocklist card. 'Clone Blocker' is the product name and is not translated."
+    "message": "Do dự án Clone Blocker cung cấp: một danh sách chung, dựng từ các báo cáo do người dùng gửi và được người thật duyệt. Mọi người dùng tiện ích đều theo danh sách này, và ở đây không có gì phải thiết lập.",
+    "description": "Note under the blocklist section of the options page."
   },
   "options_checking": {
     "message": "Đang kiểm tra…",
@@ -552,8 +552,8 @@
     "description": "Heading of the card controlling the in-page reporting affordance and where reports are sent."
   },
   "options_reportingNote": {
-    "message": "Cho phép mọi người gắn cờ tài khoản giả mạo ngay trên trang. Báo cáo được đưa đi xét duyệt; không có gì vào danh sách chặn cho tới khi quản trị viên phê duyệt.",
-    "description": "Explains what in-page reporting does."
+    "message": "Cho phép báo cáo tài khoản giả mạo ngay trên trang. Mỗi báo cáo đều có người đọc, và báo cáo được duyệt sẽ vào danh sách chặn chung mà mọi bản cài đặt của tiện ích đều dùng.",
+    "description": "Note under the reporting section of the options page."
   },
   "options_resetQueue": {
     "message": "Đặt lại hàng đợi và thống kê",
@@ -812,20 +812,12 @@
     "description": "Status line under the profile name in the popup when the open profile is the signed-in user's own."
   },
   "report_adminReviews": {
-    "message": "Quản trị viên sẽ xét duyệt trước khi bất cứ điều gì được thêm vào danh sách chặn.",
-    "description": "Note on the report dialog's confirmation screen."
+    "message": "Sẽ có người đọc và duyệt trước. Được duyệt xong, tài khoản này vào danh sách chặn chung, và mọi người đang dùng Clone Blocker cũng chặn họ.",
+    "description": "Shown in the report sheet, under the reason picker. Says what approval leads to."
   },
   "report_alsoBlock": {
     "message": "Chặn luôn tài khoản này",
     "description": "Tick box in the report sheet, on by default: block the reported account immediately as well as reporting it."
-  },
-  "report_alsoBlockNoId": {
-    "message": "Tài khoản này chưa hiện ID dạng số, nên chỉ có thể báo cáo.",
-    "description": "Shown under the block tick box when the profile has no numeric id. Blocking is issued against an id, never a username."
-  },
-  "report_alsoBlockOff": {
-    "message": "Tính năng chặn đang tắt trong Cài đặt, nên báo cáo này sẽ không chặn ai.",
-    "description": "Shown under the block tick box when platform blocking is disabled, which is why the box is greyed out."
   },
   "report_alsoBlockQueued": {
     "message": "Tính năng chặn đang tạm dừng trong Cài đặt, nên việc này sẽ chờ trong hàng đợi cho tới khi bạn bật lại.",
@@ -868,8 +860,8 @@
     "description": "Badge on the report dialog's confirmation screen when this account has been reported exactly once."
   },
   "report_disclaimer": {
-    "message": "Nội dung này được gửi tới máy chủ xét duyệt của chính bạn, không gửi cho Facebook hay Threads. Quản trị viên sẽ quyết định có đưa vào danh sách chặn hay không.",
-    "description": "Note at the foot of the report dialog, saying where the report actually goes."
+    "message": "Báo cáo được gửi tới dự án Clone Blocker, không phải tới Facebook hay Threads.",
+    "description": "Shown in the report sheet. Names who receives the report."
   },
   "report_done": {
     "message": "Xong",
@@ -932,11 +924,11 @@
     "description": "The Send report button while the report is in flight."
   },
   "report_sent": {
-    "message": "Đã gửi báo cáo. Cảm ơn bạn.",
-    "description": "Shown in place of the report form once the report went through."
+    "message": "Đã gửi báo cáo. Nếu được duyệt, mọi người đang dùng Clone Blocker cũng sẽ chặn tài khoản này.",
+    "description": "Confirmation after a report is sent without an immediate block."
   },
   "report_sentAndBlocked": {
-    "message": "Đã báo cáo, và đã đưa vào hàng đợi để chặn.",
+    "message": "Đã chặn, và đã gửi đi để duyệt. Nếu được duyệt, mọi người đang dùng Clone Blocker cũng sẽ chặn họ.",
     "description": "Confirmation after a report that also queued a block."
   },
   "report_sheetTitle": {
@@ -1106,5 +1098,73 @@
   "time_secondsAgo": {
     "message": "$1 giây trước",
     "description": "How long ago something happened, in seconds. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "welcome_aside": {
+    "message": "Từ đó trở đi nó tự làm tiếp: những tài khoản đã có trong danh sách sẽ bị chặn khi bạn lướt qua, số còn lại được xử lý dần ở nền. Biểu tượng trên thanh công cụ cho biết nó đã làm gì trên trang bạn đang xem — ghim lại cho tiện.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_heading": {
+    "message": "Clone Blocker đã sẵn sàng.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_later": {
+    "message": "Mọi thứ khác — chặn nhanh hay chậm, ẩn những gì, theo danh sách của ai — nằm trong Cài đặt. Bây giờ bạn chưa cần đến.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_lede": {
+    "message": "Không cần cài đặt gì thêm. Chỉ cần biết một điều này thôi: cách chặn một tài khoản.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_openFacebook": {
+    "message": "Mở Facebook",
+    "description": "Button on the welcome page."
+  },
+  "welcome_openThreads": {
+    "message": "Mở Threads",
+    "description": "Button on the welcome page."
+  },
+  "welcome_pageTitle": {
+    "message": "Clone Blocker",
+    "description": "Browser tab title of the welcome page."
+  },
+  "welcome_settingsLink": {
+    "message": "Cài đặt",
+    "description": "Link to the options page from the welcome page."
+  },
+  "welcome_sharedBody": {
+    "message": "Mỗi báo cáo đều có người đọc và duyệt. Được duyệt xong, tài khoản đó vào danh sách chặn chung — và mọi người đang dùng Clone Blocker cũng chặn họ. Một báo cáo, cả đàn bớt đi một con cho tất cả mọi người.",
+    "description": "Body of the shared-blocklist callout on the welcome page. This is the key feature."
+  },
+  "welcome_sharedTitle": {
+    "message": "Và nó không dừng lại ở bạn",
+    "description": "Heading of the shared-blocklist callout on the welcome page."
+  },
+  "welcome_step1Body": {
+    "message": "Mở trang cá nhân của họ trên Facebook hoặc Threads — hoặc chỉ cần tìm một bài viết của họ trong bảng tin.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step1Title": {
+    "message": "Tìm họ",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Body": {
+    "message": "Clone Blocker thêm nút này cạnh nút Chia sẻ ở mỗi bài viết, và bên cạnh các liên kết trang cá nhân. Chọn lý do — Bò đỏ nằm đầu danh sách — rồi gửi.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step2Caption": {
+    "message": "Nút này.",
+    "description": "Caption beside a drawing of the block button on the welcome page."
+  },
+  "welcome_step2Title": {
+    "message": "Bấm nút chặn",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Body": {
+    "message": "Ô “Chặn luôn tài khoản này” đã được tích sẵn, nên lệnh chặn được gửi đi ngay — bằng chính chức năng chặn của Facebook hoặc Threads, y như khi bạn tự tay bấm chặn.",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
+  },
+  "welcome_step3Title": {
+    "message": "Thế là xong",
+    "description": "Shown on the welcome tab that opens once, the first time the extension is installed."
   }
 }

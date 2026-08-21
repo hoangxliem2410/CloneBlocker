@@ -224,6 +224,19 @@ function tileHtml(w, h, opts) {
     .joke { margin-top: ${opts.jokeGap}px; font-size: ${opts.joke}px; font-weight: 700;
             letter-spacing: -.02em; line-height: 1.06; color: #ffc72e;
             max-width: ${opts.jokeWidth}px; }
+    /* The one sentence that has to survive being glanced at. It was in the
+       grey description underneath, where the single most important thing
+       about the product read as the third clause of a paragraph. White on a
+       lit panel with the brand's yellow down its edge -- loud enough to be
+       read second, after the joke, and never mistaken for body copy. */
+    .claim {
+      margin-top: ${opts.claimGap}px; display: inline-block;
+      font-size: ${opts.claim}px; font-weight: 620; line-height: 1.3;
+      color: #f4f6fc; max-width: ${opts.tagWidth}px;
+      background: rgba(255, 199, 46, .1); border: 1px solid rgba(255, 199, 46, .34);
+      border-left: 3px solid #ffc72e; border-radius: 7px;
+      padding: ${opts.claim * 0.42}px ${opts.claim * 0.62}px;
+    }
     .tag  { margin-top: ${opts.tagGap}px; font-size: ${opts.tag}px; font-weight: 500;
             line-height: 1.34; color: #c2cbee; max-width: ${opts.tagWidth}px; }
     .rule { margin-top: ${opts.tagGap}px; width: ${opts.joke * 1.5}px; height: 3px;
@@ -238,7 +251,8 @@ function tileHtml(w, h, opts) {
       <div class="name">Clone Blocker</div>
       <div class="joke">${opts.joke_}</div>
       <div class="rule"></div>
-      <div class="tag">${opts.tagline}</div>
+      <div class="claim">${opts.claim_}</div>
+      ${opts.tagline ? `<div class="tag">${opts.tagline}</div>` : ''}
     </div>
   </div>`;
 }
@@ -256,14 +270,22 @@ function posterHtml() {
     .page { position: absolute; inset: 0; display: flex; flex-direction: column;
             align-items: center; justify-content: center; text-align: center;
             padding: 0 90px 90px; }
-    .mark { width: 148px; height: 148px; border-radius: 35px;
+    .mark { width: 124px; height: 124px; border-radius: 29px;
             background: url('${icon}') center/cover no-repeat;
             box-shadow: 0 16px 48px rgba(6, 9, 24, .62); }
     .name { margin-top: 30px; font-size: 20px; font-weight: 650; text-transform: uppercase;
             letter-spacing: .21em; color: #98a6dc; }
-    h1 { margin: 18px 0 0; font-size: 76px; line-height: 1.06; font-weight: 700;
+    h1 { margin: 16px 0 0; font-size: 68px; line-height: 1.06; font-weight: 700;
          letter-spacing: -.028em; color: #ffc72e; }
-    p { margin: 24px 0 0; font-size: 25px; line-height: 1.5; color: #c2cbee; max-width: 820px; }
+    p { margin: 20px 0 0; font-size: 23px; line-height: 1.5; color: #c2cbee; max-width: 820px; }
+    /* Same panel as the tiles carry: this is the sentence the listing is
+       actually selling, and it cannot be left to be found in a paragraph. */
+    .claim {
+      display: inline-block; margin: 22px 0 0; max-width: 800px;
+      font-size: 25px; font-weight: 620; line-height: 1.32; color: #f4f6fc;
+      background: rgba(255, 199, 46, .1); border: 1px solid rgba(255, 199, 46, .34);
+      border-left: 3px solid #ffc72e; border-radius: 8px; padding: 12px 18px;
+    }
     .pills { display: flex; gap: 12px; margin-top: 38px; flex-wrap: wrap; justify-content: center; }
     .pill { font-size: 17px; font-weight: 600; padding: 11px 20px; border-radius: 999px;
             background: rgba(150,168,235,.11); border: 1px solid rgba(150,168,235,.22);
@@ -275,13 +297,13 @@ function posterHtml() {
     <div class="mark"></div>
     <div class="name">Clone Blocker</div>
     <h1>Bò đỏ ơi,<br>cỏ ở đằng kia.</h1>
-    <p>Ẩn và chặn bò đỏ, nick giả và mọi thứ na ná nhau trên Facebook và Threads.
-       Bạn bấm một lần, cả đàn tự đi ăn cỏ.</p>
+    <div class="claim">Bạn báo cáo một lần &rarr; duyệt xong,<br>ai dùng Clone Blocker cũng chặn tài khoản đó</div>
+    <p>Chặn bò đỏ, nick giả và mọi thứ na ná nhau trên Facebook và Threads.</p>
     <div class="pills">
       <span class="pill">Facebook &amp; Threads</span>
-      <span class="pill">Ẩn ngay khi trang vừa tải</span>
+      <span class="pill">Báo cáo một lần</span>
+      <span class="pill">Duyệt xong, cả cộng đồng cùng chặn</span>
       <span class="pill">Chặn từ tốn, an toàn</span>
-      <span class="pill">Danh sách do bạn duyệt</span>
     </div>
   </div>`;
 }
@@ -381,18 +403,20 @@ function productHtml(opts) {
     const JOKE = 'Bò đỏ ơi,<br>cỏ ở đằng kia.';
 
     await shoot(cdp, dataUrl(tileHtml(440, 280, {
-      iconSize: 92, gap: 22, pad: 28, name: 12, joke: 28, jokeGap: 10, jokeWidth: 262,
-      tag: 13.5, tagGap: 11, tagWidth: 262,
+      iconSize: 88, gap: 20, pad: 26, name: 11.5, joke: 27, jokeGap: 9, jokeWidth: 268,
+      claim: 13, claimGap: 11, tag: 12, tagGap: 9, tagWidth: 250,
       joke_: JOKE,
-      tagline: 'Ẩn và chặn bò đỏ và nick giả trên Facebook và Threads.',
+      claim_: 'Báo cáo một lần &rarr;<br>cả cộng đồng cùng chặn',
+      tagline: 'Bò đỏ và nick giả trên Facebook và Threads.',
       crowd: crowd(6, 84, 218, 84, -18)
     })), 440, 280, path.join(OUT, 'small-promo-440x280.png'));
 
     await shoot(cdp, dataUrl(tileHtml(1400, 560, {
-      iconSize: 244, gap: 74, pad: 98, name: 26, joke: 88, jokeGap: 20, jokeWidth: 900,
-      tag: 29, tagGap: 26, tagWidth: 840,
+      iconSize: 232, gap: 70, pad: 94, name: 25, joke: 82, jokeGap: 18, jokeWidth: 900,
+      claim: 27, claimGap: 22, tag: 25, tagGap: 18, tagWidth: 800,
       joke_: JOKE,
-      tagline: 'Ẩn và chặn bò đỏ, nick giả và mọi thứ na ná nhau trên Facebook và Threads. Bạn bấm một lần, cả đàn tự đi ăn cỏ.',
+      claim_: 'Bạn báo cáo một lần &rarr; duyệt xong, ai dùng Clone Blocker cũng chặn tài khoản đó',
+      tagline: 'Chặn bò đỏ và nick giả trên Facebook và Threads.',
       crowd: crowd(9, 168, 448, 168, -34)
     })), 1400, 560, path.join(OUT, 'marquee-1400x560.png'));
 
@@ -414,10 +438,10 @@ function productHtml(opts) {
         inset: uiShots.popup && fs.existsSync(uiShots.popup) ? uiShots.popup : null,
         insetWidth: 430,
         insetTop: 84,
-        title: 'Một nút. Cả đàn đi ăn cỏ.',
-        body: 'Ẩn ngay khi trang vừa tải, rồi chặn từ tốn ở nền ' +
-              'để tài khoản của bạn luôn an toàn. ' +
-              'Mọi tốc độ và giới hạn đều do bạn chỉnh.'
+        title: 'Một người báo cáo. Cả cộng đồng cùng chặn.',
+        body: 'Bạn báo cáo một tài khoản giả mạo, có người thật duyệt, rồi tài khoản đó ' +
+              'vào danh sách chặn chung — mọi bản Clone Blocker đều chặn theo. ' +
+              'Tốc độ và giới hạn vẫn do bạn chỉnh.'
       })), 1280, 800, path.join(OUT, 'screenshot-2-1280x800.png'));
     } else {
       console.log('  skipped screenshot 2: no capture of the extension pages');

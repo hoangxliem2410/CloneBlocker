@@ -295,3 +295,88 @@ pre.diag {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ---------------------------------------------------------------------------
+   welcome: the tab that opens once, on first install
+   -------------------------------------------------------------------------*/
+
+/* The hero borrows the store listing's clothes -- the same indigo field, the
+   same yellow, the same cow -- so the first thing somebody sees after
+   installing is the thing that persuaded them to. It is a band rather than
+   the whole page: yellow on indigo is a poster, and three paragraphs of
+   instructions set on it would be a poster nobody reads. Below the band the
+   page goes back to the extension's own colours, which follow the system
+   theme like every other screen here. */
+body.welcome { max-width: none; margin: 0; padding: 0; }
+
+.wl-hero {
+  background: radial-gradient(120% 130% at 12% 0%, #2b3566 0%, #1a2044 45%, #12162b 100%);
+  color: #f4f6fc;
+  padding: 44px 22px 40px;
+  text-align: center;
+}
+.wl-mark {
+  width: 84px; height: 84px; border-radius: 20px; display: block; margin: 0 auto;
+  box-shadow: 0 10px 30px rgba(6, 9, 24, .55);
+}
+.wl-hero h1 {
+  margin: 20px 0 0; font-size: 30px; line-height: 1.15; letter-spacing: -0.02em;
+  color: #ffc72e;
+}
+.wl-lede {
+  margin: 10px auto 0; max-width: 460px; font-size: 14px; line-height: 1.5;
+  color: #c2cbee;
+}
+
+.wl-body { max-width: 560px; margin: 0 auto; padding: 30px 22px 48px; }
+
+.wl-steps { list-style: none; margin: 0; padding: 0; }
+.wl-step { display: flex; gap: 14px; padding: 0 0 22px; }
+/* The number carries the sequence on its own, so the list needs no rule down
+   the side and no card around each step: three of those stacked read as three
+   separate things to do rather than as one short procedure. */
+.wl-num {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 650; line-height: 26px; text-align: center;
+}
+.wl-text { min-width: 0; }
+/* Overrides the shared h2, which is a small uppercase section label -- right
+   above a table of rows, wrong as the title of a step somebody is reading. */
+.wl-step h2 {
+  margin: 3px 0 4px; font-size: 15px; text-transform: none; letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.wl-step p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+/* The button, drawn at the size it appears on the page, beside the words that
+   name it. */
+.wl-glyph {
+  display: flex; align-items: center; gap: 9px; margin-top: 10px !important;
+  padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); width: fit-content;
+}
+.wl-glyph svg { flex: 0 0 auto; color: var(--fg); }
+
+/* The shared-list callout. The one thing on this page that is not an
+   instruction, so it gets the brand's yellow down its edge rather than
+   another number: the reader has just been told what to click three times,
+   and this is what clicking it is FOR. */
+.wl-key {
+  border: 1px solid var(--line); border-left: 3px solid #ffc72e;
+  border-radius: 8px; background: var(--card);
+  padding: 14px 16px; margin: 4px 0 22px;
+}
+.wl-key h2 {
+  margin: 0 0 5px; font-size: 14px; text-transform: none; letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.wl-key p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+.wl-aside {
+  border-top: 1px solid var(--line); padding-top: 16px; margin-top: 4px !important;
+  line-height: 1.55;
+}
+.wl-go { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.wl-foot { margin-top: 18px !important; }
+.wl-foot a { color: var(--accent); }

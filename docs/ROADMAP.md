@@ -37,11 +37,10 @@ ranked cold targets under the cold ceiling. Options page restructures around
 one mode picker with two plain paragraphs; the expert pacing fields fold into
 a collapsed "Advanced" block.
 
-**ASSUMPTION TO CONFIRM:** "remove the layer 1" is read as *retire the
-layer terminology*, not the hiding feature. Hiding stays, always-on and
-invisible (one toggle in Advanced) — it is free, covers the whole list
-including profiles never seen, and removing it would be a regression the
-rest of the todo does not imply. Say the word if hiding itself should go.
+**DECIDED (owner, 2026-08-21):** hiding stays but ships **disabled by
+default** — the product's default behaviour is real blocks only; the hide
+toggle lives in Advanced for those who want the whole list suppressed
+instantly. The layer terminology disappears from all UI.
 
 **Tab-open guidance [5].** The popup and activity page check
 `chrome.tabs.query` for an open Facebook/Threads tab whenever cold work is
@@ -103,8 +102,9 @@ from a small landing index; the admin dashboard moves under `/admin/`):
 - **CAUTION to decide:** this publicly names accounts as clones/scammers on
   a page you own. Approved-only is the floor; consider (a) a per-target
   "publish publicly" checkbox in the dashboard rather than automatic,
-  (b) evidence quotes shown only when a post URL backs them. Both are cheap;
-  the plan assumes (a) manual opt-in per target unless told otherwise.
+  (b) evidence quotes shown only when a post URL backs them.
+  **DECIDED (owner, 2026-08-21): (a) — per-target opt-in** via a
+  "publish publicly" control in the dashboard.
 
 ## Phase 5 — Google sign-in for the dashboard
 *(todo 10 — auth config + rules + dashboard gate)*
@@ -141,11 +141,10 @@ auth (5) is independent and can slot anywhere. Every phase ends with the
 full suite (check, queue, firebase, e2e, dashboard-visual) plus a live
 deploy where hosting or rules changed.
 
-## Open decisions (answer these, everything else proceeds on defaults)
+## Open decisions
 
-1. **Hiding**: stays always-on under the new mode model? *(plan assumes yes)*
-2. **Transparency site**: automatic for every approved target, or per-target
-   opt-in from the dashboard? *(plan assumes opt-in)*
-3. **Google admin account**: which address(es) to pin.
+1. ~~Hiding~~ — decided: kept, **disabled by default**, toggle in Advanced.
+2. ~~Transparency site~~ — decided: **per-target opt-in** from the dashboard.
+3. **Google admin account**: which address(es) to pin. *(needed at Phase 5)*
 4. **Redbull tag in store marketing**: in the product regardless; in the
-   listing copy or not.
+   listing copy or not. *(needed at store submission)*

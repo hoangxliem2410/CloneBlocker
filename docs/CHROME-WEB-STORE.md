@@ -36,50 +36,75 @@ All generated, all reproducible: `node tools/make-store-assets.js`.
 | Store icon | 128×128, 96px artwork + 16px transparent frame | yes | `store/icon128.png` |
 | Small promo tile | 440×280 | yes | `store/small-promo-440x280.png` |
 | Marquee promo tile | 1400×560 | no — but needed to be eligible for featuring | `store/marquee-1400x560.png` |
-| Screenshots | 1280×800, 1–5 of them, square corners, full bleed | at least 1 | `store/screenshot-1..4-1280x800.png` |
+| Screenshots | 1280×800, 1–5 of them, square corners, full bleed | at least 1 | `store/screenshot-1..2-1280x800.png` |
 | Extension icons | 16/32/48/128 | yes | `icons/icon*.png` |
 
 The store's guidance for tiles is *avoid text, stay legible at half size, fill
 the region, saturated colour, don't just replicate a screenshot* — hence a
 mark, a wordmark, and one line, rather than a shrunken UI.
 
-**The four screenshots**
+**The mark**
 
-1. **Hero** — the claim, no UI.
-2. **The two kinds of block** — the warm/cold split, drawn rather than captured
-   (see below).
-3. **Options page** — a real capture of the two switches, which are now the
-   first thing on the page.
-4. **Moderation dashboard** — a real capture, entirely synthetic fixture data.
+A red cow wearing a livestock ear tag. *Bò đỏ* — red cow — is what Vietnamese
+readers call the paid commenters who swarm a post to shout down whoever is
+speaking, and the complaint about them is that they are a herd: one opinion, in
+one set of words, from a hundred accounts that all look alike. Which is the
+same thing this extension is for, so one mark carries both halves.
 
-**Not yet regenerated for the two switches.** Screenshot 2 and the listing
-paragraphs inside `tools/make-store-assets.js` still say "Two modes" and name
-them *Passive* and *Active*, which is the vocabulary the product no longer uses;
-the options capture is live, so it already shows the tick boxes and currently
-disagrees with the image beside it. `npm run store-assets` has to be rerun
-against the new wording before submission, and the generator's copy edited
-first. Nothing else in the asset pipeline changes.
+The joke is aimed at the herd and nothing else. A flag or a national symbol
+with a line through it would be a different joke — one about a country rather
+than about astroturfing — and both less funny and far more likely to get the
+listing pulled. Reviewers have no obligation to work out which one you meant.
 
-Screenshot 2 is drawn rather than captured, and it and the options capture were
-both brought forward with this chapter of the product: the explainer is two
-cards, because the two kinds of block genuinely cost different things, and the
-options shot no longer hunts for a heading or fills in an endpoint field,
-because neither exists. One display-only correction survives in the generator:
-a dev session forces
-blocking off for safety and the page honestly says so, which is the harness's
-state rather than the product's, so the paused note is cleared in the DOM for
-the capture without writing any setting.
+The tag replaced a slash across the cow's face and, before that, a prohibition
+ring around it. The slash ran diagonally through the muzzle, so the face lost
+half of itself exactly where pixels got scarce; the ring read as "blocked"
+perfectly at 16px and shrank the cow to an unidentifiable smudge. The tag says
+the same thing without spending any of the face, and being the only asymmetric
+element in the mark, it is also what makes the silhouette recognisable small.
 
-Screenshot 2 is drawn instead of captured on purpose. The obvious second image
-is the popup, but on a page where the site has not yet loaded its own block
-module the popup honestly reports that, in red, and it stays there until the
-user opens a profile menu. The choice was to misconfigure the extension for a
-prettier picture or to explain the actual model — so it explains the model.
+**The two screenshots**
 
-The popup is still captured by the tool, but only to a temporary directory that
-is deleted afterwards. It must not be committed: its Page capability panel
-prints **Signed in as `<numeric account id>`**, so a copy in the repository
-would publish the real account of whoever generated it.
+1. **Poster** — the marquee again: same field, same herd, same yellow
+   punchline. *Bò đỏ ơi, cỏ ở đằng kia.* — hey red cow, the grass is that way.
+   A dismissal rather than an insult, which is both funnier and the honest
+   description of the product: it does not argue with the herd, it sends them
+   somewhere else.
+2. **The product** — real captures of the options page with the popup in front
+   of it, framed in the poster's clothes.
+
+It was four. Two of them were drawn explainers standing in front of two real
+captures, doing the captures' job — describing an interface that was sitting
+right there — and the drawn ones went stale against the product twice. One
+poster to land the joke and one photograph of the thing itself is the whole
+listing.
+
+Both captures are taken with the interface in **Vietnamese**, driven through
+the options page's own language picker. A listing that makes its joke in
+Vietnamese and then shows an English interface is quietly telling the reader
+the translation is marketing. The picker's previous value is read back and
+restored in a `finally`, so the dev browser it borrowed is left as it was
+found.
+
+Two other display-only corrections live in the generator, both because a dev
+session is not a fresh install:
+
+- The options page is captured with the paused note cleared in the DOM. A dev
+  session forces blocking off for safety and the page honestly says so; that is
+  the harness's state, not the product's. Nothing is written to settings.
+- The popup is captured with blocking **on** and dry run **on**, and the queue
+  emptied. On is what a fresh install ships with, and it has to agree with the
+  options page in the same image — a picture where the popup says blocking is
+  paused and the settings beside it say it is running contradicts itself, and
+  the reader cannot tell which half is the product. Dry run stays armed
+  regardless: that browser is signed in to real accounts, and no screenshot is
+  worth arming live blocking to take. The previous values are read back and
+  restored in a `finally`.
+
+The popup capture goes to a temporary directory that is deleted afterwards. It
+must not be committed: its Page capability panel prints **Signed in as
+`<numeric account id>`**, so a copy in the repository would publish the real
+account of whoever generated it.
 
 **Worth adding before you submit:** a fifth screenshot of a clone actually
 disappearing from a real feed. That one has to be yours — it can only be taken
@@ -486,7 +511,7 @@ exposes, and the override only selects among them — say so if asked.
 - [x] Store icon with the 96-in-128 transparent frame
 - [x] Small promo tile 440×280
 - [x] Marquee tile 1400×560
-- [x] At least one 1280×800 screenshot (four)
+- [x] At least one 1280×800 screenshot (two)
 - [x] No real accounts, real names or real reports in any asset
 - [x] Privacy policy written and in the repo
 - [ ] Developer account registered, $5 paid, email verified
@@ -497,13 +522,18 @@ exposes, and the override only selects among them — say so if asked.
 - [ ] Reviewer notes pasted
 - [ ] Confirm the defaults for the two switches: `blockSeen` and
       `blockFromList` both currently ship **on** (§6b)
-- [ ] Decide whether the `redbull` tag is named in the listing copy and the
-      reviewer notes (§3) — open, and the last product decision outstanding
+- [x] Decide whether the `redbull` tag is named in the listing copy (§3) —
+      **decided: yes, it leads.** The mark is a red cow, the tiles and both
+      screenshots run the *bò đỏ* joke in Vietnamese, and the reviewer notes
+      should say plainly what the word means: internet slang for paid
+      pro-government commenters, aimed at a posting behaviour and not at any
+      nationality. Reviewers should not have to work that out from a cow.
 - [ ] Localise the listing itself into Vietnamese in the dashboard (§3); the
       in-extension strings are already there
 - [x] `_locales/en` and `_locales/vi` at key parity, checked by `check.js`
-- [ ] Store assets regenerated against the two switches — the drawn screenshot
-      and the generator's own copy still say "two modes" (§2)
+- [x] Store assets regenerated — the drawn explainer that said "two modes" is
+      gone entirely, and the listing is down to one poster and one real
+      capture (§2)
 - [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
 
 The upload zip only needs what the extension actually loads: `manifest.json`,

@@ -28,6 +28,10 @@ const args = process.argv.slice(2);
 const argOf = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const CDP_PORT = parseInt(argOf('port', '9360'), 10);
 const KEEP = args.includes('--keep');
+// Tiles are the part that gets re-laid-out twenty times in a row. Capturing
+// the extension's own pages needs a second browser with it loaded and takes
+// about a minute, so let the fast half run on its own.
+const TILES_ONLY = args.includes('--tiles');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'store');
@@ -129,14 +133,13 @@ const BASE = `
     background:
       radial-gradient(120% 120% at 12% 0%, #2b3566 0%, #1a2044 42%, #12162b 100%);
   }
-  /* A faint crowd of impersonators behind everything, which is the problem
-     the extension exists for. Kept very low contrast so it reads as texture
-     and never competes with the mark. */
-  .crowd { position: absolute; inset: 0; opacity: .07; }
-  .crowd i {
-    position: absolute; display: block; border-radius: 999px;
-    background: #aab6e8;
-  }
+  /* A herd behind everything: the same cow, at the same size, in the same
+     pose, as many times as fits. That is the whole complaint about bo do in
+     one texture -- not that there are many of them, but that there is only
+     ever one of them, pasted. Low contrast, so it stays a texture and never
+     competes with the mark. */
+  .crowd { position: absolute; inset: 0; opacity: .2; }
+  .crowd i { position: absolute; display: block; }
 `;
 
 /**
@@ -146,15 +149,53 @@ const BASE = `
  * off-centre capsule floating below a circle reads as two unrelated blobs
  * rather than as a person, which is worse than no texture at all.
  */
+/**
+ * The mark's cow, flat, as inline SVG -- same geometry as tools/make-icons.js
+ * so the herd in the background is literally the animal in the badge, not a
+ * near-miss drawn a second time by hand.
+ */
+function cowSvg(size, fill, uid) {
+  const Z = 0.88, CY = 0.04;
+  const x = v => (v * Z).toFixed(4);
+  const y = v => (CY + v * Z).toFixed(4);
+  const r = v => (v * Z).toFixed(4);
+  const body = (paint) =>
+    `<g stroke="${paint}" fill="${paint}">` +
+    `<g stroke-width="${r(0.23)}" stroke-linecap="round">` +
+    `<line x1="${x(-0.22)}" y1="${y(-0.30)}" x2="${x(-0.62)}" y2="${y(-0.45)}"/>` +
+    `<line x1="${x(0.22)}" y1="${y(-0.30)}" x2="${x(0.62)}" y2="${y(-0.45)}"/></g>` +
+    `<g stroke="none">` +
+    `<ellipse cx="${x(-0.74)}" cy="${y(0.06)}" rx="${r(0.27)}" ry="${r(0.16)}"/>` +
+    `<ellipse cx="${x(0.74)}" cy="${y(0.06)}" rx="${r(0.27)}" ry="${r(0.16)}"/>` +
+    `<rect x="${x(-0.49)}" y="${y(-0.43)}" width="${r(0.98)}" height="${r(0.98)}" ` +
+    `rx="${r(0.28)}"/></g></g>`;
+  // Eyes and nostrils are punched through with a mask rather than painted in
+  // the background colour: the field behind is a gradient, so anything opaque
+  // would only match it in one spot and show as a smudge everywhere else.
+  const holes =
+    `<g fill="#000" stroke="none">` +
+    `<ellipse cx="${x(-0.25)}" cy="${y(-0.13)}" rx="${r(0.10)}" ry="${r(0.105)}"/>` +
+    `<ellipse cx="${x(0.25)}" cy="${y(-0.13)}" rx="${r(0.10)}" ry="${r(0.105)}"/>` +
+    `<ellipse cx="${x(-0.145)}" cy="${y(0.37)}" rx="${r(0.075)}" ry="${r(0.095)}"/>` +
+    `<ellipse cx="${x(0.145)}" cy="${y(0.37)}" rx="${r(0.075)}" ry="${r(0.095)}"/></g>`;
+  // Cropped to the animal. A square box left the cow floating in half a box
+  // of nothing, which made a row of them read as scattered dots.
+  const VB = { x: -0.92, y: -0.49, w: 1.84, h: 1.06 };
+  return `<svg viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" width="${size}" ` +
+    `height="${(size * VB.h / VB.w).toFixed(2)}">` +
+    `<defs><mask id="cow${uid}" maskUnits="userSpaceOnUse" ` +
+    `x="${VB.x}" y="${VB.y}" width="${VB.w}" height="${VB.h}">` +
+    body('#fff') + holes + `</mask></defs>` +
+    `<g mask="url(#cow${uid})"><rect x="${VB.x}" y="${VB.y}" width="${VB.w}" ` +
+    `height="${VB.h}" fill="${fill}"/></g></svg>`;
+}
+
+/** A row of that cow, evenly spaced, with nothing varied between them. */
 function crowd(count, size, top, gap, left) {
   let out = '';
-  const head = size * 0.46;
-  const bw = size * 0.80, bh = size * 0.40;
   for (let i = 0; i < count; i++) {
-    const x = left + i * gap;
-    out += `<i style="left:${x}px;top:${top}px;width:${head}px;height:${head}px"></i>`;
-    out += `<i style="left:${x - (bw - head) / 2}px;top:${top + head * 1.16}px;` +
-           `width:${bw}px;height:${bh}px;border-radius:${bw / 2}px ${bw / 2}px 0 0"></i>`;
+    out += `<i style="left:${left + i * gap}px;top:${top}px">` +
+           cowSvg(size, '#e6393f', i) + `</i>`;
   }
   return out;
 }
@@ -174,11 +215,20 @@ function tileHtml(w, h, opts) {
       background: url('${icon}') center/cover no-repeat;
       box-shadow: 0 ${big * 0.09}px ${big * 0.28}px rgba(6, 9, 24, .55);
     }
-    .name { font-size: ${opts.title}px; font-weight: 700; letter-spacing: -.022em; line-height: 1.04; }
+    /* The product name is the small line and the joke is the big one. A
+       marquee has about a second to earn a click, and "Clone Blocker" is not
+       what earns it -- being told where the grass is, is. The name still has
+       to be present and legible, so it sits above as an eyebrow. */
+    .name { font-size: ${opts.name}px; font-weight: 650; text-transform: uppercase;
+            letter-spacing: .19em; color: #98a6dc; }
+    .joke { margin-top: ${opts.jokeGap}px; font-size: ${opts.joke}px; font-weight: 700;
+            letter-spacing: -.02em; line-height: 1.06; color: #ffc72e;
+            max-width: ${opts.jokeWidth}px; }
     .tag  { margin-top: ${opts.tagGap}px; font-size: ${opts.tag}px; font-weight: 500;
-            line-height: 1.28; color: #b9c4ee; max-width: ${opts.tagWidth}px; }
-    .rule { margin-top: ${opts.tagGap}px; width: ${opts.title * 1.6}px; height: 3px;
-            border-radius: 2px; background: linear-gradient(90deg, #ff5e5b, #ff5e5b 55%, transparent); }
+            line-height: 1.34; color: #c2cbee; max-width: ${opts.tagWidth}px; }
+    .rule { margin-top: ${opts.tagGap}px; width: ${opts.joke * 1.5}px; height: 3px;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #ffc72e, #e6393f 60%, transparent); }
   </style>
   <div class="field"></div>
   <div class="crowd">${opts.crowd}</div>
@@ -186,6 +236,7 @@ function tileHtml(w, h, opts) {
     <div class="mark"></div>
     <div>
       <div class="name">Clone Blocker</div>
+      <div class="joke">${opts.joke_}</div>
       <div class="rule"></div>
       <div class="tag">${opts.tagline}</div>
     </div>
@@ -195,127 +246,92 @@ function tileHtml(w, h, opts) {
 // -- listing screenshots ---------------------------------------------------
 
 /**
- * One caption band, one real capture. The capture is inset on a tinted field
- * rather than bled to the edges so the 1280x800 frame is filled without
- * upscaling a smaller page into blur.
+ * Screenshot one: the poster. Deliberately the marquee tile again -- same
+ * field, same herd, same yellow punchline -- because a listing that opens on
+ * one joke and then shows a different product is a listing nobody trusts.
  */
-function shotHtml(opts) {
-  const shot = pngUri(opts.image);
-  return `<!doctype html><meta charset="utf-8"><style>${BASE}
-    .page { position: absolute; inset: 0; display: flex; flex-direction: column;
-            padding: 54px 64px 0; }
-    h1 { margin: 0; font-size: 44px; line-height: 1.1; font-weight: 700; letter-spacing: -.024em; }
-    h1 em { font-style: normal; color: #ff8a86; }
-    p  { margin: 14px 0 0; font-size: 21px; line-height: 1.42; font-weight: 450;
-         color: #b9c4ee; max-width: 830px; }
-    .stage { flex: 1; margin-top: 34px; position: relative; }
-    .frame {
-      position: absolute; left: 50%; transform: translateX(-50%); top: 0;
-      width: ${opts.frameWidth}px; border-radius: 14px 14px 0 0; overflow: hidden;
-      background: #0e1223;
-      box-shadow: 0 -1px 0 rgba(255,255,255,.07) inset, 0 26px 70px rgba(4, 7, 20, .6);
-      border: 1px solid rgba(150,168,235,.16); border-bottom: 0;
-    }
-    .frame img { display: block; width: 100%; }
-  </style>
-  <div class="field"></div>
-  <div class="crowd">${crowd(12, 118, 690, 112, -8)}</div>
-  <div class="page">
-    <h1>${opts.title}</h1>
-    <p>${opts.body}</p>
-    <div class="stage">
-      <div class="frame"><img src="${shot}"></div>
-    </div>
-  </div>`;
-}
-
-/**
- * The one screenshot that is drawn rather than captured.
- *
- * The popup would be the obvious second image, but on a page where the site
- * has not yet loaded its own block module the popup honestly reports that --
- * a red capability notice, permanent until the user opens a profile menu. The
- * choice was to misconfigure the extension for a prettier picture or to
- * explain the actual model instead. This explains the model.
- */
-function layersHtml() {
-  const card = (kick, title, lines, accent) => `
-    <div class="card">
-      <div class="kick" style="color:${accent}">${kick}</div>
-      <div class="ct">${title}</div>
-      <ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>
-    </div>`;
-  return `<!doctype html><meta charset="utf-8"><style>${BASE}
-    .page { position: absolute; inset: 0; padding: 62px 64px; display: flex; flex-direction: column; }
-    h1 { margin: 0; font-size: 44px; line-height: 1.1; font-weight: 700; letter-spacing: -.024em; }
-    h1 em { font-style: normal; color: #ff8a86; }
-    .sub { margin: 15px 0 0; font-size: 21px; line-height: 1.42; color: #b9c4ee; max-width: 900px; }
-    .cards { display: flex; gap: 26px; margin-top: 44px; }
-    .card { flex: 1; padding: 32px 34px 30px; border-radius: 18px;
-            background: rgba(150,168,235,.07); border: 1px solid rgba(150,168,235,.19); }
-    .kick { font-size: 15px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .ct { margin-top: 12px; font-size: 30px; font-weight: 700; letter-spacing: -.018em; }
-    ul { margin: 20px 0 0; padding: 0; list-style: none; }
-    li { font-size: 19px; line-height: 1.5; color: #cdd6f6; padding-left: 26px; position: relative; margin-top: 12px; }
-    li::before { content: ""; position: absolute; left: 4px; top: 11px; width: 8px; height: 8px;
-                 border-radius: 999px; background: #7f8cc4; }
-    .foot { margin-top: auto; font-size: 20px; line-height: 1.45; color: #b9c4ee;
-            border-left: 3px solid #ff5e5b; padding-left: 20px; max-width: 1000px; }
-  </style>
-  <div class="field"></div>
-  <div class="crowd">${crowd(12, 118, 700, 112, -8)}</div>
-  <div class="page">
-    <h1>Two jobs, because they cost <em>different things</em></h1>
-    <p class="sub">A list of thousands cannot be blocked by one account &mdash; that is exactly what
-       gets an account checkpointed. So each job is switched on separately, and paced apart.</p>
-    <div class="cards">
-      ${card('Cheap &middot; on by default', 'Clones you run into', [
-        'Profiles that appear as you browse',
-        'They were on your screen anyway',
-        'Blocked within seconds of each other',
-        'Stays well clear of the rate limits'
-      ], '#8ee6a8')}
-      ${card('Costly &middot; on by default', 'The list, worked through', [
-        'The clones most active near you',
-        'Even ones you never scroll past',
-        'Paced slowly, capped every hour',
-        'Needs a tab open &mdash; any tab'
-      ], '#ff8a86')}
-    </div>
-    <p class="foot">Both at once, or either alone. Open ten tabs if you like: the blocks still
-       go out one at a time, on purpose, because it is the account that gets checkpointed.</p>
-  </div>`;
-}
-
-/** The lead screenshot: no UI, just the claim. */
-function heroHtml() {
+function posterHtml() {
   const icon = pngUri(path.join(ROOT, 'icons', 'icon128.png'));
   return `<!doctype html><meta charset="utf-8"><style>${BASE}
     .page { position: absolute; inset: 0; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; text-align: center; padding: 0 90px; }
-    .mark { width: 132px; height: 132px; border-radius: 31px;
+            align-items: center; justify-content: center; text-align: center;
+            padding: 0 90px 90px; }
+    .mark { width: 148px; height: 148px; border-radius: 35px;
             background: url('${icon}') center/cover no-repeat;
-            box-shadow: 0 14px 44px rgba(6, 9, 24, .6); }
-    h1 { margin: 34px 0 0; font-size: 62px; line-height: 1.06; font-weight: 700; letter-spacing: -.03em; }
-    h1 em { font-style: normal; color: #ff8a86; }
-    p { margin: 20px 0 0; font-size: 24px; line-height: 1.45; color: #b9c4ee; max-width: 800px; }
-    .pills { display: flex; gap: 12px; margin-top: 40px; flex-wrap: wrap; justify-content: center; }
+            box-shadow: 0 16px 48px rgba(6, 9, 24, .62); }
+    .name { margin-top: 30px; font-size: 20px; font-weight: 650; text-transform: uppercase;
+            letter-spacing: .21em; color: #98a6dc; }
+    h1 { margin: 18px 0 0; font-size: 76px; line-height: 1.06; font-weight: 700;
+         letter-spacing: -.028em; color: #ffc72e; }
+    p { margin: 24px 0 0; font-size: 25px; line-height: 1.5; color: #c2cbee; max-width: 820px; }
+    .pills { display: flex; gap: 12px; margin-top: 38px; flex-wrap: wrap; justify-content: center; }
     .pill { font-size: 17px; font-weight: 600; padding: 11px 20px; border-radius: 999px;
             background: rgba(150,168,235,.11); border: 1px solid rgba(150,168,235,.22);
             color: #d5ddf8; }
   </style>
   <div class="field"></div>
-  <div class="crowd">${crowd(13, 132, 636, 108, -12)}</div>
+  <div class="crowd">${crowd(9, 168, 690, 168, -34)}</div>
   <div class="page">
     <div class="mark"></div>
-    <h1>Someone is pretending<br>to be <em>you</em>.</h1>
-    <p>Clone Blocker hides every impersonator on your list the moment a page loads &mdash;
-       and blocks the ones that are actually active near you.</p>
+    <div class="name">Clone Blocker</div>
+    <h1>Bò đỏ ơi,<br>cỏ ở đằng kia.</h1>
+    <p>Ẩn và chặn bò đỏ, nick giả và mọi thứ na ná nhau trên Facebook và Threads.
+       Bạn bấm một lần, cả đàn tự đi ăn cỏ.</p>
     <div class="pills">
       <span class="pill">Facebook &amp; Threads</span>
-      <span class="pill">Hides instantly</span>
-      <span class="pill">Blocks at a safe pace</span>
-      <span class="pill">Your own server</span>
+      <span class="pill">Ẩn ngay khi trang vừa tải</span>
+      <span class="pill">Chặn từ tốn, an toàn</span>
+      <span class="pill">Danh sách do bạn duyệt</span>
+    </div>
+  </div>`;
+}
+
+/**
+ * Screenshot two: the actual thing, in the same clothes. The options page
+ * carries it and the popup sits in front of it, because those are the only
+ * two surfaces a reader ever opens on purpose and showing one without the
+ * other makes the extension look like half of itself.
+ *
+ * Both captures are of the Vietnamese interface -- see captureExtensionPages.
+ * A listing that jokes in Vietnamese and then shows an English screenshot is
+ * quietly telling the reader the translation is marketing.
+ */
+function productHtml(opts) {
+  const main = pngUri(opts.main);
+  const inset = opts.inset ? pngUri(opts.inset) : null;
+  return `<!doctype html><meta charset="utf-8"><style>${BASE}
+    .page { position: absolute; inset: 0; display: flex; flex-direction: column;
+            padding: 52px 64px 0; }
+    .name { font-size: 17px; font-weight: 650; text-transform: uppercase;
+            letter-spacing: .21em; color: #98a6dc; }
+    h1 { margin: 14px 0 0; font-size: 50px; line-height: 1.08; font-weight: 700;
+         letter-spacing: -.026em; color: #ffc72e; }
+    p  { margin: 16px 0 0; font-size: 21px; line-height: 1.45; font-weight: 450;
+         color: #c2cbee; max-width: 840px; }
+    .stage { flex: 1; margin-top: 30px; position: relative; }
+    .frame {
+      position: absolute; border-radius: 14px 14px 0 0; overflow: hidden;
+      background: #0e1223;
+      box-shadow: 0 -1px 0 rgba(255,255,255,.07) inset, 0 26px 70px rgba(4, 7, 20, .6);
+      border: 1px solid rgba(150,168,235,.16); border-bottom: 0;
+    }
+    .frame img { display: block; width: 100%; }
+    .main  { right: 0; top: 0; width: ${opts.mainWidth}px; }
+    /* In front and to the left, overlapping. Side by side, the two frames
+       read as two unrelated products; overlapped, they read as one. */
+    .inset { left: 0; top: ${opts.insetTop}px; width: ${opts.insetWidth}px;
+             border-radius: 14px; border-bottom: 1px solid rgba(150,168,235,.16);
+             box-shadow: 0 30px 80px rgba(4, 7, 20, .72); }
+  </style>
+  <div class="field"></div>
+  <div class="crowd">${crowd(9, 168, 690, 168, -34)}</div>
+  <div class="page">
+    <div class="name">Clone Blocker</div>
+    <h1>${opts.title}</h1>
+    <p>${opts.body}</p>
+    <div class="stage">
+      <div class="frame main"><img src="${main}"></div>
+      ${inset ? `<div class="frame inset"><img src="${inset}"></div>` : ''}
     </div>
   </div>`;
 }
@@ -333,7 +349,7 @@ function heroHtml() {
   // Real captures of the extension's own pages, from a browser that has it
   // loaded. Falls back to the long-lived dev session if one is already up.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'store-shots-'));
-  const uiShots = await captureExtensionPages(tmp);
+  const uiShots = TILES_ONLY ? {} : await captureExtensionPages(tmp);
 
   fs.mkdirSync(PROFILE, { recursive: true });
   const chrome = spawn(findChrome(), [
@@ -355,42 +371,64 @@ function heroHtml() {
 
   try {
     console.log('\npromotional tiles');
+    // "Bo do oi, co o dang kia" -- hey red cow, the grass is that way. It is
+    // a dismissal rather than an insult, which is both funnier and the
+    // honest description of what the extension does: it does not argue with
+    // the herd, it sends them somewhere else and gets on with the day.
+    // Broken by hand rather than left to wrap: the setup on one line and the
+    // punchline on the next. Wrapping on its own split it after "cỏ ở",
+    // which puts the break in the middle of the joke and loses the timing.
+    const JOKE = 'Bò đỏ ơi,<br>cỏ ở đằng kia.';
+
     await shoot(cdp, dataUrl(tileHtml(440, 280, {
-      iconSize: 96, gap: 26, pad: 34, title: 34, tag: 15, tagGap: 12, tagWidth: 230,
-      tagline: 'Impersonator accounts, hidden on sight.',
-      crowd: crowd(7, 74, 196, 68, 14)
+      iconSize: 92, gap: 22, pad: 28, name: 12, joke: 28, jokeGap: 10, jokeWidth: 262,
+      tag: 13.5, tagGap: 11, tagWidth: 262,
+      joke_: JOKE,
+      tagline: 'Ẩn và chặn bò đỏ và nick giả trên Facebook và Threads.',
+      crowd: crowd(6, 84, 218, 84, -18)
     })), 440, 280, path.join(OUT, 'small-promo-440x280.png'));
 
     await shoot(cdp, dataUrl(tileHtml(1400, 560, {
-      iconSize: 224, gap: 76, pad: 110, title: 92, tag: 32, tagGap: 26, tagWidth: 720,
-      tagline: 'Hide every clone of your profile on Facebook and Threads &mdash; and block the ones that matter, at a pace that keeps your account safe.',
-      crowd: crowd(12, 150, 392, 124, 30)
+      iconSize: 244, gap: 74, pad: 98, name: 26, joke: 88, jokeGap: 20, jokeWidth: 900,
+      tag: 29, tagGap: 26, tagWidth: 840,
+      joke_: JOKE,
+      tagline: 'Ẩn và chặn bò đỏ, nick giả và mọi thứ na ná nhau trên Facebook và Threads. Bạn bấm một lần, cả đàn tự đi ăn cỏ.',
+      crowd: crowd(9, 168, 448, 168, -34)
     })), 1400, 560, path.join(OUT, 'marquee-1400x560.png'));
 
+    if (TILES_ONLY) return;
+
     console.log('\nlisting screenshots');
-    await shoot(cdp, dataUrl(heroHtml()), 1280, 800,
+
+    // Two, not four. Four meant two drawn explainers standing in front of two
+    // real captures, and the drawn ones were doing the captures' job --
+    // describing an interface that was sitting right there. One poster to
+    // land the joke, one photograph of the actual product, same clothes.
+    await shoot(cdp, dataUrl(posterHtml()), 1280, 800,
       path.join(OUT, 'screenshot-1-1280x800.png'));
 
-    await shoot(cdp, dataUrl(layersHtml()), 1280, 800,
-      path.join(OUT, 'screenshot-2-1280x800.png'));
+    if (uiShots.options && fs.existsSync(uiShots.options)) {
+      await shoot(cdp, dataUrl(productHtml({
+        main: uiShots.options,
+        mainWidth: 720,
+        inset: uiShots.popup && fs.existsSync(uiShots.popup) ? uiShots.popup : null,
+        insetWidth: 430,
+        insetTop: 84,
+        title: 'Một nút. Cả đàn đi ăn cỏ.',
+        body: 'Ẩn ngay khi trang vừa tải, rồi chặn từ tốn ở nền ' +
+              'để tài khoản của bạn luôn an toàn. ' +
+              'Mọi tốc độ và giới hạn đều do bạn chỉnh.'
+      })), 1280, 800, path.join(OUT, 'screenshot-2-1280x800.png'));
+    } else {
+      console.log('  skipped screenshot 2: no capture of the extension pages');
+      console.log('  (run tools/dev-session.js first, then re-run this)');
+    }
 
-    const shots = [
-      { image: uiShots.options, frameWidth: 880,
-        title: 'You choose how hard it <em>works</em>',
-        body: 'Passive blocks the clones you run into as you browse. Active also works through the list in the background, paced slowly and capped by the hour. Every delay and ceiling underneath is yours to change, and the cautious values are the ones it ships with.' },
-      { image: path.join(ROOT, 'docs', 'shots', 'dashboard.png'), frameWidth: 980,
-        title: 'You run the server. <em>You</em> decide the list.',
-        body: 'Reports land in your own moderation dashboard, ranked by reporter reputation and by where the clone is active right now. Nothing reaches the blocklist until you approve it.' }
-    ];
-    let n = 3;
-    for (const s of shots) {
-      if (!s.image || !fs.existsSync(s.image)) {
-        console.log('  skipped, no capture for:', s.title.replace(/<[^>]+>/g, ''));
-        continue;
-      }
-      await shoot(cdp, dataUrl(shotHtml(s)), 1280, 800,
-        path.join(OUT, `screenshot-${n}-1280x800.png`));
-      n++;
+    // Anything left from the four-screenshot listing would still be sitting
+    // in the directory for whoever uploads it, so it goes.
+    for (const stale of ['screenshot-3-1280x800.png', 'screenshot-4-1280x800.png']) {
+      const f = path.join(OUT, stale);
+      if (fs.existsSync(f)) { fs.unlinkSync(f); console.log('  removed stale', stale); }
     }
   } finally {
     if (!KEEP) { try { chrome.kill(); } catch (e) {} }
@@ -406,6 +444,55 @@ function heroHtml() {
  * loaded. Prefers the running dev session, because loading an unpacked
  * extension needs a non-headless Chrome and there is usually one up already.
  */
+/**
+ * Drives the options page's own language picker and returns what it was set
+ * to before. Deliberately the picker rather than a settings write: the picker
+ * is the path a real user takes, it repaints the open page in place, and
+ * whatever the setting is wired to today it stays wired to.
+ *
+ * Every caller must put the restore in a finally. This is somebody's dev
+ * browser, and leaving it in a language they did not choose is rude.
+ */
+async function onExtPage(cdp, extId, expression) {
+  const { targetId } = await cdp.send('Target.createTarget',
+    { url: `chrome-extension://${extId}/src/options/options.html` });
+  try {
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    await cdp.send('Runtime.enable', {}, sessionId);
+    await sleep(1200);
+    const r = await cdp.send('Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true }, sessionId, 20000);
+    return r.result && r.result.value;
+  } finally {
+    try { await cdp.send('Target.closeTarget', { targetId }); } catch (e) {}
+  }
+}
+
+async function setUiLanguage(cdp, extId, lang) {
+  const { targetId } = await cdp.send('Target.createTarget',
+    { url: `chrome-extension://${extId}/src/options/options.html` });
+  try {
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    await cdp.send('Runtime.enable', {}, sessionId);
+    await sleep(1500);
+    const r = await cdp.send('Runtime.evaluate', {
+      expression: `(async () => {
+        const sel = document.getElementById('uiLanguage');
+        if (!sel) return null;
+        const was = sel.value;
+        sel.value = ${JSON.stringify(lang)};
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 900));
+        return was;
+      })()`,
+      awaitPromise: true, returnByValue: true
+    }, sessionId, 20000);
+    return r.result && r.result.value;
+  } finally {
+    try { await cdp.send('Target.closeTarget', { targetId }); } catch (e) {}
+  }
+}
+
 async function captureExtensionPages(dir) {
   // Both go to a temp dir that is deleted at the end. The popup in particular
   // must never land in the repo: its Page capability panel prints "Signed in
@@ -443,6 +530,20 @@ async function captureExtensionPages(dir) {
 
   const cdp = new CDP(version.webSocketDebuggerUrl);
   await cdp.ready;
+
+  // Both captures are taken in Vietnamese, because the listing they go into
+  // makes its joke in Vietnamese. Restored in the finally below whatever
+  // happens -- the value is read back, not assumed, so a dev browser already
+  // set to something returns to that something.
+  let priorLang = null;
+  try {
+    priorLang = await setUiLanguage(cdp, extId, 'vi');
+    console.log('  interface switched to Vietnamese for the capture');
+  } catch (e) {
+    console.log('  language switch skipped:', e.message);
+  }
+
+  try {
   // The mode picker is the first thing on the options page now, so this
   // captures from the top -- no scrolling, and nothing to stand in for. (It
   // used to scroll past an endpoint field to reach the pacing controls; the
@@ -469,6 +570,13 @@ async function captureExtensionPages(dir) {
     console.log('  popup capture skipped:', e.message);
     delete out.popup;
   }
+  } finally {
+    if (priorLang !== null && priorLang !== undefined) {
+      try { await setUiLanguage(cdp, extId, priorLang); } catch (e) {
+        console.log('  WARNING: could not restore the interface language to', priorLang);
+      }
+    }
+  }
   cdp.ws.close();
   return out;
 }
@@ -486,6 +594,9 @@ async function captureExtensionPages(dir) {
 async function capturePopup(cdp, extId, file) {
   const { targetId: tab } = await cdp.send('Target.createTarget',
     { url: 'https://www.threads.com/@threads' });
+  // Taking this picture arms blocking, on a browser signed in to real
+  // accounts. Whatever it was before goes back, on every path out.
+  let restore = null;
   try {
     await cdp.send('Target.activateTarget', { targetId: tab });
     await sleep(5000);
@@ -497,20 +608,35 @@ async function capturePopup(cdp, extId, file) {
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: opt, flatten: true });
     await cdp.send('Runtime.enable', {}, sessionId);
     await sleep(1400);
-    // Platform blocking is shown OFF, which is both its real default and the
-    // honest thing to picture: with it on but dry-run armed the popup reports
-    // "612 queued - 0 blocked", which reads as broken rather than as safe.
-    // Dry run stays ON regardless -- this browser is signed in to real
-    // accounts and a screenshot is not worth arming live blocking to take.
-    await cdp.send('Runtime.evaluate', {
+    // Blocking is shown ON, because that is what a fresh install ships with
+    // and because the options page in the same screenshot shows it on: a
+    // listing image where the popup says blocking is paused and the settings
+    // beside it say it is running contradicts itself, and the reader has no
+    // way to know which half is the product.
+    //
+    // Dry run stays ON regardless. This browser is signed in to real
+    // accounts, and no screenshot is worth arming live blocking to take.
+    //
+    // The queue is emptied first. It is dev-session scratch either way, and a
+    // backlog left in it makes the popup explain its own pacing -- true, but
+    // it is answering a question the picture never asked.
+    const priorBlocking = await cdp.send('Runtime.evaluate', {
       expression: `(async () => {
         const { settings = {} } = await chrome.storage.sync.get('settings');
+        const was = {
+          hideEnabled: settings.hideEnabled,
+          platformBlockEnabled: settings.platformBlockEnabled,
+          platformBlockDryRun: settings.platformBlockDryRun
+        };
         await chrome.storage.sync.set({ settings: { ...settings,
-          hideEnabled: true, platformBlockEnabled: false, platformBlockDryRun: true } });
+          hideEnabled: true, platformBlockEnabled: true, platformBlockDryRun: true } });
+        await chrome.storage.local.set({ platformQueue: {} });
         await new Promise(r => chrome.runtime.sendMessage({ type: 'sw:refresh-now' }, r));
+        return JSON.stringify(was);
       })()`,
       awaitPromise: true, returnByValue: true
     }, sessionId, 20000);
+    restore = priorBlocking.result && priorBlocking.result.value;
     await cdp.send('Target.closeTarget', { targetId: opt });
     await cdp.send('Target.activateTarget', { targetId: tab });
     await sleep(800);
@@ -547,6 +673,19 @@ async function capturePopup(cdp, extId, file) {
     console.log('  wrote', path.basename(file), '(real action popup)',
       fs.statSync(file).size + ' bytes');
   } finally {
+    if (restore) {
+      try {
+        await onExtPage(cdp, extId, `(async () => {
+          const { settings = {} } = await chrome.storage.sync.get('settings');
+          await chrome.storage.sync.set({
+            settings: { ...settings, ...JSON.parse(${JSON.stringify(restore)}) } });
+          await new Promise(r => chrome.runtime.sendMessage({ type: 'sw:refresh-now' }, r));
+        })()`);
+        console.log('  blocking settings restored');
+      } catch (e) {
+        console.log('  WARNING: could not restore blocking settings:', e.message);
+      }
+    }
     try { await cdp.send('Target.closeTarget', { targetId: tab }); } catch (e) {}
   }
 }

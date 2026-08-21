@@ -1,0 +1,287 @@
+/*
+ * The public transparency page — Firebase Hosting, no build step.
+ *
+ * Same product as the moderation dashboard, different job: admin.css dresses a
+ * dense tool, this dresses a document that names people. So the tokens are the
+ * dashboard's, verbatim, and only the scale opens up — a reader gets a reading
+ * measure and real air between sections where an admin gets rows.
+ *
+ * Dark first, unlike the dashboard, because this page has one canonical look
+ * and the screenshots in the README are it; a reader who has asked their system
+ * for light gets the dashboard's light values so the two still match.
+ *
+ * There are no webfonts and there cannot be: the CSP is `default-src 'none'`
+ * with no font-src, so every face here is one the reader already has. That is
+ * also the safer choice for Vietnamese — the system stack renders stacked
+ * diacritics correctly on every platform, and a downloaded display face with a
+ * thin Latin-Extended-B would mangle exactly the names this page must get right.
+ */
+
+:root {
+  /* admin.css dark values */
+  --bg: #16181c; --fg: #e8eaed; --muted: #9aa4b2;
+  --line: #2b2f36; --card: #1e2127;
+  --accent: #6ea8fe; --danger: #ff6b5e; --warn: #e0b341; --good: #6fbf73;
+
+  --tag-clone: 138 175 226;
+  --tag-impersonation: 182 154 230;
+  --tag-scam: 222 180 100;
+  --tag-harassment: 213 141 190;
+  --tag-spam: 122 194 168;
+  --tag-redbull: 235 129 120;
+  --tag-other: 163 171 181;
+
+  --f-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --measure: 62ch;
+  --gutter: 22px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff; --fg: #16181c; --muted: #5b6470;
+    --line: #e3e6ea; --card: #f7f8fa;
+    --accent: #1d6fe0; --danger: #c0392b; --warn: #b7791f; --good: #2e7d32;
+
+    --tag-clone: 74 111 165;
+    --tag-impersonation: 118 88 168;
+    --tag-scam: 161 116 42;
+    --tag-harassment: 142 74 119;
+    --tag-spam: 60 126 104;
+    --tag-redbull: 168 58 50;
+    --tag-other: 110 118 128;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.6 var(--f-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 var(--gutter); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* The dashboard's section label, kept to the letter: this page and that one
+   should be recognisably the same hand. Mono here because on the public page
+   every one of these labels heads a record, not a widget. */
+.eyebrow {
+  font: 600 11px/1.4 var(--f-mono);
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--muted); margin: 0 0 10px;
+}
+
+/* -- masthead -------------------------------------------------------------- */
+.masthead { border-bottom: 1px solid var(--line); background: var(--bg); }
+.bar { display: flex; align-items: center; justify-content: space-between;
+       gap: 16px; min-height: 58px; }
+.brand { display: flex; align-items: center; gap: 9px;
+         text-decoration: none; color: var(--fg); }
+.brandtext { font: 600 13px/1 var(--f-mono); letter-spacing: .02em; }
+/* The one piece of pure ornament on the page, and it is the product's own
+   mark: a filled dot with a slash through it. */
+.mark {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--accent); position: relative; flex: none;
+}
+.mark::after {
+  content: ""; position: absolute; inset: -3px 4px; width: 2px;
+  background: var(--accent); transform: rotate(45deg);
+}
+
+.langtoggle { display: flex; gap: 2px; padding: 2px;
+              border: 1px solid var(--line); border-radius: 999px; }
+.langtoggle button {
+  font: 600 11px/1 var(--f-mono); letter-spacing: .08em;
+  padding: 6px 11px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.langtoggle button:hover { color: var(--fg); }
+.langtoggle button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: light) {
+  .langtoggle button[aria-pressed="true"] { color: #fff; }
+}
+
+/* -- intro ----------------------------------------------------------------- */
+.intro { padding: 56px 0 0; }
+.intro h1 {
+  font-size: clamp(27px, 5.4vw, 39px); font-weight: 700; line-height: 1.16;
+  letter-spacing: -0.02em; margin: 0 0 18px; max-width: 26ch;
+  /* Vietnamese words are short, so an unbalanced headline strands a
+     two-letter syllable on a line of its own; balance spreads the lines. */
+  text-wrap: balance;
+}
+.lede { font-size: 17px; line-height: 1.6; color: var(--fg);
+        max-width: var(--measure); margin: 0; }
+.lede + .lede { margin-top: 12px; color: var(--muted); font-size: 15px; }
+
+/* How a profile gets here. Numbered because it genuinely is a sequence — a
+   report, then a person reading it, then a separate decision to name someone —
+   and the order is the whole point of printing it. */
+.howhd { margin: 40px 0 0; }
+.steps { list-style: none; margin: 12px 0 0; padding: 0;
+         display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); }
+.step { background: var(--card); border: 1px solid var(--line);
+        border-radius: 10px; padding: 16px 16px 18px; }
+.step .n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--muted);
+  font: 600 11px/1 var(--f-mono); margin-bottom: 10px;
+}
+.step h3 { font-size: 14px; font-weight: 700; margin: 0 0 6px; line-height: 1.3; }
+.step p { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 0; }
+
+/* -- stats ----------------------------------------------------------------- */
+.statwrap { padding: 44px 0 0; }
+.statgrid { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); }
+.stat { background: var(--card); border: 1px solid var(--line);
+        border-radius: 10px; padding: 16px 18px 15px; }
+.stat .sv { font-size: 32px; font-weight: 700; line-height: 1.05;
+            font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.stat .sk { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--muted); margin-top: 6px; }
+/* The named slice is the small one, and the page says so in words rather than
+   letting three equal tiles imply three equal things. */
+.stat.lead .sv { color: var(--warn); }
+.statnote { font-size: 13px; color: var(--muted); max-width: var(--measure);
+            margin: 14px 0 0; }
+
+/* -- controls -------------------------------------------------------------- */
+.register { padding: 52px 0 0; }
+.controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.tagfilter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tagchip {
+  padding: 5px 12px; font: 600 12px/1.2 var(--f-sans);
+  border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.tagchip:hover { color: var(--fg); }
+.tagchip[aria-pressed="true"] { color: rgb(var(--t)); border-color: rgb(var(--t) / .55);
+                                background: rgb(var(--t) / .15); }
+.tagchip .n { opacity: .65; margin-left: 5px; font-weight: 400;
+              font-variant-numeric: tabular-nums; }
+.tagchip.all { --t: var(--tag-other); }
+.tag-clone         { --t: var(--tag-clone); }
+.tag-impersonation { --t: var(--tag-impersonation); }
+.tag-scam          { --t: var(--tag-scam); }
+.tag-harassment    { --t: var(--tag-harassment); }
+.tag-spam          { --t: var(--tag-spam); }
+.tag-redbull       { --t: var(--tag-redbull); }
+.tag-other         { --t: var(--tag-other); }
+
+.searchwrap { display: flex; }
+.controls input[type="search"] {
+  flex: 1; min-width: 0; padding: 10px 13px;
+  font: inherit; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card); color: var(--fg);
+}
+.controls input[type="search"]::placeholder { color: var(--muted); }
+
+.resultline { font: 600 11px/1.4 var(--f-mono); text-transform: uppercase;
+              letter-spacing: .14em; color: var(--muted); margin: 0 0 14px; }
+.state { color: var(--muted); font-size: 14px; margin: 22px 0; }
+.state.bad { color: var(--danger); }
+
+/* -- profile cards --------------------------------------------------------- */
+/* The signature of the page: an entry is drawn like a docket entry, with the
+   verdict as a coloured rail down its left edge. Colour appears here and
+   nowhere else in the card, so the tag is readable at a glance while scrolling
+   and the text under it stays sober. */
+.cards { display: flex; flex-direction: column; gap: 14px; }
+.profile {
+  background: var(--card); border: 1px solid var(--line);
+  border-left: 3px solid rgb(var(--t)); border-radius: 10px;
+  padding: 18px 20px 20px;
+}
+.profile .head { display: flex; align-items: baseline; justify-content: space-between;
+                 gap: 12px; flex-wrap: wrap; }
+.profile .name { font-size: 19px; font-weight: 700; line-height: 1.25;
+                 letter-spacing: -0.01em; margin: 0; word-break: break-word; }
+.profile .name.unnamed { color: var(--muted); font-weight: 600; }
+.tag {
+  border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600;
+  color: rgb(var(--t)); background: rgb(var(--t) / .15); white-space: nowrap;
+}
+.profile .ident {
+  font: 12px/1.6 var(--f-mono); color: var(--muted);
+  margin: 6px 0 0; word-break: break-all;
+}
+.profile .ident .sep { opacity: .45; padding: 0 6px; }
+
+/* The facts the list is built from, set as data rather than prose: four
+   labelled values, monospaced so the dates line up down a column of cards. */
+.facts { display: grid; gap: 12px 26px; margin: 16px 0 0;
+         grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+         border-top: 1px solid var(--line); padding-top: 14px; }
+.fact .k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+           color: var(--muted); }
+.fact .v { font: 13px/1.45 var(--f-mono); margin-top: 3px; word-break: break-word; }
+.fact .v.big { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.evidence { margin-top: 18px; }
+.evidence > .eyebrow { margin-bottom: 8px; }
+/* The exhibit label is a fixed column so the quotes line up down the card, and
+   it must never wrap: "Bài 1" broken across two lines reads as two things. */
+.exhibit { display: grid; grid-template-columns: 52px 1fr; gap: 2px 10px;
+           padding: 10px 0; border-top: 1px solid var(--line); }
+.exhibit .en { font: 600 11px/1.6 var(--f-mono); color: var(--muted);
+               font-variant-numeric: tabular-nums; white-space: nowrap; }
+.exhibit .quote { font-size: 14px; line-height: 1.55; white-space: pre-wrap;
+                  word-break: break-word; }
+.exhibit .quote::before, .exhibit .quote::after { content: '"'; color: var(--muted); }
+.exhibit a { grid-column: 2; font: 12px/1.5 var(--f-mono); word-break: break-all; }
+.exhibit .quote + a { margin-top: 5px; }
+.noevidence { font-size: 13px; color: var(--muted); margin: 0; }
+
+/* -- the honest note ------------------------------------------------------- */
+/* Amber, like the publish control in the dashboard: this is neither a warning
+   nor reassurance, it is the part a reader must weigh before believing the
+   page. It sits at the end because it is what to take away, not a disclaimer
+   to scroll past on the way in. */
+.notice {
+  margin: 60px 0 0; padding: 22px 24px 24px;
+  border: 1px solid var(--line); border-left: 3px solid var(--warn);
+  border-radius: 10px; background: var(--card);
+}
+.notice h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
+.notice p { font-size: 14px; line-height: 1.6; color: var(--muted);
+            max-width: var(--measure); margin: 0 0 10px; }
+.notice p:last-child { margin-bottom: 0; }
+.notice strong { color: var(--fg); font-weight: 600; }
+
+/* The gutter has to be repeated, not inherited: .foot and .wrap are both one
+   class deep and .foot comes later, so a shorthand `padding` here would win
+   and put the footer hard against the edge of a phone. */
+.foot { padding: 34px var(--gutter) 60px; color: var(--muted);
+        font: 11px/1.8 var(--f-mono); letter-spacing: .04em; }
+.foot .sep { opacity: .45; padding: 0 8px; }
+
+/* -- narrow ---------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .steps, .statgrid { grid-template-columns: 1fr; }
+  .intro { padding-top: 38px; }
+  .statwrap, .register { padding-top: 36px; }
+  .lede { font-size: 16px; }
+}
+@media (max-width: 460px) {
+  :root { --gutter: 16px; }
+  /* A phone cannot spare 62px to the left of a quotation. The exhibit number
+     moves above the text it labels rather than beside it. */
+  .exhibit { grid-template-columns: 1fr; gap: 4px; }
+  .exhibit a { grid-column: 1; }
+  .profile { padding: 15px 15px 17px; }
+  .profile .name { font-size: 17px; }
+  .stat .sv { font-size: 28px; }
+  .notice { padding: 18px 16px 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

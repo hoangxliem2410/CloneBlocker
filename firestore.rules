@@ -19,9 +19,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // The admin allowlist.
+    //
+    // A list rather than the single pinned uid this used to be: a Google
+    // sign-in mints a different uid than the password account, and one person
+    // moderating through either has to be the same admin. Membership is all
+    // the rules ever ask -- nothing here cares WHICH admin is writing.
+    //
+    // Shape contract, because the tool that maintains this list
+    // ('firebase-setup.js --add-admin <uid>') rewrites the literal with a
+    // regex rather than parsing the rules language. The block always looks
+    // exactly like the one below: a line ending in `return [`, then one
+    // single-quoted uid alone on each line, then a line holding only `];`.
+    // That is enough for the tool to capture the body between those two
+    // lines, read the uids out of it, append the new one and re-render the
+    // whole block -- so nothing depends on where the commas sit, and adding
+    // a uid that is already listed is a no-op rather than a duplicate.
+    //
+    // The production password account stays first. tools/firebase-test.js
+    // re-pins it onto a test uid by plain string replacement and finds which
+    // string to replace by the pre-list form of this test,
+    // request.auth.uid == 'a0XiGqlhbYhT8S8QacNYKBLFiwd2', which is why that
+    // spelling survives in prose here while the live test below reads the list.
+    function adminUids() {
+      return [
+        'a0XiGqlhbYhT8S8QacNYKBLFiwd2'
+      ];
+    }
+
     function isAdmin() {
       return request.auth != null
-          && request.auth.uid == 'a0XiGqlhbYhT8S8QacNYKBLFiwd2';
+          && request.auth.uid in adminUids();
     }
 
     // Optional string field: absent, or non-empty and within `max`.
@@ -39,6 +67,12 @@ service cloud.firestore {
                       'redbull', 'other'];
     }
 
+    // Optional boolean field: absent, or an actual bool. Absent and false mean
+    // the same thing to every reader, so nothing needs a default here.
+    function optBool(d, f) {
+      return !(f in d) || d[f] is bool;
+    }
+
     // A URL a stranger typed. http(s) only -- one javascript: href rendered as
     // a link in the dashboard would run with the admin's session.
     function optUrl(d, f) {
@@ -46,6 +80,13 @@ service cloud.firestore {
           || (d[f] is string && d[f].size() <= 300 && d[f].matches('https?://.*'));
     }
 
+    // Public read by document, which is what the transparency page needs: it
+    // reads blocklist/publicView unauthenticated over this same endpoint, and
+    // that doc is already covered by the {doc} wildcard below. No rule of its
+    // own -- publicView is a blocklist document like 'current', published by
+    // the same admin write, and giving it a second rule would be a second
+    // place for the two to drift apart. What keeps it safe to read is what
+    // buildPublicView() puts in it, not who may fetch it.
     match /blocklist/{doc} {
       allow read: if true;
       allow write: if isAdmin();
@@ -112,7 +153,14 @@ service cloud.firestore {
       // ever heard of, and blockTags matches by inclusion -- so a misspelt
       // verdict silently stops being blocked by anyone rather than failing
       // loudly here.
-      allow create, update: if isAdmin() && optTag(request.resource.data, 'tag');
+      //
+      // 'public' is the transparency site's opt-in: approving a target blocks
+      // it, publishing names it on a page the owner runs, and the schema keeps
+      // those two verdicts apart on purpose. Only its TYPE is checked here --
+      // who may set it was never in question, it is an admin-only document.
+      allow create, update: if isAdmin()
+          && optTag(request.resource.data, 'tag')
+          && optBool(request.resource.data, 'public');
     }
 
     match /admin/{doc} {

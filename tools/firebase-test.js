@@ -170,6 +170,32 @@ async function swapRules() {
   const adminList = await api('PATCH', '/blocklist/current', listDoc(seedPayload, 2), ADMIN);
   check('the admin can write the blocklist', adminList.status === 200, String(adminList.status));
 
+  // blocklist/publicView -- the transparency page's copy of what may be said
+  // out loud. It sits in the same collection as `current`, under the same
+  // rule, and that is deliberate: one place decides who may publish a list, so
+  // the document the extension acts on and the document that names people
+  // cannot drift into two different trust models. Public read is what the page
+  // needs (it fetches this unauthenticated, exactly as the extension fetches
+  // `current`); admin-only write is what stops a stranger adding a name to it.
+  const viewPayload = { v: 1, updatedAt: new Date().toISOString(),
+    counts: { published: 1, blocked: 1, reports: 1, byTag: { clone: 1 } },
+    profiles: [{ platform: 'threads', id: '9100000001', username: 'someone',
+      displayName: 'Someone', tag: 'clone', reports: 1,
+      firstReported: '2026-08-07', lastActive: '2026-08-21',
+      regions: ['Asia/Ho_Chi_Minh'], evidence: [] }] };
+  await api('PATCH', '/blocklist/publicView', listDoc(viewPayload, 1), OWNER);
+
+  const viewRead = await api('GET', '/blocklist/publicView');
+  const viewJson = viewRead.json && viewRead.json.fields && viewRead.json.fields.json
+    ? JSON.parse(viewRead.json.fields.json.stringValue) : null;
+  check('the public view is readable without signing in',
+    viewRead.status === 200 && viewJson && viewJson.profiles.length === 1,
+    String(viewRead.status));
+  check('a stranger cannot write the public view',
+    (await api('PATCH', '/blocklist/publicView', listDoc(viewPayload, 2))).status === 403);
+  check('the admin can write the public view',
+    (await api('PATCH', '/blocklist/publicView', listDoc(viewPayload, 2), ADMIN)).status === 200);
+
   // -- 2. report intake: what the rules accept ------------------------------
   const H1 = hashOf('threads:70000039595');
   const H2 = hashOf('threads:70000047514');
@@ -302,6 +328,61 @@ async function swapRules() {
   const tagBad = await api('PATCH', '/decisions/threads~9600000003', tagged('bo-do'), ADMIN);
   check('a decision tag outside the vocabulary is refused',
     tagBad.status === 403, String(tagBad.status));
+
+  // The transparency opt-in, as the rules see it. Who may set it was never in
+  // question -- the whole document is admin-only -- so what is worth pinning
+  // is that it survives the write at all, and that nothing but a boolean can
+  // occupy the field. A `public` holding the string 'false' would be truthy to
+  // every reader downstream, which is the one way this flag could put a name
+  // on a page nobody agreed to name.
+  const decPublic = (value) => ({ fields: {
+    status: { stringValue: 'approved' },
+    by: { stringValue: 'admin' },
+    at: { timestampValue: new Date().toISOString() },
+    public: value
+  } });
+  const pubOk = await api('PATCH', '/decisions/threads~9700000001',
+    decPublic({ booleanValue: true }), ADMIN);
+  check('the admin can opt a decision in to the public page',
+    pubOk.status === 200, String(pubOk.status));
+  const pubStranger = await api('PATCH', '/decisions/threads~9700000002',
+    decPublic({ booleanValue: true }));
+  check('a stranger cannot opt a decision in to the public page',
+    pubStranger.status === 403, String(pubStranger.status));
+  const pubBad = await api('PATCH', '/decisions/threads~9700000003',
+    decPublic({ stringValue: 'true' }), ADMIN);
+  check('a public flag that is not a boolean is refused',
+    pubBad.status === 403, String(pubBad.status));
+
+  // isAdmin() is a membership test against a LIST of uids: a Google sign-in
+  // mints a different uid than the password account, and one person moderating
+  // through either has to be the same admin. Widening a single pinned uid into
+  // a list is precisely the change that can accidentally widen it to everyone
+  // signed in, so both directions are held down -- the uid in the list is an
+  // admin, and another perfectly valid signed-in uid is not.
+  const inList = await api('PATCH', '/decisions/threads~9800000001', decision, ADMIN);
+  check('the uid pinned in the admin list is an admin',
+    inList.status === 200, String(inList.status));
+  const outsider = await api('PATCH', '/decisions/threads~9800000002', decision,
+    bearer('signed-in-but-not-an-admin'));
+  check('a signed-in uid outside the admin list is not an admin',
+    outsider.status === 403, String(outsider.status));
+
+  // The shape the list is written in, read off the file rather than the
+  // emulator: tools/firebase-setup.js --add-admin rewrites this literal with a
+  // regex, and swapRules() above re-pins it by plain string replacement, so a
+  // rules file that stopped spelling the allowlist this way would leave both
+  // tools editing something that is no longer there.
+  {
+    const src = fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8');
+    const body = /function adminUids\(\)\s*\{\s*return \[([^\]]*)\]/.exec(src);
+    const listed = body ? [...body[1].matchAll(/'([^']+)'/g)].map(q => q[1]) : [];
+    const pinned = (src.match(/request\.auth\.uid == '([^']+)'/) || [])[1];
+    check('isAdmin() tests membership of a uid list that holds the pinned admin',
+      /request\.auth\.uid in adminUids\(\)/.test(src) &&
+      listed.length >= 1 && listed.includes(pinned),
+      JSON.stringify(listed));
+  }
 
   const manual = { fields: {
     ids: { arrayValue: { values: [{ stringValue: '63082166531' }] } },
@@ -813,6 +894,102 @@ async function swapRules() {
       now.every((r, i) => r.id === before[i].id && r.rank === before[i].rank),
       JSON.stringify([now.map(r => [r.id, r.rank]), before.map(r => [r.id, r.rank])]));
   }
+
+  // -- 16. the public view: what may be said out loud -----------------------
+  //
+  // Every other payload in this file is read by software. This one is read by
+  // people, about people, and it names them -- so the interesting property is
+  // not what it contains but what it refuses to contain. Each case below is a
+  // way a name, a quote or a reporter could reach the page without anybody
+  // having decided it should.
+  const H4 = hashOf('threads:70000062222');
+  const H5 = hashOf('threads:70000073333');
+  const H6 = hashOf('threads:70000084444');
+
+  const publicDocs = [
+    // Approved and opted in: the only combination that is ever published.
+    doc('4200000001', H1, { at: at(6), username: 'named.publicly',
+      displayName: 'Named Publicly', region: 'Asia/Ho_Chi_Minh', lang: 'vi-vn',
+      postUrl: 'https://www.threads.com/@named.publicly/post/AAA',
+      contentSummary: 'the post the case is built on',
+      note: 'internal: bio copied word for word' }),
+    // A quote with nothing behind it: an unverifiable claim about a named
+    // person, so the entry goes rather than the link.
+    doc('4200000001', H2, { at: at(2), region: 'Asia/Bangkok',
+      contentSummary: 'a quote with no link behind it' }),
+    // A link that is not https is not proof either -- the page renders it as
+    // an anchor, and the same guard that protects the dashboard applies here.
+    doc('4200000001', H4, { at: at(1), region: 'Asia/Ho_Chi_Minh',
+      postUrl: 'http://insecure.example/p' }),
+    doc('4200000001', H5, { at: at(1), region: 'Europe/Warsaw' }),
+    doc('4200000001', H6, { at: at(1), region: 'America/Sao_Paulo' }),
+    // Approved, never opted in: blocked everywhere, named nowhere.
+    doc('4200000002', H1, { at: at(4), displayName: 'Blocked Only', reason: 'scam' }),
+    // Opted in while still pending: the opt-in is recorded, the page waits.
+    doc('4200000003', H2, { at: at(3), displayName: 'Not Yet Approved', reason: 'redbull' }),
+    // Username-only, approved and opted in: the page is about who an account
+    // claims to be, and that is the username.
+    doc('@publicnameonly', H3, { at: at(5), displayName: 'Username Only', reason: 'redbull' })
+  ];
+  const decPub = (key, status, isPublic) => ({
+    id: key.replace(':', '~'),
+    data: { status, by: 'admin', at: at(0), public: isPublic }
+  });
+  const publicRecs = L.aggregate(publicDocs, [
+    decPub('threads:4200000001', 'approved', true),
+    dec('threads:4200000002', 'approved'),
+    decPub('threads:4200000003', 'pending', true),
+    decPub('threads:@publicnameonly', 'approved', true)
+  ]);
+  const pubView = L.buildPublicView(publicRecs, L.reputation(publicRecs));
+  const serialised = JSON.stringify(pubView);
+  const named = pubView.profiles.map(p => p.id || '@' + p.username).sort();
+  const namedProfile = pubView.profiles.find(p => p.id === '4200000001');
+
+  check('only an approved target that was opted in is named in public',
+    pubView.profiles.length === 2 && named.join(',') === '4200000001,@publicnameonly',
+    JSON.stringify(named));
+  check('an approved target that was never opted in is absent',
+    serialised.indexOf('4200000002') < 0 && serialised.indexOf('Blocked Only') < 0 &&
+    pubView.counts.blocked === 3 && pubView.counts.published === 2,
+    JSON.stringify(pubView.counts));
+  check('a target opted in before it was approved is absent',
+    serialised.indexOf('4200000003') < 0 && serialised.indexOf('Not Yet Approved') < 0);
+  check('evidence with no https url behind it is dropped',
+    namedProfile.evidence.length === 1 &&
+    serialised.indexOf('a quote with no link behind it') < 0 &&
+    serialised.indexOf('insecure.example') < 0,
+    JSON.stringify(namedProfile.evidence));
+  check('evidence with an https url is kept, quote and all',
+    namedProfile.evidence[0].url === 'https://www.threads.com/@named.publicly/post/AAA' &&
+    namedProfile.evidence[0].summary === 'the post the case is built on',
+    JSON.stringify(namedProfile.evidence[0]));
+  // Asserted against the serialised document rather than the object, the same
+  // way the store's leak check is: a pseudonym nested three levels down in a
+  // field nobody thought about is still a pseudonym on a public page.
+  check('no reporter pseudonym survives into the public view',
+    serialised.indexOf('acct_') < 0 && serialised.indexOf(H1) < 0,
+    serialised.indexOf('acct_') < 0 ? 'absent' : 'LEAKED');
+  check('moderator-facing detail stays out of the public view',
+    serialised.indexOf('internal: bio copied word for word') < 0 &&
+    !('notes' in namedProfile) && !('reporters' in namedProfile),
+    JSON.stringify(Object.keys(namedProfile)));
+  // Names in tally order and nothing else: a count beside a region is a hint
+  // about how many people in one place reported this, which is a step toward
+  // narrowing who they are.
+  check('regions are names only, in tally order, capped at three',
+    namedProfile.regions.every(r => typeof r === 'string') &&
+    namedProfile.regions.join(',') ===
+      'Asia/Ho_Chi_Minh,America/Sao_Paulo,Asia/Bangkok' &&
+    serialised.indexOf('Warsaw') < 0 && !/"regions":\s*\{/.test(serialised),
+    JSON.stringify(namedProfile.regions));
+  const byTag = {};
+  for (const p of pubView.profiles) byTag[p.tag] = (byTag[p.tag] || 0) + 1;
+  check('counts.byTag is exactly the tally of the profiles beside it',
+    JSON.stringify(pubView.counts.byTag) === JSON.stringify(byTag) &&
+    byTag.clone === 1 && byTag.redbull === 1 &&
+    pubView.counts.published === pubView.profiles.length,
+    JSON.stringify(pubView.counts.byTag));
 
   const failed = results.filter(r => !r.pass);
   console.log('\n' + '='.repeat(60));

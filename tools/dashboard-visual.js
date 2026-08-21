@@ -9,6 +9,10 @@
  * prefixed project id keeps the emulators fully offline, so nothing here can
  * touch a real account, a real project, or a real store.
  *
+ * The dashboard lives at /admin/ now, not at /: hosting's root became the
+ * public transparency page. Nothing about the page changed, only where it is
+ * served from, so this tool follows it and keeps asking the same questions.
+ *
  * Seeding goes through the REAL security rules on purpose: reports are
  * unauthenticated REST creates with proper dedup-key document ids — exactly
  * the write the extension performs — and decisions/publish carry the admin's
@@ -160,19 +164,29 @@ async function report(r) {
   }
 }
 
-/** Record keys are platform:target; decision doc ids are platform~target. */
-const decide = async (key, decision) => {
+/**
+ * Record keys are platform:target; decision doc ids are platform~target.
+ *
+ * `opts.public` is the transparency opt-in, which lives on this same document
+ * because it is a second verdict about the same target -- block it, and name
+ * it on the public page -- not a second kind of record. It is written here
+ * rather than through the dashboard button so the screenshot has a row in
+ * each state to show side by side.
+ */
+const decide = async (key, decision, opts) => {
   const i = key.indexOf(':');
   const docPath = '/decisions/' + encodeURIComponent(key.slice(0, i) + '~' + key.slice(i + 1));
+  const fields = {
+    status: { stringValue: decision === 'approve' ? 'approved'
+            : decision === 'reject' ? 'rejected' : 'pending' },
+    by: { stringValue: 'demo' },
+    at: { timestampValue: new Date().toISOString() }
+  };
+  if (opts && opts.public) fields.public = { booleanValue: true };
   const res = await fetch(FS_BASE + docPath, {
     method: 'PATCH',
     headers: { authorization: ADMIN, 'content-type': 'application/json' },
-    body: JSON.stringify({ fields: {
-      status: { stringValue: decision === 'approve' ? 'approved'
-              : decision === 'reject' ? 'rejected' : 'pending' },
-      by: { stringValue: 'demo' },
-      at: { timestampValue: new Date().toISOString() }
-    } })
+    body: JSON.stringify({ fields })
   });
   if (!res.ok) throw new Error('decision write failed (' + res.status + '): ' + key);
 };
@@ -319,6 +333,11 @@ async function swapRules(uid) {
   await report({ platform:'threads', username:'spam.bot.9', displayName:'Spam Bot',
     reason:'spam', reporter:'threads:70000118785' });
   await decide('threads:9100000002', 'approve');
+  // The transparency opt-in, on the row that leads the queue. It is still
+  // pending, which is the honest half of the pair: opting in is recorded
+  // whenever the admin decides it, but nothing is named publicly until the
+  // target is also approved, and the row has to say which of those it means.
+  await decide('threads:9100000001', 'pending', { public: true });
 
   // Build one reporter with a good record and one with a bad one, so the
   // screenshot shows what trust weighting actually looks like.
@@ -367,7 +386,9 @@ async function swapRules(uid) {
     catch (e) { await sleep(400); }
   }
   const c = new CDP(v.webSocketDebuggerUrl); await c.ready;
-  const { targetId } = await c.send('Target.createTarget', { url: `http://localhost:${HOST_PORT}/` });
+  // /admin/, resolved by hosting's directory index; / is the public page now.
+  const { targetId } = await c.send('Target.createTarget',
+    { url: `http://localhost:${HOST_PORT}/admin/` });
   const { sessionId } = await c.send('Target.attachToTarget', { targetId, flatten: true });
   await c.send('Page.enable', {}, sessionId);
   await c.send('Runtime.enable', {}, sessionId);
@@ -451,6 +472,37 @@ async function swapRules(uid) {
   check('the trend matrix shows 4 region rows', state.matrixRows === 5, String(state.matrixRows));
   check('one lit cell per region (all reports are today)', state.litCells === 4, String(state.litCells));
   check('per-region top lists render', state.trendCols === 4, String(state.trendCols));
+
+  // The transparency opt-in has to be legible at a glance, not just present in
+  // the markup: naming somebody publicly is the one decision on this page that
+  // cannot be quietly undone, so the row it was taken on must not look like the
+  // four rows beside it. Read back as a person sees it -- an opted-in row
+  // carries a marker that says so in words, the rest carry nothing about the
+  // public page in their header line, and the marker is drawn in its own colour
+  // rather than in the row's body text.
+  const pub = JSON.parse(await ev(c, sessionId, `
+    (function () {
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.report'));
+      var marked = rows.filter(function (r) { return r.querySelector('.pill.public'); });
+      var plain = rows.filter(function (r) { return !r.querySelector('.pill.public'); });
+      var out = { marked: marked.length, plain: plain.length };
+      if (!marked.length) return JSON.stringify(out);
+      var pill = marked[0].querySelector('.pill.public');
+      var name = marked[0].querySelector('.name');
+      out.text = pill.textContent;
+      out.colour = getComputedStyle(pill).color;
+      out.rowColour = getComputedStyle(name).color;
+      out.plainHeadersMentionPublic = plain.some(function (r) {
+        return /public/i.test(r.querySelector('.top').textContent);
+      });
+      return JSON.stringify(out);
+    })()`));
+  console.log('public opt-in:  ' + JSON.stringify(pub));
+  check('a row opted in to the public page is visibly distinguishable from one that is not',
+    pub.marked === 1 && pub.plain === 4 &&
+    /public/i.test(pub.text || '') && !pub.plainHeadersMentionPublic &&
+    !!pub.colour && pub.colour !== pub.rowColour,
+    JSON.stringify(pub));
 
   await shot(c, sessionId, path.join(OUT, 'dashboard.png'));
 

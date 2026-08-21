@@ -20,7 +20,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
   getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut,
-  onAuthStateChanged
+  onAuthStateChanged, signInWithPopup, GoogleAuthProvider
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
@@ -144,6 +144,28 @@ function patchDocument(path, fields) {
   return fs('/' + path, 'PATCH', { fields });
 }
 
+/**
+ * A document's full resource name, which is what a commit write needs.
+ *
+ * Derived from BASE rather than rebuilt from the config, so the emulator and
+ * production cases stay one code path: BASE already ends in the documents
+ * root, and everything from "projects/" on is exactly that name.
+ */
+function docName(path) {
+  return BASE.slice(BASE.indexOf('/projects/') + 1) + '/' + path;
+}
+
+/**
+ * Several document writes, applied all-or-nothing.
+ *
+ * An `update` without an updateMask replaces the document, the same semantics
+ * patchDocument() has, so a caller can move a write from one to the other
+ * without wondering what happens to the fields it did not mention.
+ */
+function commit(writes) {
+  return fs(':commit', 'POST', { writes });
+}
+
 // -- decisions and publishing -----------------------------------------------
 
 const STATUS_OF = { approve: 'approved', reject: 'rejected', revoke: 'pending' };
@@ -160,15 +182,21 @@ function overrideTag(key) {
   return LOGIC.TAGS.includes(t) ? t : null;
 }
 
+/** Whether this key is opted in to the public page, as stored. */
+function isPublic(key) {
+  return (decisions.get(key) || {}).public === true;
+}
+
 /**
  * Write decisions/{key}, carrying over whatever this call is not about.
  *
  * A PATCH without an updateMask replaces the document, and the document now
- * holds two independent verdicts: a status (should this be blocked) and a tag
- * (what is it). Sending only one of them would erase the other — approving a
- * target would throw away the tag an admin chose for it, and retagging one
- * would revoke its approval. So both are always written, and `patch` says only
- * which of them is changing.
+ * holds three independent verdicts: a status (should this be blocked), a tag
+ * (what is it) and `public` (may it be named on the transparency page).
+ * Sending only one of them would erase the others — approving a target would
+ * throw away the tag an admin chose for it, retagging one would revoke its
+ * approval, and either would silently unpublish it. So all three are always
+ * written, and `patch` says only which of them is changing.
  *
  * `at` and `by` describe the STATUS decision, so a retag leaves them alone.
  * That matters beyond tidiness: aggregate() reopens a rejected case when a
@@ -181,6 +209,7 @@ function writeDecision(key, patch) {
     ? prev.status : 'pending';
   const status = patch.status !== undefined ? patch.status : prevStatus;
   const tag = patch.tag !== undefined ? patch.tag : overrideTag(key);
+  const pub = patch.public !== undefined ? patch.public === true : isPublic(key);
   const same = status === prevStatus;
 
   const fields = {
@@ -191,6 +220,11 @@ function writeDecision(key, patch) {
   // Absent rather than empty when there is no override: `tag` is an optional
   // field and effectiveTag() reads its absence as "let the reports decide".
   if (LOGIC.TAGS.includes(tag)) fields.tag = { stringValue: tag };
+  // Absent rather than false, for the same reason and a stronger one: not
+  // published is the default state of every target that has ever existed, and
+  // a document that says nothing about publishing is the honest record of a
+  // decision nobody has taken.
+  if (pub) fields.public = { booleanValue: true };
   return patchDocument(decisionPath(key), fields);
 }
 
@@ -219,25 +253,47 @@ function writeManual(next) {
 }
 
 /**
- * Derive and publish blocklist/current from the records just read.
+ * Derive and publish blocklist/current AND blocklist/publicView from the
+ * records just read, in one commit.
  *
  * This runs after EVERY decision, not only on the Publish button: the served
  * list is a pure function of (reports, decisions, manual), so republishing at
  * each write is what keeps the list and the report store structurally
  * consistent — the old server's "list and status never disagree" transaction,
  * without a transaction.
+ *
+ * The two documents go in a single :commit rather than two PATCHes because
+ * they are two views of one decision set. Written separately, a failure or a
+ * closed tab between them would leave a profile named on the public page after
+ * it had been taken off the blocklist — the one disagreement that matters, and
+ * the one nobody would notice. Firestore applies a commit's writes atomically,
+ * so the pair either both land or neither does, and they carry the same rev
+ * and the same updatedAt to say so.
  */
 async function publishList() {
-  const payload = LOGIC.buildPublish(records, rep, manual);
+  const list = LOGIC.buildPublish(records, rep, manual);
+  const view = LOGIC.buildPublicView(records, rep);
+  // One publish, one timestamp: each builder stamps its own clock read, and
+  // two documents from the same commit that disagree by a millisecond would
+  // invite exactly the "which is newer" question this pairing exists to
+  // remove.
+  view.updatedAt = list.updatedAt;
+
   const cur = await getDocument('blocklist/current');
   const prevRev = (cur.ok && cur.doc && Number(cur.doc.data.rev)) || 0;
-  const out = await patchDocument('blocklist/current', {
+  const rev = prevRev + 1;
+  const envelope = (payload) => ({
     json: { stringValue: JSON.stringify(payload) },
     updatedAt: { timestampValue: payload.updatedAt },
-    rev: { integerValue: String(prevRev + 1) }
+    rev: { integerValue: String(rev) }
   });
+
+  const out = await commit([
+    { update: { name: docName('blocklist/current'), fields: envelope(list) } },
+    { update: { name: docName('blocklist/publicView'), fields: envelope(view) } }
+  ]);
   if (!out.ok) { setConn(out.error || 'publish failed', 'bad'); return false; }
-  setConn('Published rev ' + (prevRev + 1), 'ok');
+  setConn('Published rev ' + rev + ' · ' + view.profiles.length + ' public', 'ok');
   return true;
 }
 
@@ -259,6 +315,22 @@ async function decideAndPublish(key, decision) {
  */
 async function retagAndPublish(key, tag) {
   const out = await writeDecision(key, { tag: tag || null });
+  if (!out.ok) return out;
+  await refresh();
+  await publishList();
+  return { ok: true };
+}
+
+/**
+ * Opt a target in to (or out of) the public transparency page and republish.
+ *
+ * The same write-then-reread-then-publish path, because publicView is derived
+ * from the stored decisions exactly like the blocklist is. Opting out is the
+ * half that has to be immediate: a name comes off the page in the same commit
+ * that records the admin changing their mind, not at the next publish.
+ */
+async function setPublicAndPublish(key, next) {
+  const out = await writeDecision(key, { public: next === true });
   if (!out.ok) return out;
   await refresh();
   await publishList();
@@ -320,6 +392,7 @@ function tagChip(tag, overridden) {
 function showGate(msg) {
   $('gate').classList.remove('hidden');
   $('app').classList.add('hidden');
+  $('gateDenied').hidden = true;
   if (msg) { $('gateErr').hidden = false; $('gateErr').textContent = msg; }
 }
 function showApp() {
@@ -328,14 +401,79 @@ function showApp() {
 }
 
 /**
- * A signed-in account the rules refuse. With Firebase Auth a session does not
- * quietly expire (tokens self-refresh), so a 403 means this account is not
- * the pinned admin. Sign it out so the gate accepts a different one.
+ * Signed in fine, and the rules still said no.
+ *
+ * This is the one screen that must never be vague. Two sign-in methods mean
+ * two uids for one person, and the uid a Google sign-in mints is not printed
+ * anywhere the owner can reach: not in the Firebase console's provider page,
+ * not in the rules file, nowhere on this page unless it is put here. An
+ * "unauthorized" toast plus an automatic sign-out would destroy the only copy
+ * of the fact needed to fix the problem, and the owner would be locked out of
+ * their own dashboard with nothing to type into --add-admin.
+ *
+ * So the session is kept, the uid is shown, the exact command is shown, and
+ * signing out is a button rather than something that happens to you.
+ */
+function showDenied(user) {
+  const uid = (user && user.uid) || '';
+  const who = (user && (user.email || user.displayName)) || uid;
+  showGate();
+  $('gateErr').hidden = true;
+  $('gateDeniedWho').textContent =
+    'Signed in as ' + who + ', which is not an admin of this project.';
+  $('gateDeniedUid').textContent = uid;
+  $('gateDeniedCmd').textContent = 'node tools/firebase-setup.js --add-admin ' + uid;
+  $('gateDenied').hidden = false;
+}
+
+/**
+ * One admin-only read, used as the question "do the rules accept this
+ * account?". Membership of the allowlist is not visible to a client any other
+ * way -- the rules are not readable, so the only honest test is to try.
+ *
+ * admin/manual is the cheapest probe: a single document, admin-only, and
+ * absent on a fresh project, which the REST layer already reports as an
+ * answer rather than an error.
+ */
+async function isAdminAccount() {
+  const out = await getDocument('admin/manual');
+  return !out.unauthorized;
+}
+
+/**
+ * A signed-in account the rules refuse, discovered mid-session. With Firebase
+ * Auth a session does not quietly expire (tokens self-refresh), so a 403 is
+ * about WHO this is, not about how old the token is -- the same answer the
+ * gate's probe gives, and it deserves the same screen.
  */
 function unauthorized() {
-  showGate('This account is not authorized to moderate. Sign in with the admin account.');
-  if (auth) signOut(auth).catch(() => {});
+  showDenied(auth && auth.currentUser);
 }
+
+$('gateGoogle').addEventListener('click', async () => {
+  $('gateErr').hidden = true;
+  if (!auth) { showGate('Firebase is not configured.'); return; }
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch (err) {
+    const code = (err && err.code) || '';
+    // A closed or blocked popup is the user's own doing, not a failure worth
+    // shouting about; anything else is worth naming, because the usual cause
+    // is a provider nobody enabled yet.
+    if (/popup-closed-by-user|cancelled-popup-request/.test(code)) return;
+    showGate(/popup-blocked/.test(code)
+      ? 'The browser blocked the sign-in popup. Allow popups for this site and try again.'
+      : /operation-not-allowed|configuration-not-found/.test(code)
+        ? 'Google sign-in is not enabled on this project. Run: node tools/firebase-setup.js'
+        : 'Google sign-in failed: ' + (code || (err && err.message) || 'unknown error'));
+  }
+  // onAuthStateChanged takes it from here: the admin probe, then the app.
+});
+
+$('gateSignOut').addEventListener('click', async () => {
+  if (auth) await signOut(auth).catch(() => {});
+  location.reload();
+});
 
 $('gateForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -351,7 +489,7 @@ $('gateForm').addEventListener('submit', async (e) => {
     return;
   }
   $('gatePass').value = '';
-  // onAuthStateChanged takes it from here: showApp() + refresh().
+  // onAuthStateChanged takes it from here: the admin probe, then the app.
 });
 $('signout').addEventListener('click', async () => {
   if (auth) await signOut(auth).catch(() => {});
@@ -880,6 +1018,18 @@ function reportRow(r) {
   if (r.reason !== r.tag) top.appendChild(el('span', 'reason', 'reported as ' + r.reason));
   if (r.held) top.appendChild(el('span', 'pill held', 'held: no trusted reporter'));
   if (r.status !== 'pending') top.appendChild(el('span', 'pill ' + r.status, r.status));
+  // Named in public, or waiting to be. The two are worth distinguishing: the
+  // opt-in can be recorded on a target of any status, but only an approved one
+  // reaches the page, so a pending row says so rather than implying it is live.
+  if (r.public) {
+    const live = r.status === 'approved';
+    const flag = el('span', 'pill public' + (live ? '' : ' later'),
+      live ? 'on the public page' : 'public once approved');
+    flag.title = live
+      ? 'this profile is named on the public transparency page'
+      : 'opted in, but nothing is published until this target is approved';
+    top.appendChild(flag);
+  }
   box.appendChild(top);
 
   box.appendChild(el('div', 'meta', [
@@ -956,9 +1106,40 @@ function reportRow(r) {
     add('Approve → block', 'good', 'approve');
     if (r.status !== 'rejected') add('Reject', 'danger', 'reject');
   }
+  actions.appendChild(publicControl(r));
   actions.appendChild(retagControl(r));
   box.appendChild(actions);
   return box;
+}
+
+/**
+ * The publish-publicly toggle.
+ *
+ * Separate from Approve on purpose, and worded as an act rather than a state.
+ * Approving puts an id on a blocklist that only the extension reads; this puts
+ * a person's name on a page anyone can read and search, and the owner decided
+ * (ROADMAP, open decision 2) that the second must never happen as a side
+ * effect of the first. So it is its own button, on its own row, saying which
+ * of the two it does.
+ */
+function publicControl(r) {
+  const on = r.public === true;
+  const label = on ? 'Unpublish' : 'Publish publicly';
+  const b = el('button', 'btn' + (on ? '' : ' pub'), label);
+  b.title = on
+    ? 'take this profile off the public transparency page'
+    : 'name this profile on the public transparency page';
+  b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = '…';
+    const out = await setPublicAndPublish(r.key, !on);
+    if (!out.ok) {
+      if (out.unauthorized) { unauthorized(); return; }
+      b.disabled = false; b.textContent = label;
+      setConn(out.error || 'failed', 'bad');
+    }
+    // On success refresh() has already redrawn this row from what is stored.
+  });
+  return b;
 }
 
 /**
@@ -1072,9 +1253,15 @@ function renderBlocklist(host) {
     : 'https://firestore.googleapis.com/v1/projects/'
         + encodeURIComponent(config.projectId) + '/databases/(default)/documents';
 
-  // The auth state decides gate vs app; there is no session probe to make.
-  onAuthStateChanged(auth, (user) => {
-    if (user) { showApp(); refresh(); }
-    else showGate();
+  // The auth state decides gate vs app -- but "signed in" and "allowed to
+  // moderate" are two different questions once there are two ways in, so the
+  // second one is asked before the dashboard is shown. Showing the app first
+  // and letting refresh() discover the 403 would flash an empty dashboard at
+  // someone whose real answer is "your uid is not on the list".
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { showGate(); return; }
+    if (!(await isAdminAccount())) { showDenied(user); return; }
+    showApp();
+    refresh();
   });
 })();

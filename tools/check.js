@@ -277,5 +277,51 @@ for (const page of ['popup', 'activity']) {
   }
 }
 
+// ---- 9. the two hosted pages, and the one rule they share ---------------
+//
+// Hosting serves a public page at / and the dashboard at /admin/, and both are
+// built out of text somebody else wrote: a reporter's summary of a post, a
+// display name, a username. The dashboard has always been textContent-only,
+// but on the public page that stops being a matter of taste -- it names
+// people, so it is exactly the page one of those named people would try to
+// get a script onto, and it is read by strangers with no reason to trust it.
+// One innerHTML anywhere on either page is all it takes.
+//
+// Both the markup and every local script it loads are scanned, because that
+// is where the assignment would actually be written. Comments come out first,
+// on purpose: a comment explaining why innerHTML is not used here is the kind
+// of note this rule wants kept, and a check that failed the build over it
+// would only get the explanation deleted.
+{
+  const stripComments = (text) => text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+
+  for (const rel of ['hosting/index.html', 'hosting/admin/index.html']) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) { report(false, 'exists ' + rel); continue; }
+    report(true, 'exists ' + rel);
+
+    const src = fs.readFileSync(file, 'utf8');
+    const dir = path.dirname(file);
+    const scanned = [[rel, src]];
+    for (const m of src.matchAll(/<script[^>]*\bsrc="([^"#]+)"/g)) {
+      if (/^(https?:)?\/\//.test(m[1])) continue;
+      const dep = path.resolve(dir, m[1]);
+      if (!fs.existsSync(dep)) { report(false, `${rel} -> ${m[1]}`); continue; }
+      scanned.push([path.relative(ROOT, dep).split(path.sep).join('/'),
+        fs.readFileSync(dep, 'utf8')]);
+    }
+
+    const offenders = scanned
+      .filter(([, text]) => /\binnerHTML\b/.test(stripComments(text)))
+      .map(([name]) => name);
+    report(offenders.length === 0,
+      rel + ' and its scripts write text, never HTML (' + scanned.length + ' file(s))',
+      offenders.join(', '));
+  }
+}
+
 console.log('\n' + (failures ? `${failures} problem(s)` : 'all checks passed'));
 process.exitCode = failures ? 1 : 0;

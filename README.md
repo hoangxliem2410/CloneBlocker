@@ -83,8 +83,12 @@ is not someone you encountered in content.
 ## Moderation dashboard
 
 Served by **Firebase Hosting** from your own project — for this one,
-**https://clone-blocker2.web.app**. Sign in with the Firebase Auth email and
-password the setup script created. There is no server of yours to start or
+**https://clone-blocker2.web.app/admin/**. Sign in with Google, or with the
+Firebase Auth email and password the setup script created — either account can
+be an admin, and a Google sign-in mints a different UID than the password
+account, so both UIDs go in the allowlist. The dashboard used to live at the site
+root and moved under `/admin/` when the root became the public transparency
+page, so an old bookmark needs updating. There is no server of yours to start or
 keep running.
 
 ![Moderation dashboard](docs/shots/dashboard.png)
@@ -120,21 +124,36 @@ rather than something a transaction has to defend.
 
 ### Admin access
 
-One account, and only one. The setup script creates the admin user in Firebase
-Auth with a random password (written to `.env`, which is gitignored), pins that
-account's UID into `firestore.rules`, and disables public sign-up at the Auth
-configuration level. There is no user database to administer: the security
-rules recognise exactly one UID, and nobody else can create an account to try.
+A short list of UIDs, and nothing else. The setup script creates the admin user
+in Firebase Auth with a random password (written to `.env`, which is
+gitignored), puts that account's UID in the allowlist inside `firestore.rules`,
+and disables public sign-up at the Auth configuration level. There is no user
+database to administer: the security rules recognise the UIDs in that list, and
+nobody else can create an account to try.
 
-The dashboard signs in with email and password through the Firebase SDK and
-holds a short-lived ID token in the page; signing out revokes it. No
-credentials live in the repository, there are no defaults to change before
-exposing anything, and password handling, sign-in throttling and token expiry
-are Google's Identity Toolkit rather than code in this repo.
+Two ways in, one allowlist. Signing in with Google is the usual door; email and
+password stays as the fallback for when a Google account is not to hand. They
+are different UIDs for the same person, so the list holds both:
+
+```
+node tools/firebase-setup.js --list-admins            # who can moderate today
+node tools/firebase-setup.js --add-admin <uid>        # add one and redeploy
+```
+
+You do not have to go hunting for the UID. Sign in first: an account the rules
+refuse gets a screen naming it, printing its UID, and spelling out the exact
+`--add-admin` command to run — being locked out of your own dashboard with no
+way to learn your own UID is the failure mode that screen exists to prevent.
+
+Either way the dashboard holds only a short-lived ID token in the page, and
+signing out revokes it. No credentials live in the repository, there are no
+defaults to change before exposing anything, and password handling, sign-in
+throttling and token expiry are Google's Identity Toolkit rather than code in
+this repo.
 
 The privilege itself lives in the rules, not the dashboard. Every read of the
 report queue and every decision write is checked server-side against the
-pinned UID, so the dashboard is just a convenience over data that only the
+admin uid allowlist in the rules, so the dashboard is just a convenience over data that only the
 admin could touch anyway — a modified copy of it gains nothing.
 
 **Reporting stays open and anonymous.** The whole point is that an ordinary
@@ -183,11 +202,17 @@ node tools/firebase-setup.js --deploy
 
 Zero dependencies, idempotent — every step checks before it creates, so
 re-running is safe. It enables the APIs, creates the Firestore database and
-the web app registration, turns on email/password sign-in, creates the admin
-user, disables public sign-up, pins the admin UID into `firestore.rules`,
-deploys rules and hosting, and seeds an empty published list. It uses the
-credentials the Firebase CLI already holds, so `firebase login` once is the
-only prerequisite.
+the web app registration, turns on email/password and Google sign-in, creates
+the admin user, disables public sign-up, puts the admin UID in the
+`firestore.rules` allowlist, deploys rules and hosting, and seeds an empty
+published list. It uses the credentials the Firebase CLI already holds, so
+`firebase login` once is the only prerequisite.
+
+Google sign-in needs an OAuth client id and secret, because the sign-in popup
+is an OAuth consent flow and consent is granted to a client rather than to a
+project. Pass `--google-client-id` and `--google-client-secret` if you have
+them; if the project has no client and none are given, that one step prints the
+console page to finish it on by hand and the rest of the run continues.
 
 ### Data model
 
@@ -729,7 +754,7 @@ manifest.json
 src/  main/ content/ background/ popup/ options/ activity/ common/ ui/
 firestore.rules           the whole trust model, enforced server-side
 firebase.json             Firestore + Hosting + emulator configuration
-hosting/                  moderation dashboard, served by Firebase Hosting
+hosting/                  the site: shared logic.js, admin/ dashboard
 tools/firebase-setup.js   one-command project provisioning
 tools/firebase-test.js    rules matrix + ported logic, against the emulator
 tools/fb.js               finds the Firebase CLI wherever it is installed

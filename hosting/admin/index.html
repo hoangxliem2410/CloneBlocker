@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clone Blocker — Moderation</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <!-- Sign-in gate. Firebase Auth holds the session; this page never stores a
+       credential of its own. -->
+  <div id="gate" class="gate hidden">
+    <form class="gatebox" id="gateForm">
+      <h1>Moderation</h1>
+      <p class="note">Sign in with the Google account that moderates this project.</p>
+      <button class="btn google" id="gateGoogle" type="button">Sign in with Google</button>
+      <p class="or">or the moderation account's email</p>
+      <input type="text" id="gateUser" placeholder="email" autocomplete="username" autofocus>
+      <input type="password" id="gatePass" placeholder="password" autocomplete="current-password">
+      <button class="btn primary" type="submit">Sign in</button>
+      <p id="gateErr" class="err" hidden></p>
+      <p id="gateWarn" class="warn" hidden></p>
+      <!-- Signed in, but the rules said no. This is the only place the owner
+           can learn the uid of the account they just signed in with, so it
+           shows the uid and the exact command that grants it. -->
+      <div id="gateDenied" class="denied" hidden>
+        <p id="gateDeniedWho" class="err"></p>
+        <p class="note">uid</p>
+        <code id="gateDeniedUid" class="uid"></code>
+        <p class="note">Add it to the allowlist and redeploy the rules:</p>
+        <code id="gateDeniedCmd" class="uid"></code>
+        <button class="btn" id="gateSignOut" type="button">Sign out and try another account</button>
+      </div>
+    </form>
+  </div>
+
+  <main id="app" class="hidden">
+    <header class="dash-hd">
+      <h1>Moderation dashboard</h1>
+      <div class="row-inline">
+        <span id="conn" class="status"></span>
+        <button id="refresh" class="btn primary">Refresh</button>
+        <button id="publish" class="btn">Publish list</button>
+        <button id="signout" class="btn">Sign out</button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><div class="sv" id="statPending">—</div><div class="sk">Pending</div></div>
+      <div class="stat"><div class="sv" id="statApproved">—</div><div class="sk">Approved</div></div>
+      <div class="stat"><div class="sv" id="statRejected">—</div><div class="sk">Rejected</div></div>
+      <div class="stat"><div class="sv" id="statSubmissions">—</div><div class="sk">Submissions</div></div>
+      <div class="stat"><div class="sv" id="statBlocked">—</div><div class="sk">On blocklist</div></div>
+      <div class="stat"><div class="sv" id="statEvidence">—</div><div class="sk">With evidence</div></div>
+      <div class="stat"><div class="sv" id="statHeld">—</div><div class="sk">Held</div></div>
+      <div class="stat"><div class="sv" id="statReporters">—</div><div class="sk" id="statReportersK">Known reporters</div></div>
+    </section>
+
+    <section class="card">
+      <h2>Reports per day</h2>
+      <div id="spark" class="spark"></div>
+      <div class="breakdowns">
+        <div><h3>By platform</h3><div id="byPlatform" class="bars"></div></div>
+        <div><h3>By reason reported</h3><div id="byReason" class="bars"></div></div>
+        <!-- Reason is what the first reporter picked; tag is the verdict the
+             target ended up with. Side by side they show where the two
+             disagree, which is where retagging is actually happening. -->
+        <div><h3>By tag</h3><div id="byTag" class="bars tinted"></div></div>
+        <div><h3>Top reporters</h3><div id="topReporters" class="bars"></div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Where clones are active</h2>
+      <div id="trendMatrix"></div>
+      <div id="trendTop" class="trendtop"></div>
+    </section>
+
+    <!-- The dials the published list carries, and what they do to it. The
+         preview ranks with whatever is in the form right now, so the effect of
+         a change is visible before anyone commits it to the served list. -->
+    <section class="card">
+      <h2>Ranking</h2>
+      <div class="ranking">
+        <form id="rankForm" class="rankform">
+          <div class="rankfields" id="rankFields"></div>
+          <div class="row-inline rankactions">
+            <button class="btn primary" type="submit">Save &amp; publish</button>
+            <button class="btn" type="button" id="rankReset">Reset to defaults</button>
+            <span id="rankMsg" class="note"></span>
+          </div>
+        </form>
+        <div class="rankpreview">
+          <h3>Top 10 with these values</h3>
+          <div id="rankPreview"></div>
+          <p class="note">No viewer region is assumed here, so locality is
+             neutral for every target; a real client ranks its own region up.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <div class="tabs">
+          <button class="tab active" data-status="pending">Pending</button>
+          <button class="tab" data-status="approved">Approved</button>
+          <button class="tab" data-status="rejected">Rejected</button>
+          <button class="tab" data-status="">All</button>
+          <button class="tab" data-status="__blocklist">Blocklist</button>
+        </div>
+        <input type="search" id="filter" placeholder="Filter by name, @username, id, reason…">
+      </div>
+
+      <!-- Tag toggles, built from the one TAGS vocabulary in logic.js rather
+           than spelled out here, so a tag added there cannot go missing. -->
+      <div class="tagfilter" id="tagFilter"></div>
+
+      <div class="bulkbar hidden" id="bulkbar">
+        <label class="toggle"><input type="checkbox" id="selectAll"><span id="selCount">0 selected</span></label>
+        <div class="row-inline">
+          <button id="bulkApprove" class="btn good">Approve selected</button>
+          <button id="bulkReject" class="btn danger">Reject selected</button>
+        </div>
+      </div>
+
+      <div id="rows"></div>
+      <p id="empty" class="note hidden">Nothing here.</p>
+    </section>
+  </main>
+
+  <!-- logic.js is a classic script and admin.js a module: modules are
+       deferred, so CB_LOGIC is guaranteed to exist before admin.js runs.
+       It sits a directory up because the public page shares it: one copy of
+       the compute, served to both, so the page and the dashboard can never
+       be reasoning from different rules. -->
+  <script src="../logic.js"></script>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

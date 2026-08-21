@@ -227,6 +227,10 @@
         reasons: Object.create(null),
         tag: 'clone',
         status: 'pending',
+        // The transparency opt-in, separate from status on purpose: blocking an
+        // account and naming it on a public page are two decisions, and a
+        // record that has only had the first taken must not carry the second.
+        public: false,
         count: 0,
         reporters: [],
         notes: [],
@@ -287,6 +291,10 @@
           rec.status = 'pending';
         }
       }
+      // Read off the decision document rather than the status block above,
+      // because it is not a status: a case reopened by a late report keeps
+      // whatever the admin last said about publishing it.
+      rec.public = !!(dec && dec.public === true);
       // The admin's tag survives a reopening: a verdict about what an account
       // IS does not stop being true because one more person reported it.
       rec.tag = effectiveTag(dec, rec.reasons);
@@ -478,6 +486,102 @@
     };
   }
 
+  // -- publish: the public transparency view ---------------------------------
+
+  // An evidence link that reaches the page must be https. The rules accept
+  // http as well and records predating them may hold anything at all, but a
+  // page that names people should not send anyone to a link that can be
+  // rewritten in transit, and there is nothing an http-only citation proves
+  // that an https one does not.
+  const isHttps = (u) => /^https:\/\//i.test(String(u || '').trim());
+
+  const PUBLIC_REGION_CAP = 3;   // region NAMES shown per profile
+
+  /**
+   * Build the payload of blocklist/publicView.
+   *
+   * Everything about this function is subtraction. The blocklist is a list of
+   * ids an extension acts on; this is a page that says in public that a named
+   * account is a clone or a scammer, so what it may carry is drawn far tighter
+   * than what the dashboard holds:
+   *
+   *   - Approved AND opted in. `public` is a separate, deliberate decision from
+   *     the dashboard (see aggregate); approving alone never names anyone.
+   *   - No reporter identities. Not the acct_ pseudonyms, not per-reporter
+   *     counts, not trust weights -- only how many people reported. The
+   *     pseudonyms are stable across targets, so publishing even one would let
+   *     anyone reconstruct who reported what.
+   *   - Evidence needs a link. A quoted summary with no post behind it is an
+   *     unverifiable claim about a named person, so the entry is dropped
+   *     rather than published; a summary WITH a link is kept, because the link
+   *     is what makes it checkable.
+   *   - No moderator notes, and region NAMES without their counts -- "two
+   *     reports from Asia/Ho_Chi_Minh" narrows a reporter in a way the bare
+   *     name does not.
+   *
+   * `rep` never reaches the output. It orders it: the same trust-weighted sum
+   * the queue is ranked by decides which profiles lead, so the best-evidenced
+   * cases are at the top of the page and the number behind that ordering stays
+   * inside this function.
+   */
+  function buildPublicView(records, rep) {
+    const trust = rep || Object.create(null);
+    const scoreOf = (r) =>
+      (r.reporters || []).reduce((n, who) => n + trustOf(trust, who), 0);
+    const day = (v) => String(v || '').slice(0, 10);
+    const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
+
+    // Ordering is total on purpose -- score, then the most recently active,
+    // then the key -- so republishing an unchanged store produces a
+    // byte-identical list of profiles rather than a reshuffled one.
+    const chosen = (records || [])
+      .filter(r => r.status === 'approved' && r.public === true)
+      .sort((a, b) =>
+        (scoreOf(b) - scoreOf(a)) ||
+        cmp(day(b.lastReportAt), day(a.lastReportAt)) ||
+        cmp(a.key, b.key));
+
+    const profiles = chosen.map(r => ({
+      platform: r.platform,
+      // Username-only targets are published as themselves rather than dropped:
+      // the page is about who an account claims to be, and that is the
+      // username. Blocking still needs the id; naming does not.
+      id: isId(r.profileId) ? String(r.profileId) : null,
+      username: r.username || null,
+      displayName: r.displayName || null,
+      tag: TAGS.includes(r.tag) ? r.tag : 'clone',
+      // The headcount, and nothing about who is in it.
+      reports: (r.reporters || []).length,
+      firstReported: day(r.createdAt),
+      lastActive: day(r.lastReportAt || r.updatedAt || r.createdAt),
+      regions: Object.keys(r.regions || {})
+        .sort((a, b) => (r.regions[b] - r.regions[a]) || (a < b ? -1 : 1))
+        .slice(0, PUBLIC_REGION_CAP),
+      evidence: (r.posts || [])
+        .filter(p => p && isHttps(p.url))
+        .map(p => ({ url: String(p.url), summary: p.summary || null }))
+    }));
+
+    const byTag = {};
+    for (const p of profiles) byTag[p.tag] = (byTag[p.tag] || 0) + 1;
+
+    return {
+      v: 1,
+      updatedAt: new Date().toISOString(),
+      counts: {
+        // What this page shows, against what it is a window onto: `blocked` is
+        // every approved target and `reports` every submission ever filed,
+        // decided or not, so a reader can see how small the named slice is
+        // next to the work behind it.
+        published: profiles.length,
+        blocked: (records || []).filter(r => r.status === 'approved').length,
+        reports: (records || []).reduce((n, r) => n + (r.count || 0), 0),
+        byTag
+      },
+      profiles
+    };
+  }
+
   // -- stats (verbatim shapes) -----------------------------------------------
 
   function buildStats(records, rep, list) {
@@ -603,7 +707,7 @@
     dayKey, normUser, isId, bump, trimDays, velocity, affinity,
     modalTag, effectiveTag, rankWeightsOf,
     weightOf, reputation, trustOf, withTrust, sortQueue,
-    aggregate, rankTargets, buildPublish, buildStats, trendMatrix
+    aggregate, rankTargets, buildPublish, buildPublicView, buildStats, trendMatrix
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

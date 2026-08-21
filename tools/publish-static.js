@@ -24,6 +24,14 @@
  *   list URL : https://<project>.web.app/blocklist.json
  *   API base : https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents
  * (reports still go to Firestore; only the read moves to the CDN).
+ *
+ * The public transparency page gets the same treatment: blocklist/publicView
+ * is mirrored to /transparency.json in the same snapshot. That page is the one
+ * a link in a post sends strangers to, so it is the read most likely to arrive
+ * in a crowd, and the one least able to afford a per-visitor database read. The
+ * two files are written from the same pass on purpose -- the dashboard commits
+ * both documents together, so a snapshot that took only one could put a name on
+ * the page that the blocklist beside it no longer carries.
  */
 const fs = require('fs');
 const os = require('os');
@@ -38,7 +46,21 @@ const INTERVAL_MIN = parseInt(argOf('interval', '0'), 10) || 0;
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'hosting', 'blocklist.json');
-const DOC = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/blocklist/current`;
+const OUT_PUBLIC = path.join(ROOT, 'hosting', 'transparency.json');
+const DOCS = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/blocklist`;
+const DOC = `${DOCS}/current`;
+const DOC_PUBLIC = `${DOCS}/publicView`;
+
+// What to write when blocklist/publicView does not exist yet, which is the
+// normal state of a project where nobody has opted a target in. Shipping this
+// is better than either failing the deploy or skipping the file: skipping it
+// would leave whatever a previous run deployed sitting on the CDN, still
+// naming people after the document behind it was emptied.
+const EMPTY_VIEW = {
+  v: 1, updatedAt: null,
+  counts: { published: 0, blocked: 0, reports: 0, byTag: {} },
+  profiles: []
+};
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -67,9 +89,29 @@ async function snapshotAndDeploy() {
   fs.writeFileSync(OUT, json);
   console.log(`[${new Date().toISOString()}] snapshot: ${json.length} bytes -> hosting/blocklist.json`);
 
+  // A 404 here is a project that has published a blocklist but never named
+  // anybody publicly, so it is not an error; anything else is, because a
+  // half-read document must not be allowed to overwrite a good mirror.
+  const pubRes = await fetch(DOC_PUBLIC);
+  let view = null;
+  if (pubRes.ok) {
+    const pubDoc = await pubRes.json();
+    view = pubDoc.fields && pubDoc.fields.json && pubDoc.fields.json.stringValue;
+    if (!view) throw new Error('blocklist/publicView has no payload');
+    JSON.parse(view);
+  } else if (pubRes.status === 404) {
+    view = JSON.stringify({ ...EMPTY_VIEW, updatedAt: new Date().toISOString() });
+    console.log('  blocklist/publicView does not exist yet -- mirroring an empty list');
+  } else {
+    throw new Error('publicView read returned HTTP ' + pubRes.status);
+  }
+  fs.writeFileSync(OUT_PUBLIC, view);
+  console.log(`  public view: ${view.length} bytes -> hosting/transparency.json`);
+
   const r = cli(['deploy', '--only', 'hosting', '--project', PROJECT, '--non-interactive']);
   if (r.status !== 0) throw new Error('hosting deploy failed');
   console.log(`  live: https://${PROJECT}.web.app/blocklist.json`);
+  console.log(`        https://${PROJECT}.web.app/transparency.json`);
   return doc.updateTime || null;
 }
 
@@ -77,6 +119,10 @@ async function snapshotAndDeploy() {
   let deployedAt = await snapshotAndDeploy();
 
   if (!INTERVAL_MIN) return;
+  // Only blocklist/current is probed, and that is enough for both files: the
+  // dashboard writes current and publicView in one commit, so they change
+  // together or not at all. A publicView that moved on its own would be a bug
+  // in the dashboard, not a case to poll for here.
   console.log(`watching for changes every ${INTERVAL_MIN} min (ctrl-c to stop)`);
   for (;;) {
     await sleep(INTERVAL_MIN * 60 * 1000);

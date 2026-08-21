@@ -827,6 +827,14 @@
     "message": "Blocking is switched off in Settings, so this report will not block anyone.",
     "description": "Shown under the block tick box when platform blocking is disabled, which is why the box is greyed out."
   },
+  "report_alsoBlockQueued": {
+    "message": "Blocking is paused in Settings, so this will wait in the queue until you switch it back on.",
+    "description": "Shown under the block tick box when platform blocking is paused. The box stays usable: the block is queued, not discarded."
+  },
+  "report_alsoBlockWhenSeen": {
+    "message": "This profile has not shown a numeric ID yet, so it will be blocked the next time it turns up rather than right now.",
+    "description": "Shown under the block tick box when the numeric id is not known yet. The box stays usable: the report carries the username, and the block happens once the profile is on the list and seen again."
+  },
   "report_buttonLabel": {
     "message": "Report clone account",
     "description": "Screen-reader label and tooltip of the report button the extension adds to a Threads post's action row."

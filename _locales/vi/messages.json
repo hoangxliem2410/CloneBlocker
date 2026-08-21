@@ -827,6 +827,14 @@
     "message": "Tính năng chặn đang tắt trong Cài đặt, nên báo cáo này sẽ không chặn ai.",
     "description": "Shown under the block tick box when platform blocking is disabled, which is why the box is greyed out."
   },
+  "report_alsoBlockQueued": {
+    "message": "Tính năng chặn đang tạm dừng trong Cài đặt, nên việc này sẽ chờ trong hàng đợi cho tới khi bạn bật lại.",
+    "description": "Shown under the block tick box when platform blocking is paused. The box stays usable: the block is queued, not discarded."
+  },
+  "report_alsoBlockWhenSeen": {
+    "message": "Tài khoản này chưa hiện ID dạng số, nên sẽ bị chặn vào lần xuất hiện sau chứ không phải ngay bây giờ.",
+    "description": "Shown under the block tick box when the numeric id is not known yet. The box stays usable: the report carries the username, and the block happens once the profile is on the list and seen again."
+  },
   "report_buttonLabel": {
     "message": "Báo cáo tài khoản giả mạo",
     "description": "Screen-reader label and tooltip of the report button the extension adds to a Threads post's action row."

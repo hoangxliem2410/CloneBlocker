@@ -391,21 +391,35 @@
       $('.submit').disabled = true;
     }
 
-    // Blocking needs a numeric id -- a block is issued against one, never
-    // against a username -- and it needs the layer to be switched on at all.
-    // Rather than offer a tick box that would quietly do nothing, say which
-    // of the two is missing.
+    // The box is never disabled. It was, on two conditions that both looked
+    // like good reasons and were not:
+    //
+    //   blocking paused -- the block is QUEUED either way, and a queue
+    //     survives until somebody turns blocking back on. Greying the box out
+    //     refused an intent it could have recorded perfectly well, from a
+    //     dialog where the reader cannot see what some other screen is set to.
+    //
+    //   no numeric id yet -- a block is issued against an id, never a
+    //     username, and on Threads the id is learned from the page rather
+    //     than being in the URL. So this is not "impossible", it is "not yet",
+    //     and how long it takes depends on how far the page has loaded. A box
+    //     that is dead for the first few seconds of every visit, on the
+    //     profile the reader is actually looking at, is indistinguishable
+    //     from a broken one -- which is exactly how it was reported.
+    //
+    // So: always tickable, ticked by default, and the note says what will
+    // actually happen rather than what cannot.
     const box = $('#alsoBlock');
     const blockNote = $('.blocknote');
-    const canBlock = !!ident.profileId && settings.platformBlockEnabled !== false;
-    box.checked = canBlock && settings.reportAlsoBlocks !== false;
-    if (!canBlock) {
-      box.checked = false;
-      box.disabled = true;
+    box.disabled = false;
+    box.checked = settings.reportAlsoBlocks !== false;
+
+    if (!ident.profileId) {
       blockNote.hidden = false;
-      blockNote.textContent = !ident.profileId
-        ? T('report_alsoBlockNoId')
-        : T('report_alsoBlockOff');
+      blockNote.textContent = T('report_alsoBlockWhenSeen');
+    } else if (settings.platformBlockEnabled === false) {
+      blockNote.hidden = false;
+      blockNote.textContent = T('report_alsoBlockQueued');
     }
     box.addEventListener('change', () => {
       // Remembered, because someone who unticks it means it.
@@ -449,14 +463,24 @@
       // report landed, and saying otherwise would be a lie about the thing
       // that matters most.
       let blocked = false;
-      if (box.checked && ident.profileId) {
-        const b = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
-          platform: PLATFORM,
-          ids: [String(ident.profileId)],
-          warm: true,
-          userInitiated: true
-        });
-        blocked = !!(b && b.ok !== false);
+      if (box.checked) {
+        // Resolve the id again rather than trusting the one captured when the
+        // sheet opened. On Threads it is learned from the page, and the sheet
+        // has been on screen for however long it took somebody to choose a
+        // reason and type a note -- which is usually long enough.
+        const now = enrich(ident);
+        if (now.profileId) {
+          const b = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
+            platform: PLATFORM,
+            ids: [String(now.profileId)],
+            warm: true,
+            userInitiated: true
+          });
+          blocked = !!(b && b.ok !== false);
+        }
+        // Still no id: the report carries the username, and once it is on the
+        // list the ordinary sweep blocks this profile the next time it is
+        // seen. Nothing is lost, so nothing is claimed.
       }
 
       // Built out of nodes rather than out of a string of HTML, which is what

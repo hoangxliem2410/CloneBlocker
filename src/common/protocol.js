@@ -132,6 +132,12 @@
     // case needs no extra configuration.
     apiBase: '',
     reportUiEnabled: true,   // the in-page report affordance on profiles
+    // Reporting and blocking are usually the same intent: the person filing
+    // the report wants this account gone from their feed now, not once a
+    // moderator has read it. So the sheet offers both at once and ticks it by
+    // default. It is a remembered preference rather than a fresh default each
+    // time -- someone who unticks it means it.
+    reportAlsoBlocks: true,
     reportHoverDelayMs: 350,
     reporterId: '',          // set on first use; identifies repeat reports
     submitToken: '',         // only if the server was started with --submit-token

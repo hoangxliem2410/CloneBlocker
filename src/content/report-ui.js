@@ -169,6 +169,13 @@
       border: 1px solid rgba(128,128,128,.4); border-radius: 8px; background: #fff;
     }
     textarea { resize: vertical; min-height: 62px; }
+    .alsoblock {
+      display: flex; align-items: center; gap: 8px; margin: 12px 0 0;
+      font-size: 13px; cursor: pointer;
+    }
+    .alsoblock input { margin: 0; cursor: pointer; }
+    .alsoblock input:disabled { cursor: default; }
+    .blocknote { margin-top: 4px; }
     .ft { display: flex; gap: 8px; justify-content: flex-end;
           padding: 12px 16px; border-top: 1px solid rgba(128,128,128,.25); }
     button {
@@ -327,6 +334,11 @@
         <select id="reason"></select>
         <label for="note" data-i18n="report_noteLabel"></label>
         <textarea id="note" data-i18n-placeholder="report_notePlaceholder"></textarea>
+        <label class="alsoblock">
+          <input type="checkbox" id="alsoBlock">
+          <span data-i18n="report_alsoBlock"></span>
+        </label>
+        <div class="blocknote note" hidden></div>
         <div class="note" data-i18n="report_disclaimer"></div>
         <div class="err" hidden></div>
       </div>
@@ -374,6 +386,28 @@
       $('.submit').disabled = true;
     }
 
+    // Blocking needs a numeric id -- a block is issued against one, never
+    // against a username -- and it needs the layer to be switched on at all.
+    // Rather than offer a tick box that would quietly do nothing, say which
+    // of the two is missing.
+    const box = $('#alsoBlock');
+    const blockNote = $('.blocknote');
+    const canBlock = !!ident.profileId && settings.platformBlockEnabled !== false;
+    box.checked = canBlock && settings.reportAlsoBlocks !== false;
+    if (!canBlock) {
+      box.checked = false;
+      box.disabled = true;
+      blockNote.hidden = false;
+      blockNote.textContent = !ident.profileId
+        ? T('report_alsoBlockNoId')
+        : T('report_alsoBlockOff');
+    }
+    box.addEventListener('change', () => {
+      // Remembered, because someone who unticks it means it.
+      bridge.sw(P.SW.SET_SETTINGS, { reportAlsoBlocks: box.checked });
+      settings.reportAlsoBlocks = box.checked;
+    });
+
     $('.cancel').addEventListener('click', closeModal);
     $('.submit').addEventListener('click', async () => {
       const btn = $('.submit');
@@ -403,6 +437,23 @@
         err.textContent = (res && res.error) || T('report_sendFailed');
         return;
       }
+      // The block rides along, as a warm target -- this profile is on screen
+      // right now, which is the cheap case -- and marked userInitiated, so
+      // the tag filter cannot silently drop something the person just asked
+      // for by ticking a box. A failure here is not a failed report: the
+      // report landed, and saying otherwise would be a lie about the thing
+      // that matters most.
+      let blocked = false;
+      if (box.checked && ident.profileId) {
+        const b = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
+          platform: PLATFORM,
+          ids: [String(ident.profileId)],
+          warm: true,
+          userInitiated: true
+        });
+        blocked = !!(b && b.ok !== false);
+      }
+
       // Built out of nodes rather than out of a string of HTML, which is what
       // lets the status word and the count be separate translated messages
       // instead of fragments concatenated around markup.
@@ -410,7 +461,9 @@
       bd.textContent = '';
       const ok = document.createElement('div');
       ok.className = 'ok';
-      ok.textContent = T(res.duplicate ? 'report_duplicate' : 'report_sent');
+      ok.textContent = blocked
+        ? T(res.duplicate ? 'report_duplicateAndBlocked' : 'report_sentAndBlocked')
+        : T(res.duplicate ? 'report_duplicate' : 'report_sent');
       const foot = document.createElement('div');
       foot.className = 'note';
       foot.appendChild(document.createTextNode(T('report_statusLabel') + ' '));
@@ -550,9 +603,21 @@
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.setAttribute('aria-label', T('report_iconLabel'));
-    const flag = document.createElementNS(ns, 'path');
-    flag.setAttribute('d', 'M4 21V4.5C4 4.5 6 3 9.5 3s5 1.5 8.5 1.5c1 0 2-.2 2-.2v9s-1 .5-2.5.5c-3.5 0-5-1.5-8.5-1.5S4 14 4 14');
-    svg.appendChild(flag);
+    // A block glyph, not a flag. Flagging is what you do to ask someone else
+    // to look; this control reports AND, by default, blocks -- and it is the
+    // same mark the extension wears in the toolbar, so the two read as one
+    // product rather than two unrelated affordances.
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('cx', '12');
+    ring.setAttribute('cy', '12');
+    ring.setAttribute('r', '9');
+    const slash = document.createElementNS(ns, 'line');
+    slash.setAttribute('x1', '5.6');
+    slash.setAttribute('y1', '5.6');
+    slash.setAttribute('x2', '18.4');
+    slash.setAttribute('y2', '18.4');
+    svg.appendChild(ring);
+    svg.appendChild(slash);
     return svg;
   }
 

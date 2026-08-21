@@ -1,6 +1,7 @@
 # 3Que Blocker
 
-A Chrome (Manifest V3) extension that fetches a profile-ID blocklist from **your** server
+A Chrome (Manifest V3) extension that fetches a profile-ID blocklist from a backend
+**you** own — a Firebase project on the free plan, or any URL serving plain JSON —
 and applies it on **Facebook** and **Threads**.
 
 No Facebook/Threads SDK. No Graph API. It works by using the sites' own internal
@@ -46,8 +47,9 @@ is a clone needs the evidence, not just a name.
 
 **Anywhere else**, hover a profile link — a post author, a commenter, a name in
 a reply thread — and a small **Report** chip appears. The chip also shows what
-is already known: *Reported ×3* if others have flagged the account, *Blocked* if
-it is already on the list.
+is already known: *Reported* if the account is already awaiting review,
+*Blocked* if it is already on the list — derived from the cached list, with no
+extra request.
 
 The popup has **Report this profile as a clone** for the profile you are viewing.
 
@@ -61,9 +63,10 @@ is not someone you encountered in content.
 
 ## Moderation dashboard
 
-Served by **your server**, at `http://<your server>/admin`. Sign in with the
-username and password the server was started with — `admin` / `admin123` unless
-you pass `--user` and `--pass`.
+Served by **Firebase Hosting** from your own project — for this one,
+**https://clone-blocker2.web.app**. Sign in with the Firebase Auth email and
+password the setup script created. There is no server of yours to start or
+keep running.
 
 ![Moderation dashboard](docs/shots/dashboard.png)
 
@@ -91,75 +94,153 @@ distinct accounts ranked by how many people flagged them. **Approve → block**
 puts it on the list every installation polls; an approved entry offers **Remove
 from blocklist** instead.
 
-Taking an entry off the list — from the dashboard or the API — reopens its
-report rather than leaving it marked approved, so the queue can never contradict
-the list itself.
+Taking an entry off the list reopens its report rather than leaving it marked
+approved, so the queue can never contradict the list itself — and since the
+published list is rewritten after every decision, that agreement is structural
+rather than something a transaction has to defend.
 
 ### Admin access
 
-```
-node server/server.js --user you --pass 'something long' [--trust-proxy]
-```
+One account, and only one. The setup script creates the admin user in Firebase
+Auth with a random password (written to `.env`, which is gitignored), pins that
+account's UID into `firestore.rules`, and disables public sign-up at the Auth
+configuration level. There is no user database to administer: the security
+rules recognise exactly one UID, and nobody else can create an account to try.
 
-Credentials come from `--user` / `--pass`, or `ADMIN_USER` / `ADMIN_PASS` in the
-environment. They default to **`admin` / `admin123`** so a fresh checkout is
-immediately usable.
+The dashboard signs in with email and password through the Firebase SDK and
+holds a short-lived ID token in the page; signing out revokes it. No
+credentials live in the repository, there are no defaults to change before
+exposing anything, and password handling, sign-in throttling and token expiry
+are Google's Identity Toolkit rather than code in this repo.
 
-The dashboard signs in by POSTing to `/admin/login`, which exchanges the
-credentials for an **HttpOnly, `SameSite=Strict` session cookie** valid for 12
-hours. Nothing readable by page scripts is stored in the browser, so a bug in the
-dashboard cannot leak the password. `POST /admin/logout` invalidates the session
-server-side, not just in the browser. Scripts and `curl` can skip the cookie and
-send **HTTP Basic** on any admin route instead.
+The privilege itself lives in the rules, not the dashboard. Every read of the
+report queue and every decision write is checked server-side against the
+pinned UID, so the dashboard is just a convenience over data that only the
+admin could touch anyway — a modified copy of it gains nothing.
 
-**While the defaults are in use, admin sign-in is refused from anywhere but
-loopback.** So `node server/server.js` on your laptop stays convenient, while the
-same command on a public host does not silently expose the review queue and
-blocklist controls to the internet with a password printed in this README. Set
-`--user` and `--pass` and the restriction lifts; `--allow-default-credentials`
-overrides it deliberately, which you should not want.
+**Reporting stays open and anonymous.** The whole point is that an ordinary
+user can flag a clone without an account, a credential, or anything to
+configure; the gate belongs at approval, not at intake. The rules make report
+documents create-only for the public: anyone can file one, nobody but the
+admin can read one back, edit one, or delete one.
 
-The dashboard says so too — while the server is on defaults, the sign-in box
-carries a warning telling you to change them before exposing it.
+## Firebase backend
 
-Comparisons are constant-time, and a wrong username costs exactly as much as a
-wrong password.
+The backend is a Firebase project on the **Spark (free) plan**: Firestore
+holds the data, Hosting serves the dashboard, Auth holds the one admin
+account. No Cloud Functions, and **no server code running anywhere** — every
+piece of the old Node server moved into the extension, into the dashboard's
+browser, or into the Firestore security rules:
 
-### Report API
+| was (server, request-time) | is now |
+|---|---|
+| per-request target ranking by region/language | the **extension**, locally, from published per-target metadata |
+| reputation, trends, stats aggregation | the **dashboard**, in the admin's browser (`hosting/logic.js`) |
+| report validation and caps | **security rules** (reject, never truncate) + the extension clipping before it sends |
+| approve/reject/revoke editing the list | **derivation**: the published list is recomputed from reports + decisions + manual entries after every decision |
+| reporter pseudonym (HMAC with a secret salt) | client-side unkeyed SHA-256 (see "What changed", below) |
+| per-IP rate limits, ETag/304, sessions, Basic auth | gone — they were server concepts |
 
-```
-GET  /blocklist.json         the list extensions poll (ETag aware)
-POST /reports                {platform, profileId|username, displayName, url, reason,
-                              note, postUrl, postId, contentSummary,
-                              reporter}   <- required: "facebook:<id>" | "threads:<id>"
-                                             401 {error:"signed-out"} without it
-GET  /reports/status?...     has this profile been reported or blocked?
+The move improves privacy in one place worth saying plainly: **fetching the
+list no longer sends anything about you to anyone.** The old server ranked
+targets per-request from your region, language and remaining budget; the
+extension now ranks locally from metadata published with the list, so those
+values never leave your machine. Reports still carry your time zone and
+language — the trending matrix is built from them — under the same **Send my
+time zone and language** switch as before.
 
-POST /admin/login            {username, password} -> HttpOnly session cookie
-POST /admin/logout           invalidates the session server-side
-GET  /admin/session          who am I, and is this server on default creds?
-
-GET  /admin/trends?days=14   the trending matrix: regions x days
-GET  /admin/targets?region=   what a client in that region would be told to block
-GET  /admin                  the moderation dashboard (the page itself is public)
-GET  /admin/reports?status=  review queue                    (cookie or Basic)
-POST /admin/reports/decide   {key|keys[], decision: approve|reject|revoke}
-GET  /admin/blocklist        live list, annotated with why each entry is there
-POST /admin/blocklist/remove {ids:[], usernames:[]}
-GET  /admin/stats            counts, 14-day series, breakdowns, top reporters
-```
-
-Everything under `/admin/` except the page, `/admin/login` and `/admin/session`
-requires authentication — session cookie or Basic:
+### One-command setup
 
 ```
-curl -u you:yourpass http://localhost:8787/admin/stats
+node tools/firebase-setup.js --deploy
 ```
 
-**Reporting is open and anonymous.** The whole point is that an ordinary user can
-flag a clone without an account, a credential, or anything to configure; the gate
-belongs at approval, not at intake. Pass `--submit-token` if you need to restrict
-submission anyway.
+Zero dependencies, idempotent — every step checks before it creates, so
+re-running is safe. It enables the APIs, creates the Firestore database and
+the web app registration, turns on email/password sign-in, creates the admin
+user, disables public sign-up, pins the admin UID into `firestore.rules`,
+deploys rules and hosting, and seeds an empty published list. It uses the
+credentials the Firebase CLI already holds, so `firebase login` once is the
+only prerequisite.
+
+### Data model
+
+| document | access | holds |
+|---|---|---|
+| `blocklist/current` | public read, admin write | the entire published payload as one JSON string, plus `rev` and `updatedAt` |
+| `reports/{platform~target~reporterHash}` | public **create only**; admin read/update/delete | one report per reporter×target — the doc id is the dedup key, so a repeat report is a create conflict, not a second row |
+| `decisions/{platform}~{target}` | admin only | `approved` / `rejected` / `pending` (revoke reopens as pending), by whom, when |
+| `admin/manual` | admin only | manually-added ids and usernames, and the `docIdOverrides` hot-patch map |
+
+Report shape and limits are enforced in `firestore.rules`, with the same caps
+the old server had: display name 80, note and content summary 400 each, URLs
+http(s)-only and ≤300 characters, narrow region and language patterns, a
+4–24-digit profile id or a lowercase `@username`. The rules **reject**
+oversized input rather than truncating it — rules cannot rewrite data — and
+the extension clips to the same limits before sending, so an honest client
+never trips them. Report time is the document's Firestore `createTime`; no
+client clock is trusted.
+
+The hardening habits that still apply survived the move: everything the
+dashboard renders goes through `textContent`, and a URL is only rendered as a
+link if it parses as http(s) — an anonymous reporter's `javascript:` href
+still has no path to the admin's session.
+
+### The published document
+
+`blocklist/current` is what every installation polls. Inside its `json` field:
+
+```jsonc
+{
+  "v": 1,
+  "updatedAt": "ISO",
+  "ids": ["63082166531", ...],          // hide + block layer (numeric ids)
+  "usernames": ["somename", ...],       // hide layer only
+  "docIdOverrides": {},                 // persisted-query hot patches
+  "pending": ["threads:9100000001"],    // report keys, status only — never blockable
+  "targets": [                          // per-target ranking METADATA (not ranked)
+    { "platform": "threads", "id": "9100000001",
+      "username": "x", "displayName": "Y",
+      "trust": 1.5,                     // Σ reporter trust, computed at publish
+      "last": "2026-08-21",             // UTC day of the last report
+      "days":    { "2026-08-21": 3 },   // ≤14 daily buckets
+      "regions": { "Asia/Ho_Chi_Minh": 4 },
+      "langs":   { "vi-vn": 4 } }
+  ]
+}
+```
+
+`targets` holds only approved, id-bearing accounts whose id is already in
+`ids`. A pending report can never be blocked — the single most
+safety-critical invariant here — and it holds structurally, because the whole
+document is recomputed and rewritten after every decision rather than edited
+in place.
+
+### What changed vs the old server
+
+An honest list, because each of these is a real trade the migration made:
+
+- **The reporter pseudonym is an unkeyed hash now.** The server HMAC'd the
+  account id with a secret salt; a pure client has nowhere to keep a secret,
+  so the pseudonym is `acct_` + 24 hex characters of a plain SHA-256. Reports
+  are admin-read-only, so the hash is defence in depth rather than the
+  primary barrier — but someone holding a candidate account id *and* a copy
+  of the report store could verify a guess offline, which the salted version
+  prevented.
+- **Per-IP and per-account rate limits are gone.** What remains is structural
+  dedup — one document per reporter×target — and the shape caps in the rules.
+  A hostile signed-in account can file many reports for many targets; the
+  reputation weighting and the held queue absorb that, and the admin deletes
+  junk. App Check is the future answer if it becomes a real problem.
+- **Duplicate re-reports are inert.** The server refreshed evidence and
+  `lastReportAt` on a duplicate; create-only storage makes a same-reporter
+  repeat a no-op. Fresh activity signal now comes only from new reporters.
+- **No more `304`s.** Every poll is a full-body read of the published
+  document — tens of kilobytes, hourly. Day-quantised ranking keeps the
+  content itself stable within a day.
+- **The 20,000-account store cap and `507` are unenforced** — rules have no
+  counters. The publish step's 2,000-target cap bounds the public document
+  instead.
 
 ## Too many clones for one account
 
@@ -190,9 +271,9 @@ So the queue tracks how each target got there:
 
 - **warm** — resolved from the page you are looking at. Paced normally (4–11s),
   limited only by the overall hourly cap.
-- **cold** — nominated by the server from the trending list, never seen in this
-  browser. Paced slowly (20–45s) and held to a much tighter ceiling of its own
-  (`maxColdBlocksPerHour`, default 4).
+- **cold** — nominated by the trending metadata published with the list, never
+  seen in this browser. Paced slowly (20–45s) and held to a much tighter
+  ceiling of its own (`maxColdBlocksPerHour`, default 4).
 
 Warm is claimed first — it is both the safer and the more relevant signal, so the
 two orderings agree far more often than they conflict. Reaching the cold ceiling
@@ -212,7 +293,8 @@ Both are things the browser already hands to every site it loads, and neither
 needs an IP lookup, a geo database, or a third-party service. Turn it off with
 **Send my time zone and language** in options.
 
-The server keeps 14 daily buckets and a region tally per account, and ranks:
+The published list carries 14 daily buckets and a region tally per approved
+account, and the **extension ranks them locally**:
 
 ```
 rank = trust × recency × (1 + velocity7d) × locality
@@ -220,41 +302,27 @@ rank = trust × recency × (1 + velocity7d) × locality
   trust      trust-weighted report score (see "Who filed the report")
   recency    0.5 ^ (days since last report / 7)
   velocity   reports in the last 7 days
-  locality   0.25 + 0.75 × how much of this clone's activity is in your region
+  locality   0.25 + 0.75 × how much of this clone's activity is near you
 ```
 
-Locality never zeroes a target out — a clone that is merely hot elsewhere stays
-reachable, just lower. Everything is quantised to whole days on purpose: a
-continuously-decaying score would change on every request, which would change the
-ETag on every request, which would turn a cheap `304` into a full download every
-time the extension polls.
+"Near you" is your own browser's time zone and language, compared against the
+published tallies **on your machine**. The fetch itself carries nothing about
+you — the old server did this ranking per-request, which meant telling it your
+region and remaining budget on every poll; now nobody learns either. Turn
+**Send my time zone and language** off and locality is simply 1 for every
+target: the ranking degrades gracefully instead of leaking.
 
-The client asks for what its own rate limiter still has room for, so the slice
-it gets back is one it can actually spend:
+Locality never zeroes a target out — a clone that is merely hot elsewhere
+stays reachable, just lower. Everything is quantised to whole days on purpose:
+a continuously-decaying score would reorder the queue on every poll, and a
+ranking that cannot be reproduced an hour later cannot be inspected either.
 
-```
-GET /blocklist.json?platform=threads&region=Asia/Ho_Chi_Minh&lang=vi-VN&budget=25
+The extension takes the top of its own ranking up to what its rate limiter
+still has room for, so the slice it acts on is one it can actually spend.
 
-{
-  "ids": [ ... ],          // everything, for hiding
-  "usernames": [ ... ],
-  "targets": [             // ranked slice, for actually blocking
-    { "platform": "threads", "id": "...", "rank": 12.4,
-      "why": { "trust": 2.4, "recentDays": 0, "velocity7d": 6,
-               "region": 0.83, "lang": 0.83 } }
-  ],
-  "targetsAvailable": 812,
-  "budget": 25
-}
-```
-
-A client that sends no context still gets the plain list, unchanged.
-
-The dashboard shows the matrix — regions down the side, days across, with what is
-driving each region underneath. `GET /admin/trends` returns it as JSON, and
-`GET /admin/targets?region=…` shows exactly what the server would tell a client
-in that region to block, and why, so the ranking can be inspected before it is
-trusted.
+The dashboard shows the matrix — regions down the side, days across, with what
+is driving each region underneath — computed in the admin's browser from the
+same reports, so the ranking can be inspected before it is trusted.
 
 ### Who filed the report
 
@@ -272,23 +340,25 @@ produced a brand new reporter and one person could raise any report's count
 without limit. Inflating a count now takes real accounts, and — more importantly
 — it gives reputation something stable to attach to.
 
-The raw account id never reaches the disk. A per-server HMAC turns it into a
-stable pseudonym (`acct_0f8df7554dc15a7f`), which is everything reputation needs
-— *is this the same person as last time* — while leaving the store useless to
-anyone who copies it. A persistent bad actor is still bannable: you ban the
-pseudonym. The salt lives in `server/.reporter-salt`; delete it and every
-reporter becomes a stranger again.
+The raw account id is never stored. The extension hashes it before it leaves
+the browser — SHA-256 of `platform:id`, truncated to a stable pseudonym
+(`acct_0f8df7554dc15a7f9be22c31`) — which is everything reputation needs,
+*is this the same person as last time*, without keeping the number itself. A
+persistent bad actor is still bannable: you ban the pseudonym. The hash is
+unkeyed now — a pure client has nowhere to keep a secret salt — which makes
+it one honest notch weaker than the old server's HMAC; the trade is spelled
+out in "What changed vs the old server" above.
 
 ### Reputation
 
-Every decision teaches the server something. Approving a report credits everyone
+Every decision teaches the system something. Approving a report credits everyone
 who filed it; rejecting one debits them. A reporter's weight is
 `(approved + 0.5) / (approved + rejected + 1)` — a Jeffreys prior, so an unknown
 reporter sits at `0.50`, one bad call does not ruin a good history, and one lucky
 call does not buy trust.
 
-Reputation is **recomputed from the decided reports** on every read, never
-accumulated. A running tally has to be un-done when a decision is revoked, and
+Reputation is **recomputed from the decided reports** on every dashboard
+refresh, never accumulated. A running tally has to be un-done when a decision is revoked, and
 every bug in that path is a reporter whose score is quietly wrong forever.
 Revoking an approval takes its credit back automatically.
 
@@ -299,20 +369,6 @@ floor (`0.25`) is marked **held** and sinks to the bottom — still recorded, st
 visible, just not able to jump the queue. Each row shows who stands behind it and
 their record (`5✓ 0✗`).
 
-### Rate limits
-
-Three ceilings, all tunable, because the right value depends on who is behind the
-address — a household NAT or a school shares one:
-
-```
---report-rate N    reports per minute per address   (default 30)
---account-rate N   reports per minute per account   (default 10)
---login-rate N     sign-in attempts per 15 min      (default 10)
-```
-
-The per-account limit is the one that matters: one account behind a pool of
-addresses is the shape mass-reporting actually takes.
-
 ### What this does not stop
 
 Someone with several genuine Meta accounts, patient enough to build a record with
@@ -321,67 +377,16 @@ scheme that does not have Meta vouching for identities. What it costs them is
 real accounts and real time, and the moment a decision goes against them, every
 account involved loses weight — including on reports they filed earlier.
 
-### Hardening
-
-`/reports` is open to anyone, so everything reachable through it is bounded.
-
-**Input limits.** Every caller-supplied field is clipped and stripped of control
-characters: display name 80, note and content summary 400 each, reporter 64,
-post id 64, username 64, profile id 32. Request bodies are capped at 64KB and
-refused on the declared `Content-Length` before a byte is read. A profile id is
-4–24 digits, so a megabyte of digits is not "a number". Per record, evidence
-stops at 20 posts, notes at 50 and distinct reporters at 1000; the store stops
-opening new files at 20,000 accounts.
-
-**URLs are validated, not truncated.** Only `http:` and `https:` are stored —
-anything else becomes `null`. The dashboard renders these as links the owner
-clicks, and a `javascript:` href there would run in the dashboard's origin
-carrying the admin session, which would let an anonymous reporter approve their
-own report. An over-length URL is *rejected* rather than clipped, because
-truncating a URL does not shorten it, it produces a different URL that still
-parses and points somewhere else. The dashboard re-checks the scheme at the
-point of use, so records predating the check cannot bite either.
-
-**Report keys never touch a prototype.** The report map is created with
-`Object.create(null)` and looked up with `hasOwnProperty`. On an ordinary
-object, `reports['__proto__']` returns `Object.prototype` — truthy — and
-`{"key":"__proto__","decision":"approve"}` would then write a status onto it.
-The same applies to the stats tallies, which are keyed by reporter names.
-
-**Rate limits.** 30 reports per minute per IP, 10 sign-in attempts per 15
-minutes per IP. The sign-in throttle is not bypassable by then supplying the
-correct password. Basic auth is a separate door and stays usable for scripts.
-
-**Sessions.** HttpOnly, `SameSite=Strict`, `Secure` when the request arrived
-over TLS, 12-hour expiry, capped at 200 with periodic sweeping.
-
-**Headers.** `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy:
-no-referrer` on everything. The dashboard adds a CSP with `default-src 'none'`,
-`script-src 'self'`, `frame-ancestors 'none'` and no `unsafe-inline`, so a
-payload that reaches the page as data still has no way to execute.
-
-**CORS is scoped.** Only `/blocklist.json`, `/reports`, `/reports/status` and
-`/health` answer cross-origin — the extension calls those from a facebook.com or
-threads.com page. The entire admin surface advertises no cross-origin access, so
-a hostile page cannot read a response even if one somehow arrived authenticated.
-
-**Behind a proxy.** `isLoopback` decides whether the shipped default credentials
-are accepted, and behind nginx every request genuinely arrives from `127.0.0.1`.
-So a forwarding header is treated as proof the hop was *not* local, and the
-defaults are refused. Pass `--trust-proxy` when the proxy is yours, and
-`X-Forwarded-For` / `X-Forwarded-Proto` become the client address and scheme.
-
-**Durability.** The blocklist and report store are written to a temporary file
-and renamed over the target, so a crash mid-write cannot leave a truncated list.
-Connections are bounded too: 30s request timeout, 20s headers timeout.
-
 ---
 
 ## Install
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select this directory.
-3. Open the extension's **Settings** and set your blocklist endpoint.
+3. Open the extension's **Settings** and set your blocklist endpoint. For a
+   Firebase backend that is the public document URL —
+   `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/blocklist/current`
+   — and any URL returning one of the plain-JSON shapes below works too.
 4. Click **Grant access** next to the URL — this requests host permission for that origin
    (required; Chrome will not let the extension fetch it otherwise).
 5. Click **Test & refresh now**. You should see the parsed counts.
@@ -415,9 +420,12 @@ extension go to the two Meta origins and the endpoint you typed.
 
 ---
 
-## Blocklist server contract
+## Self-hosted and static lists
 
-`GET <your endpoint>` returning JSON. Several shapes are accepted:
+The extension does not require Firebase. Any endpoint returning JSON in one of
+the shapes below still works — a static file on any host you control is a
+complete backend for the hide layer, and this is also the escape hatch if you
+ever want off Google entirely. `GET <your endpoint>` returning JSON:
 
 ```jsonc
 // simplest
@@ -442,22 +450,14 @@ shipping a new extension build:
 }
 ```
 
-**`ETag` / `If-None-Match` is honoured** — return `304` for an unchanged list and refreshes
-cost almost nothing. An optional `Authorization` header can be configured in settings.
+**`ETag` / `If-None-Match` is honoured** — a server that returns `304` for an
+unchanged list makes refreshes cost almost nothing. (Firestore does not play
+this game; the trade is listed under "What changed vs the old server".) An
+optional `Authorization` header can be configured in settings.
 
-### Reference server
-
-A zero-dependency implementation is included, useful as both a test fixture and a spec:
-
-```bash
-node server/server.js --port 8787 --user you --pass 'something long'
-# GET  /blocklist.json
-# POST /blocklist.json   replace
-# POST /add  |  /remove  {ids:[],usernames:[]}
-```
-
-It also carries the report queue and the moderation dashboard — see
-[Admin access](#admin-access).
+Reporting is the one thing a static file cannot carry: against a plain-JSON
+endpoint the extension still hides and blocks, but the report button needs
+somewhere to write, which is what the Firestore backend provides.
 
 ---
 
@@ -492,7 +492,7 @@ nested comment subtree, on both the DOM and Relay paths.
 ## Architecture
 
 ```
-     your server
+  Firestore (or any JSON URL)
           │  (fetch: service worker only — page CSP blocks it anywhere else)
           ▼
 ┌─────────────────────┐
@@ -522,7 +522,7 @@ expando properties on DOM nodes.
 | `src/content/identity.js` | Blocklist index, id↔username alias cache |
 | `src/content/dom-blocker.js` | Selector engine + MutationObserver |
 | `src/content/main.js` | Orchestration, Relay store sweep, block worker |
-| `src/background/service-worker.js` | Server fetch, queue, rate limiter, alarms |
+| `src/background/service-worker.js` | List fetch, local target ranking, queue, rate limiter, alarms |
 
 ---
 
@@ -549,23 +549,22 @@ it excludes the extension's own requests, so it cannot learn from its own failur
 ```bash
 node tools/check.js         # static: syntax, manifest refs, MV3 CSP
 node tools/queue-test.js    # Layer 2 queue + rate limiter (mocked chrome.*)
-node tools/server-test.js   # report lifecycle + admin auth over real HTTP
-node tools/report-test.js   # in-page report UI, browser, against live Threads
+node tools/firebase-test.js # security-rules matrix + ported logic, emulator
 node tools/e2e-test.js      # hiding + Relay discovery, browser
 npm test                    # all of the above
 ```
 
-`server-test.js` runs the real server against a throwaway store and drives it
-over HTTP: the report lifecycle end to end, non-ASCII names surviving the round
-trip, ETag revalidation, the hardening above -- field truncation, oversized
-bodies refused, `javascript:` URLs dropped while the post's text is kept, a
-`__proto__` report key treated as missing with `Object.prototype` left
-untouched, CORS scoped away from `/admin`, the CSP served, sign-in throttled and
-not bypassable with the right password, and default credentials refused to a
-caller a forwarding header says is remote -- and the admin gate — wrong password, wrong username,
-cookie login, sign-out actually invalidating the session server-side, reporting
-succeeding with no credentials while the same anonymous caller is refused at
-`/admin`, and default credentials working from loopback. 31/31.
+`firebase-test.js` runs against the Firestore **emulator** and needs no real
+project or network. It drives the rules over plain REST — every accept and
+reject case in the report validation matrix, a stranger refused reading
+reports or writing decisions, the public list readable with no credentials at
+all, and a repeat report from the same account bouncing off the create-only
+dedup as a conflict. Then it feeds fixture reports through the ported compute
+in `hosting/logic.js`: aggregation, reputation and its claw-back on revoke,
+held ordering, the id-versus-username publish asymmetry, pending never
+reaching the blockable targets, the stats and trends shapes, and the
+day-quantised local ranking — including the regional flip in both directions,
+because a ranking that only flips one way is a ranking with a bug.
 
 `queue-test.js` drives the real service-worker message handler against a mocked
 `chrome.*`, covering the Layer 2 queue, leases and rate limiter — logic the
@@ -575,12 +574,15 @@ that failed *attempts* (not just successes) count toward the caps, that dry runs
 rotate without consuming the limit, and that two tabs cannot claim the same
 target. 12/12.
 
-Loads the extension into real Chrome and exercises it against live `threads.com` and
-`facebook.com`: manifest load, service-worker boot, server fetch, bridge handshake, module
-hook, Relay discovery, and that content from a listed profile is genuinely hidden. It
-asserts that **no real block is attempted**.
+`e2e-test.js` loads the extension into real Chrome and exercises it against live
+`threads.com` and `facebook.com`: manifest load, service-worker boot, a list
+fetch from a seeded Firestore emulator, bridge handshake, module hook, Relay
+discovery, that content from a listed profile is genuinely hidden, and that the
+service worker derives its ranked targets locally from the published metadata.
+It asserts that **no real block is attempted**.
 
-Current status — **24/24 browser · 23/23 queue · 88/88 server · 11/11 report · static clean**:
+Current status — **24/24 browser · 23/23 queue · static clean**, plus the
+firebase suite:
 
 ```
 PASS  extension service worker started
@@ -653,11 +655,17 @@ Layer 2 was tested end to end on a real Threads account:
 ```
 manifest.json
 src/  main/ content/ background/ popup/ options/ common/ ui/
-server/server.js          reference blocklist server
+firestore.rules           the whole trust model, enforced server-side
+firebase.json             Firestore + Hosting + emulator configuration
+hosting/                  moderation dashboard, served by Firebase Hosting
+tools/firebase-setup.js   one-command project provisioning
+tools/firebase-test.js    rules matrix + ported logic, against the emulator
+tools/fb.js               finds the Firebase CLI wherever it is installed
 tools/e2e-test.js         end-to-end browser test
 tools/make-icons.js       dependency-free PNG generation
 tools/make-store-assets.js  listing tiles and screenshots, at exact sizes
 docs/RESEARCH.md          internals findings, with what is and isn't verified
+docs/FIREBASE-SPEC.md     the migration contract, formula by formula
 docs/CHROME-WEB-STORE.md  store requirements, listing copy, rejection risks
 store/                    generated listing assets
 PRIVACY.md                privacy policy (required by the store)

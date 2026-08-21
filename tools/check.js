@@ -57,7 +57,7 @@ function checkSyntax(file) {
 }
 
 for (const f of jsFiles(path.join(ROOT, 'src'))
-  .concat(jsFiles(path.join(ROOT, 'server')))
+  .concat(jsFiles(path.join(ROOT, 'hosting')))
   .concat(jsFiles(path.join(ROOT, 'tools')))) {
   try {
     checkSyntax(f);

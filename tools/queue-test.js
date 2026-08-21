@@ -362,6 +362,139 @@ async function reset(settings) {
   check('turning platform blocking off clears the message it was about',
     !afterOff.stats.lastError, JSON.stringify(afterOff.stats.lastError));
 
+  // -- 14. the Firestore list path ------------------------------------------
+  //
+  // The blocklist can now live in a Firestore document; the service worker
+  // must decode the envelope, rank the published metadata LOCALLY (nothing
+  // about the browser is sent), and file reports as create-only documents.
+  // These drive the real refresh/submit/status handlers with fetch stubbed.
+  {
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const today = new Date().toISOString().slice(0, 10);
+    const old10 = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+    const published = {
+      v: 1, updatedAt: new Date().toISOString(),
+      ids: ['4100000001', '4100000002', '63082166531'],
+      usernames: ['threads'],
+      docIdOverrides: { probe: 'x' },
+      pending: ['threads:@maybe.clone'],
+      targets: [
+        // Fresh + active vs stale + idle, equal trust. The fresh one must win
+        // in EVERY region: worst-case locality 0.25 gives 2*1*(1+3)*0.25 = 2,
+        // the stale one at best 2*0.5^(10/7)*1*1 ~= 0.74 -- so the assertion
+        // holds no matter what timezone the test machine is in.
+        { platform: 'threads', id: '4100000002', trust: 2, last: old10,
+          days: {}, regions: { 'America/Sao_Paulo': 2 }, langs: { 'pt-br': 2 } },
+        { platform: 'threads', id: '4100000001', trust: 2, last: today,
+          days: { [today]: 3 }, regions: { 'Asia/Ho_Chi_Minh': 3 }, langs: { 'vi-vn': 3 } }
+      ]
+    };
+    const envelope = {
+      name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+      fields: { json: { stringValue: JSON.stringify(published) } },
+      createTime: '2026-08-21T00:00:00Z', updateTime: '2026-08-21T03:04:05Z'
+    };
+
+    const calls = [];
+    global.fetch = async (url, opts) => {
+      calls.push({ url: String(url), opts: opts || {} });
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify(envelope),
+        json: async () => envelope
+      };
+    };
+
+    await reset({ maxColdBlocksPerHour: 50, platformBlockEnabled: true });
+    await setSettings({ listUrl: FS_URL });
+    const r = await send('sw:refresh-now');
+    check('a Firestore document envelope decodes into the published list',
+      r.ok && r.blocklist && r.blocklist.ids.length === 3 &&
+      r.blocklist.usernames.includes('threads'),
+      JSON.stringify(r.blocklist && r.blocklist.ids));
+    check('no ranking hints are appended to a Firestore URL',
+      calls.length === 1 && !calls[0].url.includes('budget=') &&
+      !calls[0].url.includes('region='), calls[0] && calls[0].url);
+    check('published metadata is ranked locally, freshest and most active first',
+      r.blocklist.targets.length === 2 &&
+      r.blocklist.targets[0].id === '4100000001' &&
+      typeof r.blocklist.targets[0].rank === 'number' &&
+      r.blocklist.targets[0].rank > r.blocklist.targets[1].rank,
+      JSON.stringify(r.blocklist.targets.map(t => [t.id, t.rank])));
+    check('the why fields survive local ranking',
+      r.blocklist.targets[0].why &&
+      r.blocklist.targets[0].why.velocity7d === 3 &&
+      typeof r.blocklist.targets[0].why.region === 'number',
+      JSON.stringify(r.blocklist.targets[0].why));
+    check('the document updateTime stands in for the etag',
+      r.blocklist.etag === '2026-08-21T03:04:05Z', String(r.blocklist.etag));
+    check('pending report keys ride along for the status chip',
+      r.blocklist.pending && r.blocklist.pending[0] === 'threads:@maybe.clone',
+      JSON.stringify(r.blocklist.pending));
+    check('docIdOverrides still hot-patch through the Firestore path',
+      (store.local.docIdOverrides || {}).probe === 'x',
+      JSON.stringify(store.local.docIdOverrides));
+
+    const st = await state();
+    const queued = (st.queue.threads || []).map(e => (typeof e === 'string' ? e : e.id));
+    check('locally-ranked targets are seeded into the cold queue',
+      queued.includes('4100000001') && queued.includes('4100000002'),
+      JSON.stringify(queued));
+
+    // Status answers come from the cached document, no network at all.
+    calls.length = 0;
+    const stat1 = await send('sw:report-status',
+      { platform: 'threads', profileId: '4100000001', force: true });
+    check('an approved id answers blocked from the cached list, no fetch',
+      stat1.ok && stat1.blocked === true && stat1.status === 'approved' && calls.length === 0,
+      JSON.stringify(stat1));
+    const stat2 = await send('sw:report-status',
+      { platform: 'threads', username: 'maybe.clone', force: true });
+    check('a pending key answers pending from the cached list',
+      stat2.ok && stat2.blocked === false && stat2.status === 'pending',
+      JSON.stringify(stat2));
+
+    // Submitting a report becomes a create-only document write.
+    calls.length = 0;
+    global.fetch = async (url, opts) => {
+      calls.push({ url: String(url), opts: opts || {} });
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => '{}', json: async () => ({}) };
+    };
+    const sub = await send('sw:submit-report', {
+      platform: 'threads', profileId: '9990001111', username: 'Fake.Person',
+      displayName: 'x'.repeat(300), reason: 'clone', note: 'they copied me',
+      viewerId: '2904880000'
+    });
+    const call = calls[0];
+    const sent = call && JSON.parse(call.opts.body);
+    const docId = call && decodeURIComponent(call.url.split('documentId=')[1]);
+    check('the report goes to the reports collection as a create',
+      sub.ok && call && call.url.includes('/documents/reports?documentId=') &&
+      call.opts.method === 'POST', call && call.url);
+    check('the document id IS the dedup key',
+      sent && docId === sent.fields.dedupKey.stringValue &&
+      /^threads~9990001111~acct_[0-9a-f]{24}$/.test(docId), docId);
+    check('the raw viewer id appears nowhere in the write',
+      call && !call.opts.body.includes('2904880000'), 'checked body');
+    check('fields are clipped to the caps the rules enforce',
+      sent && sent.fields.displayName.stringValue.length === 80 &&
+      sent.fields.username.stringValue === 'fake.person',
+      sent && String(sent.fields.displayName.stringValue.length));
+
+    // A 409 means this account already reported this target.
+    global.fetch = async () => ({ ok: false, status: 409, headers: { get: () => null },
+      text: async () => '{}', json: async () => ({}) });
+    const dup = await send('sw:submit-report', {
+      platform: 'threads', profileId: '9990001111', viewerId: '2904880000'
+    });
+    check('a create conflict is reported as a duplicate, not an error',
+      dup.ok && dup.duplicate === true, JSON.stringify(dup));
+
+    delete global.fetch;
+  }
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exitCode = 1; });
 

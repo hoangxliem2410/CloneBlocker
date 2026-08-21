@@ -16,3 +16,10 @@ server/.reporter-salt
 # panel. It is written to a temp dir by tools/make-store-assets.js and must
 # never be committed.
 docs/shots/popup.png
+
+# Firebase litter: the emulators drop their logs in the repo root, and
+# deploys keep a per-project cache under .firebase/.
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/

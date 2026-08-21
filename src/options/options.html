@@ -21,10 +21,13 @@
         <button id="grant" class="btn inline">Grant access</button>
       </div>
       <p class="hint">
-        Must return JSON. Accepted shapes: <code>["100001234567890"]</code>,
-        <code>{"ids":[…],"usernames":[…]}</code>, or
-        <code>{"blocked":[{"id":"…","username":"…"}]}</code>.
-        A plain newline-delimited list also works.
+        For a Firebase backend, paste the published document URL:
+        <code>https://firestore.googleapis.com/v1/projects/&lt;project&gt;/databases/(default)/documents/blocklist/current</code>
+        &mdash; reporting and suggestions wire themselves up from it. Plain JSON
+        endpoints also work: <code>["100001234567890"]</code>,
+        <code>{"ids":[…],"usernames":[…]}</code>,
+        <code>{"blocked":[{"id":"…","username":"…"}]}</code>, or a
+        newline-delimited list.
       </p>
       <p id="permStatus" class="status"></p>
     </div>

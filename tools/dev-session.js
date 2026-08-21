@@ -21,45 +21,34 @@ const path = require('path');
 const args = process.argv.slice(2);
 const argOf = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const CDP_PORT = parseInt(argOf('port', '9333'), 10);
-const SERVER_PORT = 8790;
 const FRESH = args.includes('--fresh');
 
 const ROOT = path.join(__dirname, '..');
 const SESSION_DIR = path.join(os.tmpdir(), 'claude', 'C--src-3queblocker', 'dev-session');
 const PROFILE = path.join(SESSION_DIR, 'chrome-profile');
-const SERVER_DIR = path.join(SESSION_DIR, 'server');
+const DATA_DIR = path.join(SESSION_DIR, 'firestore-data');
 
-// Same fingerprint the server computes for itself at boot, over the copy we are
-// about to run. Kept in step with the BUILD constant in server/server.js.
-function serverBuild(dir) {
-  const h = require('crypto').createHash('sha256');
-  try {
-    h.update(fs.readFileSync(path.join(dir, 'server.js')));
-    const pub = path.join(dir, 'public');
-    for (const f of fs.readdirSync(pub).sort()) {
-      h.update(f);
-      h.update(fs.readFileSync(path.join(pub, f)));
-    }
-  } catch (e) { return 'unknown'; }
-  return h.digest('hex').slice(0, 12);
-}
+// The Firestore emulator port is fixed by firebase.json at the repo root; the
+// demo- prefixed project id keeps the emulator fully offline.
+const EMULATOR_PORT = 8080;
+const PROJECT = 'demo-clone';
+const LIST_URL = `http://127.0.0.1:${EMULATOR_PORT}/v1/projects/${PROJECT}` +
+  '/databases/(default)/documents/blocklist/current';
 
-// Stopping a detached process we no longer hold a handle to.
-async function killPort(port) {
-  const { execSync } = require('child_process');
-  try {
-    const out = execSync(`netstat -ano -p tcp | findstr LISTENING | findstr :${port}`,
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    const pids = new Set(out.trim().split(/\r?\n/)
-      .map(l => l.trim().split(/\s+/).pop()).filter(x => /^\d+$/.test(x)));
-    for (const pid of pids) {
-      try { execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' }); } catch (e) {}
-    }
-  } catch (e) { /* nothing listening */ }
-  await sleep(600);
-}
+// The standalone Firebase CLI installs itself under ~/.cache/firebase and is
+// never on PATH; run it through the Node that is already executing us.
+const FIREBASE_BIN = path.join(os.homedir(), '.cache', 'firebase', 'tools', 'bin', 'firebase');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * The Firebase CLI shells out to `java` and refuses to start the Firestore
+ * emulator on anything below 21. A dev machine often pins an older JDK first
+ * on PATH for other work, so look for a modern one in the usual install roots
+ * and put it in front -- for the emulator process only; nothing else sees the
+ * changed PATH.
+ */
+const { javaEnv } = require('./java-env.js');
 
 function findChrome() {
   for (const c of [
@@ -111,51 +100,64 @@ async function evalIn(cdp, sessionId, expression) {
 (async () => {
   if (FRESH) { try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch (e) {} }
   fs.mkdirSync(PROFILE, { recursive: true });
-  fs.mkdirSync(SERVER_DIR, { recursive: true });
 
-  // -- blocklist server (detached so it outlives this script) --------------
-  fs.copyFileSync(path.join(ROOT, 'server', 'server.js'), path.join(SERVER_DIR, 'server.js'));
-  // The dashboard is served from disk, so its assets have to travel with the
-  // server copy or /admin returns "asset missing".
-  const pubSrc = path.join(ROOT, 'server', 'public');
-  const pubDst = path.join(SERVER_DIR, 'public');
-  fs.mkdirSync(pubDst, { recursive: true });
-  for (const f of fs.readdirSync(pubSrc)) {
-    fs.copyFileSync(path.join(pubSrc, f), path.join(pubDst, f));
+  // -- Firestore emulator (detached so it outlives this script) ------------
+  //
+  // The old detached server needed a build fingerprint because it served CODE
+  // that this script had just overwritten on disk. The emulator serves only
+  // DATA, so "is it answering?" is the whole staleness question and an
+  // already-running emulator is simply reused. Seeded documents survive
+  // restarts through --import/--export-on-exit in the session directory, the
+  // way the stable server directory used to carry blocklist.json.
+  let up = false;
+  try { await fetch(`http://127.0.0.1:${EMULATOR_PORT}/`); up = true; } catch (e) {}
+
+  if (up) {
+    console.log('reusing the Firestore emulator already on port ' + EMULATOR_PORT);
+  } else {
+    const cliArgs = [FIREBASE_BIN, 'emulators:start', '--only', 'firestore',
+                     '--project', PROJECT, '--export-on-exit', DATA_DIR];
+    // --import refuses a directory that does not exist yet; the first session
+    // starts empty and the export creates it for the next one.
+    if (fs.existsSync(DATA_DIR)) cliArgs.push('--import', DATA_DIR);
+    const emu = spawn(process.execPath, cliArgs,
+      { cwd: ROOT, detached: true, stdio: 'ignore', env: javaEnv() });
+    emu.unref();
+
+    // Generous window: a first run downloads the emulator jar before anything
+    // can listen.
+    for (let i = 0; i < 240 && !up; i++) {
+      try { await fetch(`http://127.0.0.1:${EMULATOR_PORT}/`); up = true; }
+      catch (e) { await sleep(500); }
+    }
+    if (!up) { console.error('Firestore emulator never answered on port ' + EMULATOR_PORT); process.exit(1); }
   }
-  if (!fs.existsSync(path.join(SERVER_DIR, 'blocklist.json'))) {
-    fs.writeFileSync(path.join(SERVER_DIR, 'blocklist.json'), JSON.stringify({
+
+  // Seed the published list once; an existing doc -- imported session data, or
+  // something published by hand mid-session -- is left alone. `Bearer owner`
+  // is the emulator's rules bypass, fine for fixtures.
+  const have = await fetch(LIST_URL, { headers: { authorization: 'Bearer owner' } });
+  if (have.status === 404) {
+    const payload = {
+      v: 1,
+      updatedAt: new Date().toISOString(),
       // Seeded with the official @threads account: safe to hide locally, and a
       // known-good target for verifying suppression on a signed-in feed.
       ids: ['63082166531'],
       usernames: ['threads'],
-      docIdOverrides: {}
-    }, null, 2));
-  }
-
-  // The server is detached so it outlives this script -- which means a process
-  // started from an older copy can still be listening, answering /health, and
-  // serving code we just overwrote on disk. Reusing it on "is it up?" alone is
-  // how a retired sign-in gate survives the change that replaced it. Compare the
-  // build fingerprint and restart when it does not match what we just copied.
-  const wantBuild = serverBuild(SERVER_DIR);
-  let live = null;
-  try {
-    const r = await fetch(`http://localhost:${SERVER_PORT}/health`);
-    if (r.ok) live = await r.json();
-  } catch (e) { live = null; }
-
-  const stale = live && live.build !== wantBuild;
-  if (stale) {
-    console.log(`  server on ${SERVER_PORT} is running stale code (${live.build || 'pre-fingerprint'} != ${wantBuild}) -- restarting`);
-    await killPort(SERVER_PORT);
-    live = null;
-  }
-  if (!live) {
-    const srv = spawn(process.execPath, [path.join(SERVER_DIR, 'server.js'), '--port', String(SERVER_PORT)],
-      { detached: true, stdio: 'ignore' });
-    srv.unref();
-    await sleep(900);
+      docIdOverrides: {},
+      pending: [],
+      targets: []
+    };
+    const r = await fetch(LIST_URL, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        json: { stringValue: JSON.stringify(payload) },
+        updatedAt: { timestampValue: new Date().toISOString() }
+      } })
+    });
+    if (!r.ok) { console.error('seeding blocklist/current failed: HTTP ' + r.status); process.exit(1); }
   }
 
   // -- is a browser already listening on this port? ------------------------
@@ -202,7 +204,7 @@ async function evalIn(cdp, sessionId, expression) {
   }
 
   fs.writeFileSync(path.join(SESSION_DIR, 'session.json'),
-    JSON.stringify({ extId, cdpPort: CDP_PORT, serverPort: SERVER_PORT }, null, 2));
+    JSON.stringify({ extId, cdpPort: CDP_PORT, emulatorPort: EMULATOR_PORT, listUrl: LIST_URL }, null, 2));
 
   // -- configure it through its own options page ---------------------------
   const optionsUrl = `chrome-extension://${extId}/src/options/options.html`;
@@ -223,7 +225,7 @@ async function evalIn(cdp, sessionId, expression) {
   // page rather than letting it decide whether the session gets configured.
   const perm = await evalIn(cdp, sessionId, `
     (async () => {
-      const origins = ['http://localhost/*'];
+      const origins = ['http://127.0.0.1/*'];
       if (await chrome.permissions.contains({ origins })) {
         return JSON.stringify({ granted: true, has: true, asked: false });
       }
@@ -241,7 +243,7 @@ async function evalIn(cdp, sessionId, expression) {
   const applied = await evalIn(cdp, sessionId, `
     (async () => {
       await chrome.storage.sync.set({ settings: {
-        listUrl: 'http://localhost:${SERVER_PORT}/blocklist.json',
+        listUrl: '${LIST_URL}',
         refreshMinutes: 60,
         hideEnabled: true,
         hideMode: 'placeholder',
@@ -262,7 +264,7 @@ async function evalIn(cdp, sessionId, expression) {
   console.log('  extension id : ' + extId);
   console.log('  cdp port     : ' + CDP_PORT);
   console.log('  profile      : ' + PROFILE);
-  console.log('  blocklist    : http://localhost:' + SERVER_PORT + '/blocklist.json');
+  console.log('  blocklist    : ' + LIST_URL);
   console.log('  host access  : ' + perm);
   console.log('  loaded       : ' + (parsed.ok
     ? `${parsed.blocklist.ids.length} ids, ${parsed.blocklist.usernames.length} usernames`

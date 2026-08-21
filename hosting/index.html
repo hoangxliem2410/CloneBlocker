@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>3Que — Moderation</title>
-  <link rel="stylesheet" href="/admin/admin.css">
+  <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-  <!-- Sign-in gate. Credentials are exchanged for an HttpOnly session cookie,
-       so nothing readable by scripts is left behind in this browser. -->
+  <!-- Sign-in gate. Firebase Auth holds the session; this page never stores a
+       credential of its own. -->
   <div id="gate" class="gate hidden">
     <form class="gatebox" id="gateForm">
       <h1>Moderation</h1>
-      <p class="note">Sign in with the credentials this server was started with.</p>
-      <input type="text" id="gateUser" placeholder="username" autocomplete="username" autofocus>
+      <p class="note">Sign in with the moderation account's email.</p>
+      <input type="text" id="gateUser" placeholder="email" autocomplete="username" autofocus>
       <input type="password" id="gatePass" placeholder="password" autocomplete="current-password">
       <button class="btn primary" type="submit">Sign in</button>
       <p id="gateErr" class="err" hidden></p>
@@ -27,6 +27,7 @@
       <div class="row-inline">
         <span id="conn" class="status"></span>
         <button id="refresh" class="btn primary">Refresh</button>
+        <button id="publish" class="btn">Publish list</button>
         <button id="signout" class="btn">Sign out</button>
       </div>
     </header>
@@ -83,6 +84,9 @@
     </section>
   </main>
 
-  <script src="/admin/admin.js"></script>
+  <!-- logic.js is a classic script and admin.js a module: modules are
+       deferred, so TQ_LOGIC is guaranteed to exist before admin.js runs. -->
+  <script src="logic.js"></script>
+  <script type="module" src="admin.js"></script>
 </body>
 </html>

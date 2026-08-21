@@ -4,17 +4,17 @@
   "description": "Chrome MV3 extension: fetch a profile-ID blocklist from your server and apply it on Facebook and Threads.",
   "private": true,
   "scripts": {
-    "server": "node server/server.js --port 8787",
-    "test": "node tools/check.js && node tools/queue-test.js && node tools/server-test.js && node tools/report-test.js && node tools/e2e-test.js",
+    "test": "node tools/check.js && node tools/queue-test.js && node tools/firebase-test.js && node tools/e2e-test.js",
     "test:headful": "node tools/e2e-test.js --headful",
     "icons": "node tools/make-icons.js",
     "check": "node tools/check.js",
     "test:queue": "node tools/queue-test.js",
     "test:browser": "node tools/e2e-test.js",
     "test:static": "node tools/check.js",
-    "test:server": "node tools/server-test.js",
-    "test:report": "node tools/report-test.js",
-    "admin": "echo \"moderation dashboard: http://localhost:8787/admin (start the server first)\"",
+    "test:firebase": "node tools/firebase-test.js",
+    "fb": "node tools/fb.js",
+    "emulators": "node tools/fb.js emulators:start --project demo-clone",
+    "deploy": "node tools/fb.js deploy --only firestore,hosting",
     "store-assets": "node tools/make-store-assets.js"
   },
   "engines": {

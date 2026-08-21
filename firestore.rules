@@ -1,0 +1,106 @@
+rules_version = '2';
+
+// The whole trust model in one file.
+//
+//   blocklist/current   public read  -- the published list the extension polls
+//   reports/*           public CREATE only, shape-validated -- anyone can file
+//   decisions/*         admin only   -- approve / reject / reopen
+//   admin/*             admin only   -- manual list entries, docIdOverrides
+//
+// Reporting is deliberately open (the gate belongs at approval, not intake),
+// but every field a stranger can set is bounded, and a report can only ever be
+// CREATED -- never read back, never edited, never deleted -- by the public.
+// The document id doubles as the dedup key: one reporter, one target, one doc,
+// so a repeat report is a create conflict rather than a second row.
+//
+// Rules REJECT oversized input rather than truncating it (rules cannot rewrite
+// data); the extension clips to the same limits before sending.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.uid == 'a0XiGqlhbYhT8S8QacNYKBLFiwd2';
+    }
+
+    // Optional string field: absent, or non-empty and within `max`.
+    function optStr(d, f, max) {
+      return !(f in d) || (d[f] is string && d[f].size() >= 1 && d[f].size() <= max);
+    }
+
+    // A URL a stranger typed. http(s) only -- one javascript: href rendered as
+    // a link in the dashboard would run with the admin's session.
+    function optUrl(d, f) {
+      return !(f in d)
+          || (d[f] is string && d[f].size() <= 300 && d[f].matches('https?://.*'));
+    }
+
+    match /blocklist/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if
+        // No fields beyond the contract.
+        request.resource.data.keys().hasOnly([
+          'platform', 'target', 'profileId', 'username', 'displayName', 'url',
+          'reason', 'note', 'postUrl', 'postId', 'contentSummary',
+          'region', 'lang', 'reporterHash', 'dedupKey'
+        ])
+        // Required identity of the report.
+        && request.resource.data.platform in ['facebook', 'threads']
+        && request.resource.data.target is string
+        && request.resource.data.target.matches('([0-9]{4,24}|@[a-z0-9._]{1,64})')
+        && request.resource.data.reason in
+             ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'other']
+        // Reporter binding: the pseudonym, and the doc id that makes a repeat
+        // report from the same account a structural no-op.
+        && request.resource.data.reporterHash is string
+        && request.resource.data.reporterHash.matches('acct_[0-9a-f]{24}')
+        && request.resource.data.dedupKey ==
+             request.resource.data.platform + '~' + request.resource.data.target
+               + '~' + request.resource.data.reporterHash
+        && reportId == request.resource.data.dedupKey
+        // A numeric target IS the profile id; an @target IS the username.
+        // Nothing can claim one identity in the key and another in the fields.
+        && (
+          (request.resource.data.target.matches('[0-9]{4,24}')
+            && request.resource.data.profileId == request.resource.data.target
+            && optStr(request.resource.data, 'username', 64))
+          ||
+          (request.resource.data.target.matches('@[a-z0-9._]{1,64}')
+            && !('profileId' in request.resource.data)
+            && request.resource.data.username is string
+            && request.resource.data.target == '@' + request.resource.data.username)
+        )
+        // Bounded free text (same caps the Node server enforced).
+        && optStr(request.resource.data, 'displayName', 80)
+        && optStr(request.resource.data, 'note', 400)
+        && optStr(request.resource.data, 'contentSummary', 400)
+        && optStr(request.resource.data, 'postId', 64)
+        && optUrl(request.resource.data, 'url')
+        && optUrl(request.resource.data, 'postUrl')
+        // Coarse origin, both optional and narrow: these strings become
+        // object keys and dashboard labels.
+        && (!('region' in request.resource.data)
+            || (request.resource.data.region is string
+                && request.resource.data.region.size() <= 64
+                && request.resource.data.region.matches('[A-Za-z]{2,}(/[A-Za-z0-9_+-]{1,40}){0,2}')))
+        && (!('lang' in request.resource.data)
+            || (request.resource.data.lang is string
+                && request.resource.data.lang.size() <= 16
+                && request.resource.data.lang.matches('[a-z]{2,3}(-[a-z0-9]{2,8}){0,2}')));
+    }
+
+    match /decisions/{key} {
+      allow read, write: if isAdmin();
+    }
+
+    match /admin/{doc} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

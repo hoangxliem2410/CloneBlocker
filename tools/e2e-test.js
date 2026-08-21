@@ -8,7 +8,8 @@
  *
  * What it proves:
  *   1. The MV3 manifest loads and the service worker boots without error.
- *   2. The blocklist is fetched from the local server and parsed.
+ *   2. The blocklist is fetched from a Firestore document (served by the
+ *      emulator), unwrapped, parsed, and the ranked slice is computed locally.
  *   3. The MAIN-world script hooks Meta's module registry and the isolated
  *      world completes the bridge handshake.
  *   4. The capability probe finds the live Relay environment and doc_ids.
@@ -23,7 +24,13 @@ const path = require('path');
 
 const HEADFUL = process.argv.includes('--headful');
 const KEEP = process.argv.includes('--keep');
-const PORT = 8791;
+// The Firestore emulator port is fixed by firebase.json at the repo root. The
+// demo- prefix on the project id keeps the emulator fully offline: nothing in
+// this harness can reach a real Firebase project.
+const EMULATOR_PORT = 8080;
+const PROJECT = 'demo-clone';
+const LIST_URL = `http://127.0.0.1:${EMULATOR_PORT}/v1/projects/${PROJECT}` +
+  '/databases/(default)/documents/blocklist/current';
 // Deliberately NOT the dev-session port (9333). Sharing it meant this harness
 // silently attached to a browser someone was using by hand instead of the clean
 // one it spawns, which produced confusing phantom failures.
@@ -34,6 +41,14 @@ const ROOT = path.join(__dirname, '..');
 const TARGET_ID = '63082166531';
 const TARGET_USERNAME = 'threads';
 const TEST_URL = 'https://www.threads.com/@threads';
+
+// Two approved targets published as ranking METADATA (day buckets, region and
+// language tallies) rather than ready-made ranks, so the harness can prove the
+// service worker does the ranking itself. One is fresh and busy, one went
+// quiet ten days ago; the seeded numbers make the ordering machine-independent
+// (see the ranked-targets check for the arithmetic).
+const FRESH_TARGET = '4100000001';
+const STALE_TARGET = '4100000002';
 
 const results = [];
 function check(name, pass, detail) {
@@ -116,35 +131,90 @@ function buildTestExtension() {
   walk('src');
   walk('icons');
 
-  // The only divergence from the shipped build: the local test server is added
+  // The only divergence from the shipped build: the local emulator is added
   // to host_permissions so the fetch path can be exercised without a
-  // user-gesture permission prompt.
+  // user-gesture permission prompt. Both spellings of loopback are granted
+  // because the origin the extension asks about is whichever one the listUrl
+  // was written with.
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
-  m.host_permissions = m.host_permissions.concat([`http://localhost:${PORT}/*`]);
+  m.host_permissions = m.host_permissions.concat([
+    `http://127.0.0.1:${EMULATOR_PORT}/*`,
+    `http://localhost:${EMULATOR_PORT}/*`
+  ]);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(m, null, 2));
   return dir;
 }
 
-function startServer() {
-  const listFile = path.join(os.tmpdir(), 'tq-blocklist-' + Date.now() + '.json');
-  fs.writeFileSync(listFile, JSON.stringify({
+// The standalone Firebase CLI installs itself under ~/.cache/firebase and is
+// never on PATH; run it through the Node that is already executing us.
+const FIREBASE_BIN = path.join(os.homedir(), '.cache', 'firebase', 'tools', 'bin', 'firebase');
+
+/**
+ * The Firebase CLI shells out to `java` and refuses to start the Firestore
+ * emulator on anything below 21. A dev machine often pins an older JDK first
+ * on PATH for other work, so look for a modern one in the usual install roots
+ * and put it in front -- for the emulator process only; nothing else sees the
+ * changed PATH.
+ */
+const { javaEnv } = require('./java-env.js');
+
+function startEmulator() {
+  const proc = spawn(process.execPath,
+    [FIREBASE_BIN, 'emulators:start', '--only', 'firestore', '--project', PROJECT],
+    { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: javaEnv() });
+  proc.stdout.on('data', () => {});
+  proc.stderr.on('data', (d) => console.error('[emulator]', String(d).trim()));
+  return proc;
+}
+
+async function waitForEmulator() {
+  // Any HTTP answer means the port is alive; the window is generous because a
+  // first run downloads the emulator jar before anything can listen.
+  for (let i = 0; i < 240; i++) {
+    try { await fetch(`http://127.0.0.1:${EMULATOR_PORT}/`); return true; }
+    catch (e) { await sleep(500); }
+  }
+  return false;
+}
+
+/**
+ * Seed the published list the way the dashboard publishes it: one document,
+ * the whole payload as a JSON string field. `Bearer owner` is the emulator's
+ * rules bypass -- seeding is test setup, not the thing under test; the public
+ * read path IS under test and uses no auth at all.
+ */
+async function seedBlocklist() {
+  const day = (msAgo) => new Date(Date.now() - msAgo).toISOString().slice(0, 10);
+  const today = day(0);
+  const payload = {
+    v: 1,
+    updatedAt: new Date().toISOString(),
     ids: [TARGET_ID],
     usernames: [TARGET_USERNAME],
-    docIdOverrides: {}
-  }, null, 2));
-
-  // Reuse the reference server, pointed at a temp store.
-  const serverDir = path.join(os.tmpdir(), 'tq-srv-' + Date.now());
-  fs.mkdirSync(serverDir, { recursive: true });
-  fs.copyFileSync(path.join(ROOT, 'server', 'server.js'), path.join(serverDir, 'server.js'));
-  fs.copyFileSync(listFile, path.join(serverDir, 'blocklist.json'));
-
-  const proc = spawn(process.execPath, [path.join(serverDir, 'server.js'), '--port', String(PORT)], {
-    stdio: ['ignore', 'pipe', 'pipe']
+    docIdOverrides: {},
+    pending: [],
+    // Metadata, not ranks: FRESH_TARGET was reported three times today from
+    // Vietnam, STALE_TARGET went quiet ten days ago in Brazil. The service
+    // worker must turn these into ranks with context that never leaves the
+    // machine it runs on.
+    targets: [
+      { platform: 'threads', id: FRESH_TARGET, trust: 2, last: today,
+        days: { [today]: 3 },
+        regions: { 'Asia/Ho_Chi_Minh': 3 }, langs: { 'vi-vn': 3 } },
+      { platform: 'threads', id: STALE_TARGET, trust: 2, last: day(10 * 86400000),
+        days: {},
+        regions: { 'America/Sao_Paulo': 2 }, langs: { 'pt-br': 2 } }
+    ]
+  };
+  const res = await fetch(LIST_URL, {
+    method: 'PATCH',
+    headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      json: { stringValue: JSON.stringify(payload) },
+      updatedAt: { timestampValue: new Date().toISOString() }
+    } })
   });
-  proc.stdout.on('data', () => {});
-  proc.stderr.on('data', (d) => console.error('[server]', String(d).trim()));
-  return proc;
+  if (!res.ok) throw new Error('seeding blocklist/current failed: HTTP ' + res.status);
 }
 
 function findChrome() {
@@ -166,17 +236,46 @@ function findChrome() {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tq-profile-'));
   console.log('extension:', extDir);
 
-  const server = startServer();
-  await sleep(700);
+  const emulator = startEmulator();
 
-  // Sanity: the server really is serving.
+  let chrome = null;
+  const cleanup = () => {
+    try { if (chrome) chrome.kill(); } catch (e) {}
+    // The CLI is a Node wrapper around a java process; killing the wrapper
+    // alone leaves the emulator itself listening on 8080 for the next run to
+    // trip over. Take down the whole process tree.
+    try {
+      if (process.platform === 'win32') {
+        require('child_process').execSync(`taskkill /PID ${emulator.pid} /T /F`, { stdio: 'ignore' });
+      } else {
+        emulator.kill();
+      }
+    } catch (e) {}
+    if (!KEEP) {
+      try { fs.rmSync(extDir, { recursive: true, force: true }); } catch (e) {}
+      try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch (e) {}
+    }
+  };
+  process.on('exit', cleanup);
+
+  // Sanity: seed the published doc, then read it back the exact way the
+  // extension will -- plain GET, no auth (blocklist reads are public in rules).
+  if (!(await waitForEmulator())) {
+    check('emulator serves the seeded blocklist doc', false,
+      'no answer on port ' + EMULATOR_PORT);
+    finish(cleanup);
+    return;
+  }
   try {
-    const r = await fetch(`http://localhost:${PORT}/blocklist.json`);
-    const j = await r.json();
-    check('mock server serves blocklist', Array.isArray(j.ids) && j.ids.includes(TARGET_ID),
-      `${j.ids.length} ids`);
+    await seedBlocklist();
+    const r = await fetch(LIST_URL);
+    const doc = await r.json();
+    const j = JSON.parse(doc.fields.json.stringValue);
+    check('emulator serves the seeded blocklist doc',
+      r.ok && Array.isArray(j.ids) && j.ids.includes(TARGET_ID) && j.targets.length === 2,
+      `${j.ids.length} ids, ${j.targets.length} targets with metadata`);
   } catch (e) {
-    check('mock server serves blocklist', false, String(e.message));
+    check('emulator serves the seeded blocklist doc', false, String(e.message));
   }
 
   // Current Chrome builds ignore --load-extension, so the extension is loaded
@@ -192,18 +291,8 @@ function findChrome() {
     'about:blank'
   ];
   if (!HEADFUL) chromeArgs.splice(3, 0, '--headless=new');
-  const chrome = spawn(findChrome(), chromeArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  chrome = spawn(findChrome(), chromeArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
   chrome.stderr.on('data', () => {});
-
-  const cleanup = () => {
-    try { chrome.kill(); } catch (e) {}
-    try { server.kill(); } catch (e) {}
-    if (!KEEP) {
-      try { fs.rmSync(extDir, { recursive: true, force: true }); } catch (e) {}
-      try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch (e) {}
-    }
-  };
-  process.on('exit', cleanup);
 
   // Wait for the debugging endpoint.
   let version = null;
@@ -272,7 +361,7 @@ function findChrome() {
     const setRes = await evalIn(browser, optSession, `
       (async () => {
         await chrome.storage.sync.set({ settings: {
-          listUrl: 'http://localhost:${PORT}/blocklist.json',
+          listUrl: '${LIST_URL}',
           refreshMinutes: 60,
           hideEnabled: true,
           hideMode: 'collapse',
@@ -306,6 +395,33 @@ function findChrome() {
                 : parsed.error);
   } catch (e) {
     check('blocklist fetched + parsed by service worker', false, e.message);
+  }
+
+  // ---- 2b. local ranking from published metadata --------------------------
+  // The list arrived as Firestore metadata, so the ranked slice must have been
+  // computed HERE -- there is no server left to do it. The ordering assertion
+  // is machine-independent even though rank depends on the real timezone and
+  // language of whatever runs this test: trust is equal (2), so the fresh
+  // target scores recency 1 and velocity 3 against the stale one's recency
+  // 0.5^(10/7) ~= 0.37 and velocity 0, and locality is bounded to [0.25, 1].
+  // Fresh worst case: 2 * 1 * (1+3) * 0.25 = 2. Stale best case:
+  // 2 * 0.37 * 1 * 1 = 0.74. The fresh target wins everywhere on earth.
+  try {
+    const raw = await evalIn(browser, optSession, `
+      (async () => {
+        const res = await new Promise(r => chrome.runtime.sendMessage(
+          { type: 'sw:get-state' }, x => r(x || {})));
+        return JSON.stringify((res.blocklist && res.blocklist.targets) || []);
+      })()
+    `);
+    const targets = JSON.parse(raw);
+    const wellFormed = targets.length > 0 && targets.every(t =>
+      typeof t.rank === 'number' && t.why && typeof t.why.velocity7d === 'number');
+    check('service worker ranked published targets locally',
+      wellFormed && targets[0].id === FRESH_TARGET,
+      targets.map(t => `${t.id}@${t.rank}`).join(' ') || 'no targets');
+  } catch (e) {
+    check('service worker ranked published targets locally', false, e.message);
   }
 
   // ---- 3. open Threads and let the content scripts run -------------------

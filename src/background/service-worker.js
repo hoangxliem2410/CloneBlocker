@@ -136,6 +136,115 @@ async function hasHostPermission(url) {
 
 const ID_RE = /^\d{4,24}$/;
 
+// ---------------------------------------------------------------------------
+// Firestore-backed lists
+// ---------------------------------------------------------------------------
+//
+// The blocklist can live in a Firestore document instead of on a self-hosted
+// server: one public-read doc whose `json` field holds the whole published
+// payload. Three things change when the URL points there, and only there:
+// no ranking hints are appended to the URL (nothing about this browser is
+// sent anywhere), the ranked slice is computed locally from published
+// per-target metadata, and reports are written as create-only documents.
+// Every legacy shape keeps working for self-hosted servers and static files.
+
+const FIRESTORE_URL_RE = /\/v1\/projects\/[^/]+\/databases\/[^/]+\/documents\//;
+function isFirestoreUrl(url) { return FIRESTORE_URL_RE.test(String(url || '')); }
+
+/** `.../documents` prefix of a Firestore REST URL, or null. */
+function firestoreDocsBase(url) {
+  const m = String(url || '').match(/^(.*\/v1\/projects\/[^/]+\/databases\/[^/]+\/documents)\//);
+  return m ? m[1] : null;
+}
+
+/** Decode the published payload out of a Firestore REST document response. */
+function decodeFirestoreDoc(body) {
+  if (!body || typeof body !== 'object' || !body.fields) return null;
+  const f = body.fields;
+  if (f.json && typeof f.json.stringValue === 'string') {
+    try { return JSON.parse(f.json.stringValue); } catch (e) { return null; }
+  }
+  return null;
+}
+
+const normUsername = (u) => String(u || '').trim().toLowerCase().replace(/^@/, '');
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// -- local ranking ----------------------------------------------------------
+//
+// Verbatim from the retired server (and duplicated in hosting/logic.js, which
+// a service worker cannot import): recency halves every 7 days, velocity is
+// the last 7 UTC day buckets, affinity is a smoothed share of where the
+// clone's reports come from. The one inherited quirk -- language affinity
+// divides by the REGION total -- is kept so rankings match the old ones.
+// Everything quantises to whole days, so recomputing within a day is
+// deterministic and the queue does not churn between polls.
+
+const RANK_HALF_LIFE_DAYS = 7;
+const rankDayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+function rankVelocity(days, n) {
+  const cutoff = rankDayKey(Date.now() - (n - 1) * 86400000);
+  let total = 0;
+  for (const k of Object.keys(days || {})) if (k >= cutoff) total += days[k];
+  return total;
+}
+
+function rankAffinity(tally, key, total) {
+  if (!key) return 1;
+  const here = (tally && Object.prototype.hasOwnProperty.call(tally, key)) ? tally[key] : 0;
+  return (here + 0.5) / (total + 1);
+}
+
+/**
+ * Rank published target metadata for THIS browser.
+ *
+ * The server used to do this per-request from query params; now the region
+ * and language never leave the machine. `shareRegion` keeps its user-visible
+ * meaning -- off means suggestions are not localised to you.
+ */
+function rankPublishedTargets(meta, settings) {
+  let region = null, lang = null;
+  if (settings.shareRegion !== false) {
+    const c = clientContext();
+    region = c.region || null;
+    lang = c.lang ? String(c.lang).toLowerCase() : null;
+  }
+  const today = Date.now();
+  const out = [];
+  for (const t of meta || []) {
+    if (!t || !ID_RE.test(String(t.id))) continue;
+    const total = Object.values(t.regions || {}).reduce((n, v) => n + v, 0);
+    const trust = Number(t.trust) || 0;
+    const ageDays = Math.max(0, Math.floor((today - Date.parse(t.last || 0)) / 86400000));
+    const recency = Math.pow(0.5, ageDays / RANK_HALF_LIFE_DAYS);
+    const vel = rankVelocity(t.days, 7);
+    const regionAff = rankAffinity(t.regions, region, total);
+    const langAff = rankAffinity(t.langs, lang, total);
+    // Region never zeroes a target out; it dominates the ordering when it fits.
+    const locality = 0.25 + 0.75 * Math.max(regionAff, langAff * 0.8);
+    const rank = trust * recency * (1 + vel) * locality;
+    out.push({
+      id: String(t.id),
+      platform: String(t.platform || ''),
+      rank: Math.round(rank * 1000) / 1000,
+      why: {
+        trust: Math.round(trust * 100) / 100,
+        recentDays: ageDays,
+        velocity7d: vel,
+        region: Math.round(regionAff * 100) / 100,
+        lang: Math.round(langAff * 100) / 100
+      }
+    });
+  }
+  out.sort((a, b) => (b.rank - a.rank) || (a.id < b.id ? -1 : 1));
+  return out;
+}
+
 /**
  * Where this browser is, coarsely.
  *
@@ -154,6 +263,9 @@ function clientContext() {
 
 /** Add the ranking hints to the list URL, respecting the privacy setting. */
 function withClientContext(listUrl, settings, budget) {
+  // A Firestore document URL takes no hints: nothing about this browser is
+  // sent, and the ranking happens locally in rankPublishedTargets instead.
+  if (isFirestoreUrl(listUrl)) return listUrl;
   let u;
   try { u = new URL(listUrl); } catch (e) { return listUrl; }
   if (settings.acceptServerTargets === false) return listUrl;
@@ -257,6 +369,17 @@ async function refreshBlocklist(force) {
     payload = lines;
   }
 
+  // A Firestore document envelope carries the whole published payload as one
+  // JSON string field. Unwrap it and fall through to the normal path; the
+  // document updateTime stands in for the etag (a change marker, nothing
+  // more -- Firestore does not honour If-None-Match).
+  let fsUpdateTime = null;
+  const fsDecoded = decodeFirestoreDoc(payload);
+  if (fsDecoded) {
+    fsUpdateTime = (payload && payload.updateTime) || null;
+    payload = fsDecoded;
+  }
+
   const norm = normalizeBlocklist(payload);
   // An empty list is a legitimate state -- nothing reported yet, or an admin
   // just removed the last entry. Refusing it meant the extension kept serving a
@@ -273,17 +396,34 @@ async function refreshBlocklist(force) {
     return { ok: false, error: 'Response did not look like a blocklist (wrong URL?)' };
   }
 
+  // Ranked cold targets, if the list carries any and the user allows them.
+  // Two shapes arrive here: a legacy server sends targets it already ranked
+  // for us ({id, rank, why}); a published Firestore list sends per-target
+  // METADATA (day buckets, region tallies) and the ranking happens right
+  // here, with context that never leaves this machine.
+  let targets = [], targetsAvailable = Number(payload.targetsAvailable) || 0;
+  if (settings.acceptServerTargets !== false && Array.isArray(payload.targets)) {
+    const raw = payload.targets.filter(t => t && ID_RE.test(String(t.id)));
+    if (raw.some(t => t.days || t.regions || t.langs)) {
+      const budget = Math.max(1, Math.min(await remainingBudget(settings), 200));
+      const ranked = rankPublishedTargets(raw, settings);
+      targets = ranked.slice(0, budget);
+      targetsAvailable = ranked.length;
+    } else {
+      targets = raw.map(t => ({ id: String(t.id), platform: String(t.platform || ''),
+                                rank: Number(t.rank) || 0, why: t.why || null }));
+    }
+  }
+
   const record = {
     ids: norm.ids,
     usernames: norm.usernames,
-    // Ranked cold targets, if the server offered any and the user allows them.
-    targets: (settings.acceptServerTargets !== false && Array.isArray(payload.targets))
-      ? payload.targets.filter(t => t && ID_RE.test(String(t.id)))
-                       .map(t => ({ id: String(t.id), platform: String(t.platform || ''),
-                                    rank: Number(t.rank) || 0, why: t.why || null }))
-      : [],
-    targetsAvailable: Number(payload.targetsAvailable) || 0,
-    etag: res.headers.get('etag') || null,
+    targets,
+    targetsAvailable,
+    // Report keys still awaiting a decision, so the report chip can say
+    // "already reported" without asking anyone.
+    pending: Array.isArray(payload.pending) ? payload.pending.slice(0, 5000) : [],
+    etag: res.headers.get('etag') || fsUpdateTime || null,
     fetchedAt: Date.now(),
     source: settings.listUrl,
     count: norm.ids.length + norm.usernames.length
@@ -802,6 +942,113 @@ function reportKeyFor(platform, profileId, username) {
     : platform + ':@' + String(username || '').toLowerCase().replace(/^@/, '');
 }
 
+/**
+ * File a report as a Firestore document.
+ *
+ * The retired server received a POST, validated it, hashed the reporter and
+ * merged it into a per-account record. Here the write IS the validation and
+ * the dedup: security rules enforce every cap this function clips to, and the
+ * document id -- platform~target~reporterHash -- makes a repeat report from
+ * the same account a create conflict (409) rather than a second row. The
+ * per-account record the dashboard shows is rebuilt from these documents.
+ *
+ * The pseudonym is an unkeyed SHA-256 now, not the server's salted HMAC -- a
+ * pure client cannot keep a salt secret. Reports are admin-read-only, so the
+ * hash is defence in depth rather than the primary barrier; PRIVACY.md says
+ * so in as many words.
+ */
+async function firestoreSubmitReport(settings, payload, reporter) {
+  const base = firestoreDocsBase(settings.listUrl);
+  if (!base) return { ok: false, error: 'Could not derive the Firestore base from the list URL.' };
+  if (!(await hasHostPermission(base + '/'))) {
+    return { ok: false, needsPermission: true,
+             error: 'Host permission not granted. Open options and click Grant access.' };
+  }
+
+  const platform = payload.platform;
+  const clip = (v, max) => {
+    if (v == null) return null;
+    const t = String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
+    return t ? t.slice(0, max) : null;
+  };
+  const url = (v) => {
+    if (!v) return null;
+    const t = String(v).trim();
+    return /^https?:\/\//.test(t) && t.length <= 300 ? t : null;
+  };
+
+  const profileId = ID_RE.test(String(payload.profileId || '')) ? String(payload.profileId) : null;
+  const username = normUsername(payload.username) || null;
+  if (!profileId && !username) {
+    return { ok: false, error: 'Need a numeric profile id or a username to report.' };
+  }
+  const target = profileId || ('@' + username);
+  const reporterHash = 'acct_' + (await sha256Hex(reporter)).slice(0, 24);
+  const dedupKey = platform + '~' + target + '~' + reporterHash;
+  const key = platform + ':' + target;
+
+  const fields = { platform, target, reason: payload.reason || 'clone', reporterHash, dedupKey };
+  if (profileId) {
+    fields.profileId = profileId;
+    if (username) fields.username = username;
+  } else {
+    fields.username = username;
+  }
+  const opt = {
+    displayName: clip(payload.displayName, 80),
+    url: url(payload.url),
+    note: clip(payload.note, 400),
+    postUrl: url(payload.postUrl),
+    postId: clip(payload.postId, 64),
+    contentSummary: clip(payload.contentSummary, 400)
+  };
+  if (settings.shareRegion !== false) {
+    const ctx = clientContext();
+    // Pre-validated with the same patterns the rules use: a malformed value
+    // must cost the field, never the report.
+    if (ctx.region && /^[A-Za-z]{2,}(?:\/[A-Za-z0-9_+-]{1,40}){0,2}$/.test(ctx.region) &&
+        ctx.region.length <= 64) opt.region = ctx.region;
+    const lang = (ctx.lang || '').toLowerCase();
+    if (lang && /^[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,2}$/.test(lang)) opt.lang = lang;
+  }
+  for (const k of Object.keys(opt)) if (opt[k] != null) fields[k] = opt[k];
+
+  const body = { fields: {} };
+  for (const k of Object.keys(fields)) body.fields[k] = { stringValue: String(fields[k]) };
+
+  let res;
+  try {
+    res = await fetch(base + '/reports?documentId=' + encodeURIComponent(dedupKey), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    return { ok: false, error: 'Could not reach Firestore: ' + (e && e.message) };
+  }
+
+  const list = await getLocal(KEYS.BLOCKLIST, null);
+  const blocked = !!(list && ((profileId && (list.ids || []).includes(profileId)) ||
+                              (username && (list.usernames || []).includes(username))));
+
+  if (res.status === 409) {
+    // The document already exists: this account already reported this target.
+    return { ok: true, key, status: blocked ? 'approved' : 'pending', count: 1,
+             duplicate: true, alreadyBlocked: blocked };
+  }
+  if (!res.ok) {
+    return { ok: false, error: res.status === 403
+      ? 'The server rules refused this report.'
+      : 'Firestore returned HTTP ' + res.status };
+  }
+
+  const reported = await getLocal(KEYS.REPORTED, {});
+  reported[key] = { status: blocked ? 'approved' : 'pending', count: 1, blocked, at: Date.now() };
+  await setLocal(KEYS.REPORTED, reported);
+  return { ok: true, key, status: blocked ? 'approved' : 'pending', count: 1,
+           duplicate: false, alreadyBlocked: blocked };
+}
+
 async function submitReport(payload) {
   const settings = await getSettings();
   const base = await apiBase(settings);
@@ -818,6 +1065,10 @@ async function submitReport(payload) {
     return { ok: false, signedOut: true,
              error: 'Sign in to ' + (payload.platform === 'facebook' ? 'Facebook' : 'Threads') +
                     ' before reporting.' };
+  }
+
+  if (isFirestoreUrl(settings.listUrl) && !settings.apiBase) {
+    return firestoreSubmitReport(settings, payload, reporter);
   }
 
   const ctx = settings.shareRegion === false ? {} : clientContext();
@@ -876,6 +1127,21 @@ async function reportStatus(q, force) {
   const hit = cache[key];
   if (!force && hit && (Date.now() - hit.at) < STATUS_TTL_MS) {
     return { ok: true, key, cached: true, status: hit.status, count: hit.count, blocked: hit.blocked };
+  }
+
+  // Against a Firestore list there is nothing to ask: the published document
+  // already carries what the chip needs. Blocked is list membership; pending
+  // is the published pending-keys array; anything else is simply unreported.
+  const fsSettings = await getSettings();
+  if (isFirestoreUrl(fsSettings.listUrl) && !fsSettings.apiBase) {
+    const rec = await getLocal(KEYS.BLOCKLIST, null);
+    const pid = String(q.profileId || '');
+    const uname = normUsername(q.username);
+    const blocked = !!(rec && (((rec.ids || []).includes(pid)) ||
+                               (uname && (rec.usernames || []).includes(uname))));
+    const status = blocked ? 'approved'
+      : (rec && (rec.pending || []).includes(key)) ? 'pending' : null;
+    return { ok: true, key, status, count: 0, blocked };
   }
 
   const base = await apiBase();

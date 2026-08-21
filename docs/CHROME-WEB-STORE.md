@@ -108,9 +108,10 @@ So blocking is opt-in, off by default, and paced:
 
   • Profiles you actually see on screen are blocked at a normal pace. Blocking
     someone whose profile is in front of you is what ordinary people do.
-  • Accounts suggested by your server that you have never seen are held to a
-    separate, much tighter hourly ceiling — which you set, and which you can
-    set to zero to never block anyone you have not seen.
+  • Accounts nominated by the list's own trending data, which you have never
+    seen, are held to a separate, much tighter hourly ceiling — which you
+    set, and which you can set to zero to never block anyone you have not
+    seen.
   • Every delay, cap and ceiling is yours to change. The cautious values are
     the ones it ships with.
 
@@ -120,27 +121,33 @@ posts that prove it.
 
 YOU RUN THE LIST
 3Que Blocker does not ship a blocklist and does not host one. It fetches from
-a server you run — that backend is open source and included, with no
-dependencies. Reports arrive in your own moderation dashboard, ranked by
+a backend you own — your own Firebase project (the included setup provisions
+it in one command, on the free plan, with no server code) or any URL serving
+plain JSON. Reports arrive in your own moderation dashboard, ranked by
 reporter reputation and by where the clone is currently active, and nothing
 reaches the blocklist until you approve it.
 
 WHAT IT SENDS, AND WHERE
-Only to the server you configure, and nowhere else:
-  • the blocklist request itself;
+Only to the backend you configure, and nowhere else:
+  • the blocklist request itself — which carries nothing about you: deciding
+    which clones are active near you happens locally, in your browser;
   • when you file a report: the reported profile's ID or username, the reason
-    you pick, any note and post links you add, and your own platform account
-    ID — so that reports can be weighed by reputation and abuse can be
-    rate-limited;
-  • optionally, your time zone and language, so suggestions can be ranked
-    towards clones active near you. This is a single switch and you can turn
+    you pick, any note and post links you add, and a hash of your own platform
+    account ID — so that reports can be weighed by reputation and one account
+    cannot flood the queue;
+  • optionally, your time zone and language with that report, so the reviewer
+    can see where a clone is active. This is a single switch and you can turn
     it off.
-Your account ID is stored by the backend only as a salted hash. There is no
-analytics, no tracking, no ad network, and no third-party service of any kind.
+Your account ID never leaves the browser in the clear — only a truncated
+hash of it does — and the report store is readable only by the project owner.
+There is no analytics, no tracking, no ad network, and no third-party service
+beyond the Firebase project you yourself own.
 
 REQUIREMENTS
-You need somewhere to run the backend — a laptop, a Raspberry Pi, or any small
-VPS. Setup is `node server/server.js`. Source, backend and documentation:
+Your own Firebase project — the free plan is enough, and there is no server
+of yours to run or keep alive. Setup is `node tools/firebase-setup.js
+--deploy`. A plain static JSON file on any host also works for hiding and
+blocking. Source, backend and documentation:
 https://github.com/hoangxliem2410/CloneBlocker
 
 Not affiliated with, endorsed by, or connected to Meta, Facebook or Threads.
@@ -166,7 +173,7 @@ removed. These are written to match the code.
 
 ```
 Suppress and block accounts that impersonate the user on Facebook and Threads,
-using a blocklist the user supplies from their own server.
+using a blocklist the user supplies from a backend they own.
 ```
 
 Hiding, blocking and reporting are one purpose, not three: reporting is how an
@@ -180,8 +187,8 @@ Nothing in the extension serves any other end.
 | `storage` | Stores the user's settings and the cached blocklist so the list does not have to be re-fetched on every page load. Nothing is stored anywhere else. |
 | `alarms` | Refreshes the blocklist on the user's chosen interval, and paces platform blocks so they are never issued in a burst. |
 | `host_permissions` — facebook.com, threads.net, threads.com | The extension's entire function is to hide and block impersonator accounts on these two sites. It reads the page to find profiles from the user's list and, when the user has enabled it, issues a block through the site's own interface. |
-| `optional_host_permissions` — `https://*/*` | The blocklist lives on a server the **user** runs and whose address they type into the options page, so the origin cannot be known in advance. This is optional, never granted at install, and requested at runtime for **only** the single origin the user entered, via a Chrome permission prompt they must accept. |
-| `optional_host_permissions` — `http://localhost/*` | Many users run the included backend on their own machine, where it is reached over plain HTTP on localhost. Same optional, per-origin, user-accepted flow. |
+| `optional_host_permissions` — `https://*/*` | The blocklist lives in a backend the **user** owns — their own Firebase project, or any URL they choose — and its address is typed into the options page, so the origin cannot be known in advance. This is optional, never granted at install, and requested at runtime for **only** the single origin the user entered, via a Chrome permission prompt they must accept. |
+| `optional_host_permissions` — `http://localhost/*` | During development and testing the list is served locally — a static file or the Firestore emulator — over plain HTTP on localhost. Same optional, per-origin, user-accepted flow. |
 
 ### Data collection disclosures
 
@@ -189,20 +196,20 @@ Tick these, and be prepared to explain each:
 
 | Category | Collected? | What, and why |
 |---|---|---|
-| Personally identifiable information | **Yes** | The user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The backend stores it only as a salted HMAC pseudonym; the raw ID is never written to disk. |
+| Personally identifiable information | **Yes** | A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner under Firestore security rules. |
 | User activity | **Yes** | The reports the user chooses to file: the reported account, the reason, an optional note, optional links to posts. |
 | Website content | **Yes** | Only what the user attaches to a report — public post URLs and an optional short quote of the content they are reporting. |
-| Location | **Yes, coarse, optional** | IANA time zone and BCP-47 language, from the browser, sent only when **Send my time zone and language** is on. No IP lookup, no geolocation API, no geo database. Used to rank which clones are worth spending a block on. |
+| Location | **Yes, coarse, optional** | IANA time zone and BCP-47 language, from the browser, attached to reports only — never to list fetches — and only when **Send my time zone and language** is on. No IP lookup, no geolocation API, no geo database. Shows the reviewer where a reported clone is active; the ranking of which clones to block is computed locally in the user's browser and sends nothing. |
 | Authentication information | No | |
 | Financial / health / personal communications | No | |
 
 ### Limited Use certification
 
 You must certify that the data is used only for the disclosed single purpose.
-That is true here — it goes to the user's own server and nowhere else, and
-there is no analytics, telemetry, ad network or third-party endpoint anywhere
-in the code. Grep it: the only network destinations are the two Meta origins
-and the endpoint the user typed.
+That is true here — it goes to the user's own Firebase project (or whatever
+endpoint they typed) and nowhere else, and there is no analytics, telemetry,
+ad network or third-party endpoint anywhere in the code. Grep it: the only
+network destinations are the two Meta origins and the endpoint the user typed.
 
 ### Notes for the reviewer
 
@@ -210,17 +217,20 @@ This field matters more than usual here, because an unconfigured install shows
 a reviewer nothing at all. Suggested text:
 
 ```
-This extension has no built-in blocklist by design — it fetches from a server
-the user runs, so out of the box it is inert.
+This extension has no built-in blocklist by design — it fetches from a
+backend the user owns, so out of the box it is inert. There is no server to
+start: the backend is a Firebase project, and any URL serving a plain JSON
+list also works.
 
 To exercise it end to end:
-  1. git clone https://github.com/hoangxliem2410/CloneBlocker
-  2. node server/server.js --port 8787
-  3. In the extension's options, set the endpoint to
-     http://localhost:8787/blocklist.json and press "Grant access", then
-     "Test & refresh now".
-  4. Add an account to the list at http://localhost:8787/admin
-     (default sign-in admin / admin123), then load Threads or Facebook.
+  1. In the extension's options, set the endpoint to the public list of the
+     demo Firebase project:
+     https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current
+     press "Grant access", then "Test & refresh now".
+  2. Alternatively, any static JSON works as an endpoint — for example a
+     file containing {"ids":["100001234567890"],"usernames":["some.handle"]}
+     served from any URL you control.
+  3. Load Threads or Facebook. Content from listed accounts is hidden.
 
 Layer 1 (hiding) works immediately and sends nothing.
 Layer 2 (platform blocking) is OFF by default and additionally ships with a
@@ -255,7 +265,7 @@ unlucky first impression. The reviewer-notes text in §4 exists for this. If it
 gets rejected once on these grounds, consider shipping a tiny default list of
 known-impersonator accounts so the extension demonstrates itself.
 
-### b. Server-nominated blocks and "related user action"
+### b. List-nominated blocks and "related user action"
 
 Store policy is explicit that an extension must not send messages for the user
 without a chance to confirm, and requires related user action before each
@@ -268,12 +278,15 @@ What already argues for it: platform blocking is **off** by default; dry run is
 `acceptServerTargets` can be turned off entirely.
 
 What argues against it: with blocking enabled, `acceptServerTargets` defaults
-to **true**, so the server can nominate an account the user has never seen and
-it will be blocked without a per-account confirmation.
+to **true**, so the trending metadata published with the list can put an
+account the user has never seen into the queue, and it will be blocked without
+a per-account confirmation. (The ranking itself now runs locally in the
+extension, but the effect a reviewer would care about is the same: the list's
+publisher chooses candidates the user never looked at.)
 
 **Worth considering before submitting:** default `acceptServerTargets` to
 `false`. Then every block in a default install traces to a profile the user
-looked at, and the server-suggestion feature becomes something they switch on
+looked at, and the suggestion feature becomes something they switch on
 knowingly. It costs little — a user who wants suggestions is exactly the user
 who will find the setting.
 
@@ -294,16 +307,17 @@ surprised by it.
 ### d. `https://*/*` in optional_host_permissions
 
 Broad patterns draw scrutiny even when optional. The justification is genuine —
-a user-supplied server address cannot be enumerated ahead of time — and the
+a user-supplied backend address cannot be enumerated ahead of time — and the
 runtime request is scoped to the single origin the user typed. Keep the
 justification text in §4 verbatim; it is the whole answer.
 
-### e. Server-pushed `docIdOverrides`
+### e. List-supplied `docIdOverrides`
 
 The blocklist response may carry `docIdOverrides`, which changes which
 persisted GraphQL operation the extension calls. This is configuration data,
 not code, and MV3's rule is about executing remotely-hosted *logic*. But it
-does let a server change what a request does, and a thorough reviewer may ask.
+does let whoever publishes the list change what a request does, and a
+thorough reviewer may ask.
 The answer is that the operation is always one the page itself already
 exposes, and the override only selects among them — say so if asked.
 
@@ -328,7 +342,7 @@ exposes, and the override only selects among them — say so if asked.
 - [ ] Limited Use certification ticked
 - [ ] Reviewer notes pasted
 - [ ] Decide on `acceptServerTargets` default (§6b)
-- [ ] `npm test` green, then zip: everything except `server/`, `tools/`, `docs/`, `store/`, `.env`
+- [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
 
 The upload zip only needs what the extension actually loads: `manifest.json`,
 `src/`, `icons/`. The backend and the tooling are for you, not for Chrome, and

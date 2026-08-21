@@ -441,6 +441,34 @@ async function isAdminAccount() {
 }
 
 /**
+ * Take ownership of a project nobody owns yet.
+ *
+ * A uid compiled into firestore.rules can only be added by editing and
+ * deploying that file, which is a chicken and egg for the person who wants to
+ * sign in with Google: they cannot learn their own uid without opening a
+ * dashboard they cannot open. So the first account to sign in claims the
+ * project by creating admin/allowlist with itself inside.
+ *
+ * The rules do the deciding, not this function. `create` succeeds only when
+ * the document is absent and only when the single uid inside is the caller's
+ * own, so a second attempt fails with a conflict rather than a takeover, and
+ * this can never install somebody else. All that happens here is the ask.
+ */
+async function tryClaimProject(user) {
+  // A POST to the COLLECTION with an explicit documentId, not a PATCH: that
+  // is the create-only verb, so an existing allowlist answers 409 instead of
+  // being overwritten. The safety is structural, not a check we remembered.
+  const res = await fs('/admin?documentId=allowlist', 'POST', {
+    fields: {
+      uids: { arrayValue: { values: [{ stringValue: user.uid }] } },
+      claimedAt: { stringValue: new Date().toISOString() },
+      claimedBy: { stringValue: user.email || user.displayName || 'unknown' }
+    }
+  });
+  return !!(res && res.ok);
+}
+
+/**
  * A signed-in account the rules refuse, discovered mid-session. With Firebase
  * Auth a session does not quietly expire (tokens self-refresh), so a 403 is
  * about WHO this is, not about how old the token is -- the same answer the
@@ -1260,7 +1288,23 @@ function renderBlocklist(host) {
   // someone whose real answer is "your uid is not on the list".
   onAuthStateChanged(auth, async (user) => {
     if (!user) { showGate(); return; }
-    if (!(await isAdminAccount())) { showDenied(user); return; }
+    if (!(await isAdminAccount())) {
+      // Not an admin yet -- but on a project nobody has claimed, signing in
+      // IS the claim. Only if that is refused (someone got here first) is
+      // this account genuinely locked out, and then it needs its uid.
+      if (await tryClaimProject(user) && await isAdminAccount()) {
+        showApp();
+        // After the refresh, not before: refresh() finishes by writing its own
+        // connection status, and taking ownership of the project is the one
+        // message that must not be scrolled past on the way in.
+        await refresh();
+        setConn('Claimed this project as ' + (user.email || user.uid) +
+                ' -- close the sign-up window now', 'ok');
+        return;
+      }
+      showDenied(user);
+      return;
+    }
     showApp();
     refresh();
   });

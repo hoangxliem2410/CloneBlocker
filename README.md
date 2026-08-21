@@ -49,7 +49,7 @@ thousands of profiles you will never scroll past.
 
 **Which kinds — tags.** Every listed account carries one tag: *clone*,
 *impersonation*, *scam*, *harassment*, *spam*, *Bò đỏ* (red bull —
-state-aligned troll) or *other*. One vocabulary throughout, in which a
+a state-aligned troll) or *other*. One vocabulary throughout, in which a
 reporter's reason is a vote and the target's tag is the verdict. Settings →
 **Which kinds get blocked** has a tick box per tag (`blockTags`, all ticked by
 default): untick *spam* and spam
@@ -213,6 +213,29 @@ gitignored), puts that account's UID in the allowlist inside `firestore.rules`,
 and disables public sign-up at the Auth configuration level. There is no user
 database to administer: the security rules recognise the UIDs in that list, and
 nobody else can create an account to try.
+
+**The first person to sign in owns the project.** A UID compiled into the rules
+can only be added by editing and deploying that file, which is a chicken and
+egg for anyone signing in with Google: you cannot learn your own UID without
+opening a dashboard you cannot open. So on a project nobody has claimed yet,
+signing in *is* the claim — the dashboard creates `admin/allowlist` with your
+account in it, and from then on it is admin-only like everything else. The
+rules do the deciding: the create succeeds only when the document is absent and
+only when the single UID inside is the caller's own, so a second person gets a
+conflict rather than a takeover, and nobody can install somebody else.
+
+Sign-up is disabled by default, so open the window on purpose and shut it again:
+
+```
+node tools/firebase-setup.js --open-claim     # let an account be created
+#   ... sign in with Google at /admin/ -- that account becomes the admin ...
+node tools/firebase-setup.js --close-claim    # shut it again
+node tools/firebase-setup.js --claim-status   # who has it, is it still open
+```
+
+Between opening and claiming, anyone who reaches that page could take it
+instead. The window is meant to be seconds long, and `--claim-status` exists so
+"is it still open?" is a question with an answer rather than a memory.
 
 Two ways in, one allowlist. Signing in with Google is the usual door; email and
 password stays as the fallback for when a Google account is not to hand. They

@@ -30,7 +30,7 @@
   },
   "tag_redbull": {
     "message": "Bò đỏ",
-    "description": "Kind of account: a state-aligned troll. 'Red bull' is a calque of the Vietnamese slang 'bò đỏ' and should be that phrase in Vietnamese. Offered as a report reason, a Settings tick box and an Activity chip."
+    "description": "Kind of account: a state-aligned troll. English uses the loanword Redbull; Vietnamese uses the slang it comes from, Bo do (with diacritics). Offered as a report reason, a Settings tick box and an Activity chip."
   },
   "tag_other": {
     "message": "Khác",

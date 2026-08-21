@@ -9,7 +9,7 @@ implementers must not invent fields or rename them.
 TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other']
 ```
 
-`redbull` is new. Labels: en `Red bull (state-aligned troll)`, vi `Bò đỏ`.
+`redbull` is new. Labels: en `Redbull`, vi `Bò đỏ`.
 The reason a reporter picks and the tag a target carries are the same
 vocabulary — a report's `reason` is a vote, a target's `tag` is the verdict.
 

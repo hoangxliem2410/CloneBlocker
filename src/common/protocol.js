@@ -81,7 +81,7 @@
     scam: 'Scam or fraud',
     harassment: 'Harassment',
     spam: 'Spam',
-    redbull: 'Red bull (state-aligned troll)',
+    redbull: 'Redbull',
     other: 'Something else'
   };
 

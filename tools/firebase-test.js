@@ -991,6 +991,77 @@ async function swapRules() {
     pubView.counts.published === pubView.profiles.length,
     JSON.stringify(pubView.counts.byTag));
 
+  // -- 17. claiming the project by signing in -------------------------------
+  //
+  // The first account to sign in creates admin/allowlist with itself inside
+  // and becomes an admin, so the owner never has to learn their own uid to
+  // get into their own dashboard. That is a door, so every way it must stay
+  // shut is worth a check -- more so than the one way it opens.
+  {
+    // A ruleset with NO baked-in admin, so these exercise the claim path
+    // rather than the literal allowlist that the rest of this file uses.
+    const rulesSrc = fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8');
+    const pinned = rulesSrc.match(/request\.auth\.uid == '([^']+)'/)[1];
+    const putRules = (content) => fetch(
+      `http://${HOST}/emulator/v1/projects/${PROJECT}:securityRules`,
+      { method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rules: { files: [{ name: 'firestore.rules', content }] } }) });
+    await putRules(rulesSrc.split(pinned).join('nobody-at-all'));
+
+    const ALICE = 'claim-alice', BOB = 'claim-bob';
+    const claimBody = (uid) => ({ fields: {
+      uids: { arrayValue: { values: [{ stringValue: uid }] } },
+      claimedAt: { stringValue: new Date().toISOString() },
+      claimedBy: { stringValue: 'test' } } });
+    const post = (body, uid) =>
+      api('POST', '/admin?documentId=allowlist', body, uid ? bearer(uid) : undefined);
+
+    check('with nothing claimed, a signed-in account is not yet an admin',
+      (await api('GET', '/reports', undefined, bearer(ALICE))).status === 403);
+    check('an unauthenticated caller cannot claim',
+      (await post(claimBody(ALICE))).status === 403);
+    check('a claim naming somebody else is refused',
+      (await post(claimBody(BOB), ALICE)).status === 403, 'alice naming bob');
+    check('a claim naming two uids is refused',
+      (await post({ fields: { uids: { arrayValue: { values: [
+        { stringValue: ALICE }, { stringValue: BOB }] } } } }, ALICE)).status === 403);
+    const sneaky = claimBody(ALICE);
+    sneaky.fields.backdoor = { stringValue: 'x' };
+    check('a claim carrying an unknown field is refused',
+      (await post(sneaky, ALICE)).status === 403);
+
+    check('the first signed-in account claims the project',
+      (await post(claimBody(ALICE), ALICE)).status === 200);
+    check('and is an admin from that moment',
+      (await api('GET', '/reports', undefined, bearer(ALICE))).status === 200);
+
+    check('a second account cannot claim over it',
+      (await post(claimBody(BOB), BOB)).status !== 200);
+    check('and is still not an admin',
+      (await api('GET', '/reports', undefined, bearer(BOB))).status === 403);
+    check('nor may it overwrite the list',
+      (await api('PATCH', '/admin/allowlist', claimBody(BOB), bearer(BOB))).status === 403);
+    check('nor delete it to reopen the claim',
+      (await api('DELETE', '/admin/allowlist', undefined, bearer(BOB))).status === 403);
+    check('the allowlist is not world-readable',
+      (await api('GET', '/admin/allowlist')).status === 403);
+
+    check('an admin may add a second admin',
+      (await api('PATCH', '/admin/allowlist', { fields: { uids: { arrayValue: { values: [
+        { stringValue: ALICE }, { stringValue: BOB }] } } } }, bearer(ALICE))).status === 200);
+    check('who is then an admin too',
+      (await api('GET', '/reports', undefined, bearer(BOB))).status === 200);
+
+    check('the public blocklist is unaffected throughout',
+      [200, 404].includes((await api('GET', '/blocklist/current')).status));
+    check('reports stay closed to the public throughout',
+      (await api('GET', '/reports')).status === 403);
+
+    // Leave the ruleset as the rest of the file expects to find it.
+    await api('DELETE', '/admin/allowlist', undefined, bearer(ALICE));
+    await swapRules();
+  }
+
   const failed = results.filter(r => !r.pass);
   console.log('\n' + '='.repeat(60));
   console.log(`${results.length - failed.length}/${results.length} checks passed`);

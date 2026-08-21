@@ -24,7 +24,7 @@ block something that has to happen outside the repository.
    `node tools/firebase-setup.js --add-admin <uid>`.
 2. **Whether the `redbull` tag appears in the store listing copy.** It ships in
    the product either way — the vocabulary, the report sheet, the tag filter and
-   the public page all carry *Bò đỏ* / *Red bull (state-aligned troll)*. The
+   the public page all carry *Bò đỏ* / *Redbull*. The
    question is only the shop window: a politically-charged category on a public
    listing invites a kind of review attention and user reporting that "scam"
    does not. The listing copy in `docs/CHROME-WEB-STORE.md` §3 does not name it
@@ -138,7 +138,7 @@ The report `reason` enum is the seed of the taxonomy. It becomes the
 per-target `tag`, admin-overridable.
 
 - **Schema:** add `redbull` to the reasons enum (rules + report sheet;
-  vi label "Bò đỏ", en label "Red bull (state-aligned troll)"). Decision
+  vi label "Bò đỏ", en label "Redbull"). Decision
   docs gain an optional `tag` field (admin override); `aggregate()` keeps
   reason tallies per target; effective tag = admin override ‖ modal reason.
 - **Publish:** targets carry `tag`; a parallel `idTags: {id: tag}` map covers

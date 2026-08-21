@@ -14,6 +14,13 @@
  *   node tools/firebase-setup.js --list-admins
  *   node tools/firebase-setup.js --add-admin <uid> [--dry-run] [--rules FILE]
  *
+ * Or let the first Google sign-in take the project, which needs no uid at all:
+ *
+ *   node tools/firebase-setup.js --open-claim     allow an account to be made
+ *   ... sign in with Google at /admin/ -- that account becomes the admin ...
+ *   node tools/firebase-setup.js --close-claim    shut it again
+ *   node tools/firebase-setup.js --claim-status   who has it, is it still open
+ *
  * --add-admin redeploys the rules once the new file has been read back and
  * re-parsed. --dry-run prints what it would write and touches nothing;
  * --rules points both commands at a scratch copy instead of the repo's file
@@ -58,6 +65,9 @@ const ROOT = path.join(__dirname, '..');
 // without touching what production runs.
 const ADD_ADMIN = argOf('add-admin', null);
 const LIST_ADMINS = args.includes('--list-admins');
+const CLAIM_STATUS = args.includes('--claim-status');
+const OPEN_CLAIM = args.includes('--open-claim');
+const CLOSE_CLAIM = args.includes('--close-claim');
 const DRY_RUN = args.includes('--dry-run');
 const RULES_ARG = argOf('rules', null);
 const RULES_PATH = path.resolve(ROOT, RULES_ARG || 'firestore.rules');
@@ -332,11 +342,75 @@ async function addAdminCommand(uid) {
     }
   }
 
+  // -- the claim window ------------------------------------------------------
+  //
+  // Signing in with Google is how the owner becomes an admin without ever
+  // learning their own uid: the first account to sign in creates
+  // admin/allowlist with itself inside, and the rules honour it from then on.
+  //
+  // For that to be possible the account has to be creatable, and sign-up is
+  // disabled by default -- deliberately, because an open project is an open
+  // project. So the window is a thing you open on purpose and close again,
+  // and --claim-status answers the only question that matters while it is
+  // open: has anybody taken it yet.
+  async function setSignup(disabled) {
+    const tok = await accessToken();
+    const r = await api(tok, 'PATCH',
+      `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config?updateMask=client.permissions`,
+      { client: { permissions: { disabledUserSignup: disabled, disabledUserDeletion: false } } });
+    if (r.status >= 400) {
+      console.error(`could not ${disabled ? 'close' : 'open'} the claim window: HTTP ${r.status}`);
+      process.exit(1);
+    }
+    if (disabled) {
+      console.log('claim window CLOSED -- no new account can be created in this project.');
+    } else {
+      console.log('claim window OPEN.');
+      console.log('');
+      console.log(`  Sign in at https://${PROJECT}.web.app/admin/ with Google, NOW.`);
+      console.log('  The first account to sign in becomes the admin. Until that happens,');
+      console.log('  anyone who reaches that page could take it instead -- so do it now,');
+      console.log('  then run:  node tools/firebase-setup.js --close-claim');
+    }
+  }
+
+  /** Has anybody claimed it, and is the window still open? */
+  async function claimStatusCommand() {
+    const tok = await accessToken();
+    const doc = await api(tok, 'GET',
+      `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/admin/allowlist`);
+    const cfg = await api(tok, 'GET',
+      `https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config`);
+    const open = !(((cfg.json || {}).client || {}).permissions || {}).disabledUserSignup;
+
+    if (doc.status === 404) {
+      console.log('claimed   : NO -- nobody is an admin by sign-in yet');
+    } else if (doc.status === 200) {
+      const f = (doc.json || {}).fields || {};
+      const uids = (((f.uids || {}).arrayValue || {}).values || []).map(v => v.stringValue);
+      console.log('claimed   : YES');
+      console.log('by        : ' + ((f.claimedBy || {}).stringValue || 'unknown') +
+        '  at ' + ((f.claimedAt || {}).stringValue || 'unknown'));
+      console.log('admin uids: ' + uids.join(', '));
+    } else {
+      console.log('claimed   : could not tell (HTTP ' + doc.status + ')');
+    }
+    console.log('sign-up   : ' + (open ? 'OPEN -- the claim can still be taken' : 'closed'));
+    if (doc.status === 200 && open) {
+      console.log('');
+      console.log('  It is claimed but the window is still open. Close it:');
+      console.log('    node tools/firebase-setup.js --close-claim');
+    }
+  }
+
   // The allowlist commands are their own small program: one file, at most one
   // deploy, and no project call at all in the --dry-run and --rules paths, so
   // they work on a machine that cannot reach Firebase.
   if (LIST_ADMINS) { await listAdminsCommand(); return; }
   if (ADD_ADMIN !== null) { await addAdminCommand(ADD_ADMIN); return; }
+  if (CLAIM_STATUS) { await claimStatusCommand(); return; }
+  if (OPEN_CLAIM) { await setSignup(false); return; }
+  if (CLOSE_CLAIM) { await setSignup(true); return; }
 
   const tok = await accessToken();
   console.log(`project: ${PROJECT}`);

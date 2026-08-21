@@ -47,9 +47,32 @@ service cloud.firestore {
       ];
     }
 
+    // The claim document, and why the allowlist is not only a literal.
+    //
+    // A uid baked into this file can only be added by editing and deploying
+    // it, which means the owner cannot become an admin by signing in with
+    // Google -- they would have to learn their own uid first, from a
+    // dashboard they cannot open. So the first person to sign in claims the
+    // project: admin/allowlist is created once, with exactly its creator in
+    // it, and from then on it is admin-only like everything else.
+    //
+    // Trust on first use, with the window stated honestly rather than hidden:
+    // between deploying this and someone claiming it, ANY account that can
+    // sign in can take it. That is why firebase-setup keeps sign-up disabled
+    // by default, opens it only for the claim, and closes it again the moment
+    // the document exists -- and why --claim-status exists to ask whether the
+    // window is still open.
+    function claimed() {
+      return exists(/databases/$(database)/documents/admin/allowlist);
+    }
+    function claimedUids() {
+      return get(/databases/$(database)/documents/admin/allowlist).data.uids;
+    }
+
     function isAdmin() {
       return request.auth != null
-          && request.auth.uid in adminUids();
+          && (request.auth.uid in adminUids()
+              || (claimed() && request.auth.uid in claimedUids()));
     }
 
     // Optional string field: absent, or non-empty and within `max`.
@@ -161,6 +184,21 @@ service cloud.firestore {
       allow create, update: if isAdmin()
           && optTag(request.resource.data, 'tag')
           && optBool(request.resource.data, 'public');
+    }
+
+    // The claim itself. `create` is the only opening: it succeeds solely when
+    // the document does not exist, so the second caller to try gets a failure
+    // rather than a takeover, and the list they would have to overwrite is
+    // admin-only. A claimer may name only themselves -- one uid, their own --
+    // so this cannot be used to install somebody else.
+    match /admin/allowlist {
+      allow read: if isAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uids', 'claimedAt', 'claimedBy'])
+        && request.resource.data.uids is list
+        && request.resource.data.uids.size() == 1
+        && request.resource.data.uids[0] == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     match /admin/{doc} {

@@ -200,7 +200,7 @@ description translates itself: the store serves `appDesc` from whichever locale
 matches the shopper.
 
 **Still undecided: whether the `redbull` tag is named here.** The extension
-ships it either way — *Bò đỏ* / "Red bull (state-aligned troll)" is one of the
+ships it either way — *Bò đỏ* / "Redbull" is one of the
 seven tags a reporter can pick and one of the tick boxes in Settings. The copy
 above does not name it, which is the absence of a decision rather than a
 decision. Naming a politically-charged category in a public listing invites a

@@ -145,7 +145,7 @@
       tag_scam: 'Scam',
       tag_harassment: 'Harassment',
       tag_spam: 'Spam',
-      tag_redbull: 'Red bull',
+      tag_redbull: 'Redbull',
       tag_other: 'Other'
     }  };
 

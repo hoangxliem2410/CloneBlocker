@@ -29,8 +29,8 @@
     "description": "Kind of account: bulk unwanted posting. Offered as a report reason, a Settings tick box and an Activity chip."
   },
   "tag_redbull": {
-    "message": "Red bull (state-aligned troll)",
-    "description": "Kind of account: a state-aligned troll. 'Red bull' is a calque of the Vietnamese slang 'bò đỏ' and should be that phrase in Vietnamese. Offered as a report reason, a Settings tick box and an Activity chip."
+    "message": "Redbull",
+    "description": "Kind of account: a state-aligned troll. English uses the loanword Redbull; Vietnamese uses the slang it comes from, Bo do (with diacritics). Offered as a report reason, a Settings tick box and an Activity chip."
   },
   "tag_other": {
     "message": "Something else",

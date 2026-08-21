@@ -51,12 +51,11 @@
     $('listAge').textContent = bl ? ago(bl.fetchedAt) : '—';
 
     const stats = (state && state.stats) || {};
-    if (stats.lastError) {
-      $('listError').textContent = stats.lastError;
-      $('listError').classList.remove('hidden');
-    } else {
-      $('listError').classList.add('hidden');
-    }
+    // stats.lastError is always about platform blocking, and it used to be
+    // rendered in this card -- the one headed Blocklist / Last refresh -- so a
+    // block that could not run read as "the list failed to load". It belongs
+    // with the page capability it describes, further down.
+    $('listError').classList.add('hidden');
 
     $('hideEnabled').checked = settings.hideEnabled !== false;
     $('platformBlockEnabled').checked = !!settings.platformBlockEnabled;
@@ -95,6 +94,20 @@
     $('hiddenCount').textContent = tabStatus.dom ? String(tabStatus.dom.hidden) : '—';
     $('capBridge').textContent = tabStatus.handshake ? 'connected' : 'not connected';
     $('capViewer').textContent = tabStatus.viewerId || 'signed out';
+
+    // A recorded failure is only worth showing while it is still true. A
+    // signed-out complaint is plainly stale once the page reports a viewer,
+    // and anything older than the last hour is history rather than status.
+    const err = stats.lastError;
+    const staleSignedOut = err && /Signed out of the site/.test(err) && tabStatus.viewerId;
+    const old = stats.lastErrorAt && (Date.now() - stats.lastErrorAt) > 3600 * 1000;
+    if (err && !staleSignedOut && !old) {
+      $('blockError').textContent = stats.lastErrorAt
+        ? `${err}  (${ago(stats.lastErrorAt)})` : err;
+      $('blockError').classList.remove('hidden');
+    } else {
+      $('blockError').classList.add('hidden');
+    }
 
     const cap = tabStatus.capability;
     if (!cap) {

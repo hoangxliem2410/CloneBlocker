@@ -11,3 +11,8 @@ server/reports.json
 # Per-server HMAC salt for reporter pseudonyms. Losing it resets every
 # reporter to a stranger; leaking it de-anonymises the report store.
 server/.reporter-salt
+
+# The popup capture prints the signed-in account id in its capability
+# panel. It is written to a temp dir by tools/make-store-assets.js and must
+# never be committed.
+docs/shots/popup.png

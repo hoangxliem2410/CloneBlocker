@@ -407,10 +407,11 @@ function heroHtml() {
  * extension needs a non-headless Chrome and there is usually one up already.
  */
 async function captureExtensionPages(dir) {
-  const out = {
-    popup: path.join(ROOT, 'docs', 'shots', 'popup.png'),
-    options: path.join(dir, 'options.png')
-  };
+  // Both go to a temp dir that is deleted at the end. The popup in particular
+  // must never land in the repo: its Page capability panel prints "Signed in
+  // as <numeric account id>", so a committed copy would publish the real
+  // account of whoever ran this.
+  const out = { popup: path.join(dir, 'popup.png'), options: path.join(dir, 'options.png') };
   let version = null, port = null;
   for (const p of [9333, 9360]) {
     try { version = await (await fetch(`http://localhost:${p}/json/version`)).json(); port = p; break; }

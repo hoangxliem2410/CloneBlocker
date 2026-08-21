@@ -54,9 +54,12 @@ Screenshot 2 is drawn instead of captured on purpose. The obvious second image
 is the popup, but on a page where the site has not yet loaded its own block
 module the popup honestly reports that, in red, and it stays there until the
 user opens a profile menu. The choice was to misconfigure the extension for a
-prettier picture or to explain the actual model — so it explains the model. The
-real popup is still captured, to `docs/shots/popup.png`, where a capability
-notice is information rather than a blemish.
+prettier picture or to explain the actual model — so it explains the model.
+
+The popup is still captured by the tool, but only to a temporary directory that
+is deleted afterwards. It must not be committed: its Page capability panel
+prints **Signed in as `<numeric account id>`**, so a copy in the repository
+would publish the real account of whoever generated it.
 
 **Worth adding before you submit:** a fifth screenshot of a clone actually
 disappearing from a real feed. That one has to be yours — it can only be taken

@@ -39,6 +39,12 @@ async function getSettings() {
 async function setSettings(patch) {
   const next = Object.assign(await getSettings(), patch || {});
   await chrome.storage.sync.set({ [KEYS.SETTINGS]: next });
+  // Every recorded error is about platform blocking. Switching blocking off
+  // makes all of them historical, so none should still be on screen.
+  if (patch && patch.platformBlockEnabled === false) {
+    const stats = await getLocal(KEYS.STATS, {});
+    if (stats.lastError) { clearError(stats); await setLocal(KEYS.STATS, stats); }
+  }
   return next;
 }
 async function getLocal(key, fallback) {
@@ -47,6 +53,22 @@ async function getLocal(key, fallback) {
 }
 async function setLocal(key, value) {
   await chrome.storage.local.set({ [key]: value });
+}
+
+// A failure is worth remembering, but only until it stops being true.
+//
+// These were three bare assignments with nothing anywhere that cleared them,
+// so the first block that could not run left its message in the popup
+// permanently -- through a successful block, through signing back in, through
+// turning platform blocking off entirely. Stamping the time makes a stale one
+// obvious; clearing on success makes it stop being stale.
+function noteError(stats, detail) {
+  stats.lastError = String(detail || '').slice(0, 300);
+  stats.lastErrorAt = Date.now();
+}
+function clearError(stats) {
+  delete stats.lastError;
+  delete stats.lastErrorAt;
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +562,7 @@ async function reportResult(info) {
     done[platform] = Array.from(new Set([...(done[platform] || []), target]));
     stats.blockTimes.push(now);
     stats.succeeded = (stats.succeeded || 0) + 1;
+    clearError(stats);
     delete failures[key];
     delete cooldowns[key];
   } else if (ok && dryRun) {
@@ -547,10 +570,13 @@ async function reportResult(info) {
     // into cooldown, otherwise the worker would re-simulate the same first
     // entry forever and never reach the rest of the queue.
     stats.dryRuns = (stats.dryRuns || 0) + 1;
+    // A dry run resolved a strategy end to end. Whatever the last complaint
+    // was, it is no longer the current state of things.
+    clearError(stats);
     cooldowns[key] = now + DRYRUN_COOLDOWN_MS;
   } else {
     stats.failed = (stats.failed || 0) + 1;
-    stats.lastError = String(detail || '').slice(0, 300);
+    noteError(stats, detail);
     const n = (failures[key] || 0) + 1;
     failures[key] = n;
     if (n >= MAX_TARGET_FAILURES) {
@@ -572,13 +598,13 @@ async function reportResult(info) {
     delete failures[key];
     cooldowns[key] = now + 10 * 60 * 1000;
     stats.pausedUntil = now + 15 * 60 * 1000;
-    stats.lastError = 'Signed out of the site -- platform blocking paused. Sign in again, then resume.';
+    noteError(stats, 'Signed out of the site -- platform blocking paused. Sign in again, then resume.');
   }
   if (rateLimited) stats.pausedUntil = now + 20 * 60 * 1000;
   if (checkpoint) {
     stats.pausedUntil = now + 6 * 3600 * 1000;
     stats.halted = true;
-    stats.lastError = 'Account checkpoint detected. Platform blocking paused; resolve the challenge on the site.';
+    noteError(stats, 'Account checkpoint detected. Platform blocking paused; resolve the challenge on the site.');
     await setSettings({ platformBlockEnabled: false });
     try {
       await chrome.action.setBadgeText({ text: '!' });

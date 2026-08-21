@@ -528,8 +528,6 @@ expando properties on DOM nodes.
 
 ## If it says "block mutation not found"
 
-![The popup reporting that the block module is not loaded yet](docs/shots/popup.png)
-
 That is expected, not a failure. Meta ships the block module lazily — it genuinely is not
 in the page until something needs it, and neither `Bootloader.loadModules` nor
 `requireLazy` can pull it by name (both time out; the loader needs a resource map that

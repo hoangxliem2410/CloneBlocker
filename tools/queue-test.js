@@ -306,6 +306,62 @@ async function reset(settings) {
     remaining.length === 2 && remaining.indexOf('6200000001') < 0,
     JSON.stringify(remaining));
 
+  // -- 13. a recorded failure stops being shown once it stops being true ----
+  //
+  // stats.lastError was written in three places and cleared in none, so the
+  // first block that could not run pinned its message to the popup for good --
+  // through later successes, through signing back in, through turning platform
+  // blocking off. These lock the clearing behaviour in.
+  await reset({ maxColdBlocksPerHour: 50 });
+  await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000001'], warm: true });
+  const f1 = await send('sw:queue-claim', { platform: 'facebook' });
+  await send('sw:queue-result', {
+    platform: 'facebook', target: f1.target, ok: false, dryRun: false,
+    detail: "the site's own block operation is not loaded on this page yet"
+  });
+  const afterFail = await state();
+  check('a failed block records what went wrong',
+    /not loaded on this page/.test(afterFail.stats.lastError || ''),
+    JSON.stringify(afterFail.stats.lastError));
+  check('and records when, so a stale one can be told apart from a live one',
+    typeof afterFail.stats.lastErrorAt === 'number' && afterFail.stats.lastErrorAt > 0,
+    String(afterFail.stats.lastErrorAt));
+
+  await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000002'], warm: true });
+  const f2 = await send('sw:queue-claim', { platform: 'facebook' });
+  await send('sw:queue-result', { platform: 'facebook', target: f2.target, ok: true, dryRun: false });
+  const afterOk = await state();
+  check('a block that works clears the earlier failure',
+    !afterOk.stats.lastError && !afterOk.stats.lastErrorAt,
+    JSON.stringify(afterOk.stats.lastError));
+
+  // A dry run resolves a strategy end to end, so it settles the question too.
+  await reset({ platformBlockDryRun: true, maxColdBlocksPerHour: 50 });
+  await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000003'], warm: true });
+  const d1 = await send('sw:queue-claim', { platform: 'facebook' });
+  await send('sw:queue-result', {
+    platform: 'facebook', target: d1.target, ok: false, dryRun: true, detail: 'nothing to drive' });
+  await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000004'], warm: true });
+  const d2 = await send('sw:queue-claim', { platform: 'facebook' });
+  await send('sw:queue-result', { platform: 'facebook', target: d2.target, ok: true, dryRun: true });
+  const afterDry = await state();
+  check('a successful dry run clears it as well',
+    !afterDry.stats.lastError, JSON.stringify(afterDry.stats.lastError));
+
+  // Every recorded error is about blocking, so switching blocking off makes
+  // all of them historical.
+  await reset({ maxColdBlocksPerHour: 50 });
+  await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000005'], warm: true });
+  const f3 = await send('sw:queue-claim', { platform: 'facebook' });
+  await send('sw:queue-result', {
+    platform: 'facebook', target: f3.target, ok: false, dryRun: false, detail: 'signed out' });
+  check('the failure is recorded before blocking is turned off',
+    !!(await state()).stats.lastError, 'recorded');
+  await setSettings({ platformBlockEnabled: false });
+  const afterOff = await state();
+  check('turning platform blocking off clears the message it was about',
+    !afterOff.stats.lastError, JSON.stringify(afterOff.stats.lastError));
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exitCode = 1; });
 

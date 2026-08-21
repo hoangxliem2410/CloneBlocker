@@ -20,6 +20,64 @@
                 typeof chrome.i18n.getMessage === 'function') ? chrome.i18n : null;
 
   /**
+   * A locale the user asked for, overriding the browser's.
+   *
+   * chrome.i18n resolves against the BROWSER's language and offers no way to
+   * ask it for another one, so an override means reading the same
+   * _locales/<lang>/messages.json Chrome would have read and doing the lookup
+   * here. Empty until load() has run and filled it, and empty is the ordinary
+   * case: with no override this file behaves exactly as it did before.
+   */
+  let override = null;
+
+  const SUPPORTED = ['en', 'vi'];
+
+  /**
+   * Chrome's own substitution, reimplemented for the override path only.
+   * getMessage does this for us when it is doing the lookup; when we are, the
+   * $1 placeholders still have to be filled or every message with an argument
+   * comes out with the literal marker in it.
+   */
+  function substitute(message, args) {
+    return String(message).replace(/\$(\d+)/g, (whole, n) => {
+      const v = args[Number(n) - 1];
+      return v === undefined ? whole : v;
+    });
+  }
+
+  /**
+   * Load an override dictionary, then hand back whether anything changed.
+   *
+   * Callers await this BEFORE painting, because CB_T is synchronous and a page
+   * that translated itself first would have to be translated twice -- visibly,
+   * in front of the reader.
+   */
+  async function load(lang) {
+    if (!lang || lang === 'auto' || !SUPPORTED.includes(lang)) { override = null; return false; }
+    if (!chrome || !chrome.runtime || !chrome.runtime.getURL) { override = null; return false; }
+    try {
+      const res = await fetch(chrome.runtime.getURL('_locales/' + lang + '/messages.json'));
+      const json = await res.json();
+      const flat = Object.create(null);
+      for (const k of Object.keys(json)) flat[k] = json[k] && json[k].message;
+      override = { lang, flat };
+      return true;
+    } catch (e) {
+      // A missing or unreadable locale file must not take the page down with
+      // it; falling back to the browser's language is a worse outcome than
+      // the user asked for, not a broken one.
+      override = null;
+      return false;
+    }
+  }
+
+  /** The language actually in force, for <html lang> and for the picker. */
+  function current() {
+    if (override) return override.lang;
+    return i18n ? i18n.getMessage('@@ui_locale').replace(/_/g, '-') : 'en';
+  }
+
+  /**
    * CB_T('activity_needsTabMany', 4) -> "4 profiles from the list are waiting…"
    *
    * Substitution goes through getMessage's own $1 placeholders rather than
@@ -29,8 +87,16 @@
    * first: getMessage silently drops a number.
    */
   function t(key, ...args) {
+    const strs = args.map(String);
+    if (override) {
+      const m = override.flat[key];
+      if (m) return substitute(m, strs);
+      // Fall through rather than return the key: a message the override file
+      // is missing may still exist in the browser's own locale, and half a
+      // translation beats a page of identifiers.
+    }
     if (!i18n) return key;
-    return i18n.getMessage(key, args.map(String)) || key;
+    return i18n.getMessage(key, strs) || key;
   }
 
   /**
@@ -85,6 +151,9 @@
   globalThis.CB_T = t;
   globalThis.CB_FILL_I18N = fill;
   globalThis.CB_APPLY_I18N = apply;
+  globalThis.CB_LOAD_LOCALE = load;
+  globalThis.CB_LOCALE = current;
+  globalThis.CB_LOCALES = SUPPORTED.slice();
 
   // Extension pages only. This file also runs as a content script at
   // document_start, and there the document belongs to Facebook or Threads:
@@ -92,10 +161,17 @@
   // root and translates itself) and rewriting their <html lang> would be
   // vandalism.
   if (typeof document !== 'undefined' && location.protocol === 'chrome-extension:') {
-    const run = () => {
+    const run = async () => {
+      // Read the override before painting, not after. chrome.storage is async
+      // and CB_T is not, so the alternative is a page that renders in one
+      // language and then visibly rewrites itself in another.
+      try {
+        const got = await chrome.storage.sync.get('settings');
+        await load(((got && got.settings) || {}).uiLanguage);
+      } catch (e) { /* no storage access here: the browser's language stands */ }
       // Says what the page is actually written in, which is what spellcheck,
       // hyphenation and a screen reader's voice all key off.
-      if (i18n) document.documentElement.lang = i18n.getMessage('@@ui_locale').replace(/_/g, '-');
+      document.documentElement.lang = current();
       apply(document);
     };
     if (document.readyState === 'loading') {

@@ -73,5 +73,17 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "_locales/*/messages.json"
+      ],
+      "matches": [
+        "https://*.facebook.com/*",
+        "https://*.threads.net/*",
+        "https://*.threads.com/*"
+      ]
+    }
+  ]
 }

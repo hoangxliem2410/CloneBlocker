@@ -608,7 +608,16 @@ for (const page of ['popup', 'activity']) {
           if (translatedAt && depth < translatedAt) translatedAt = 0;
         } else {
           depth++;
-          if (!translatedAt && /\bdata-i18n=/.test(m[3])) translatedAt = depth;
+          // An element that declares its OWN language is deliberately not in
+          // the page's language and must not be translated: a language picker
+          // lists each language as its own speakers write it, which is the one
+          // place "English" and "Tiếng Việt" are correct in every locale.
+          // `lang` is the honest marker for that rather than a bespoke opt-out
+          // attribute -- it is exactly what the attribute already means, and a
+          // screen reader reads it the same way.
+          if (!translatedAt && (/\bdata-i18n=/.test(m[3]) || /\slang="/.test(m[3]))) {
+            translatedAt = depth;
+          }
         }
       }
       consider(src.slice(at));

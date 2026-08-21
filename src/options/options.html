@@ -25,6 +25,21 @@
        both -- and it left "work through the list but leave what I scroll past
        alone" with no way to say it. Two independent switches, both on. -->
   <section class="card">
+    <div class="field">
+      <label for="uiLanguage" data-i18n="options_languageLabel"></label>
+      <select id="uiLanguage">
+        <option value="auto" data-i18n="options_languageAuto"></option>
+        <!-- Each language named as its own speakers write it. Never
+             translated, and `lang` says so to the build check and to a
+             screen reader alike. -->
+        <option value="en" lang="en">English</option>
+        <option value="vi" lang="vi">Tiếng Việt</option>
+      </select>
+      <p class="hint" data-i18n="options_languageHint"></p>
+    </div>
+  </section>
+
+  <section class="card">
     <h2 data-i18n="options_workHeading"></h2>
 
     <div class="jobs">

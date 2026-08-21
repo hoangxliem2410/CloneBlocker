@@ -27,7 +27,7 @@
   // Order is load-bearing twice over: it breaks ties when several reasons are
   // equally popular, and it is the order the dashboard and the report sheet
   // show. New tags go before 'other', which stays the bucket of last resort.
-  const TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other'];
+  const TAGS = ['redbull', 'clone', 'impersonation', 'scam', 'harassment', 'spam', 'other'];
   const REASONS = TAGS;
   const PLATFORMS = ['facebook', 'threads'];
   const DAY_BUCKETS = 14;    // days of history kept per account
@@ -111,8 +111,10 @@
    *
    * Ties go to whichever comes first in TAGS, which is why that order is not
    * cosmetic. Scanning in TAGS order with a strict `>` gives that for free.
-   * A target with no usable reason at all falls back to 'clone' -- the reason
-   * this list exists, and the one that is never a surprise.
+   * A target with no usable reason at all falls back to the head of the list,
+   * which is also what the report sheet offers first -- one decision about
+   * what this deployment is mostly for, honoured in both places rather than
+   * spelled out twice and drifting apart.
    */
   function modalTag(reasons) {
     let best = null, bestN = 0;
@@ -120,7 +122,7 @@
       const n = (reasons && hasOwn(reasons, t)) ? reasons[t] : 0;
       if (n > bestN) { best = t; bestN = n; }
     }
-    return best || 'clone';
+    return best || TAGS[0];
   }
 
   /** The verdict: what the admin said, or failing that what the reports say. */
@@ -221,11 +223,11 @@
         key,
         platform: first.platform,
         profileId: null, username: null, displayName: null, url: null,
-        reason: REASONS.includes(first.reason) ? first.reason : 'clone',
+        reason: REASONS.includes(first.reason) ? first.reason : TAGS[0],
         // Every vote, not just the first reporter's: `reason` above is what
         // opened the case, `reasons` is what the case has come to be about.
         reasons: Object.create(null),
-        tag: 'clone',
+        tag: TAGS[0],
         status: 'pending',
         // The transparency opt-in, separate from status on purpose: blocking an
         // account and naming it on a public page are two decisions, and a

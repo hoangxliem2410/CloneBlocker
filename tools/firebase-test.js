@@ -715,14 +715,24 @@ async function swapRules() {
     L.TAGS.indexOf('redbull') < L.TAGS.indexOf('other'),
     JSON.stringify(L.TAGS));
 
+  // Asserted against the HEAD of TAGS rather than against a name. The head is
+  // a product decision that has already moved once (redbull was made the
+  // first and default reason), and a test that spells the name out just has
+  // to be edited every time -- which teaches nobody anything and eventually
+  // gets edited without being reread.
   const unusable = L.aggregate([doc('3100000005', H1, { reason: 'because' })], [])[0];
-  check('a target with no usable reason falls back to clone',
-    unusable.tag === 'clone' && Object.keys(unusable.reasons).length === 0,
-    unusable.tag);
+  check('a target with no usable reason falls back to the head of TAGS',
+    unusable.tag === L.TAGS[0] && Object.keys(unusable.reasons).length === 0,
+    unusable.tag + ' (TAGS[0]=' + L.TAGS[0] + ')');
   check('effectiveTag resolves the same way when asked directly',
-    L.effectiveTag(null, {}) === 'clone' &&
+    L.effectiveTag(null, {}) === L.TAGS[0] &&
     L.effectiveTag({ tag: 'redbull' }, { scam: 9 }) === 'redbull' &&
     L.effectiveTag({ tag: '' }, { scam: 9 }) === 'scam');
+
+  // The head of the list is what the report sheet offers before anybody
+  // touches it, so the two must not drift apart.
+  check('the reason offered first is the tag an unread target gets',
+    L.TAGS[0] === 'redbull', L.TAGS[0]);
 
   // A verdict about what an account IS does not expire because one more
   // person reported it, so the tag has to outlive the reopening.

@@ -60,12 +60,19 @@
    *
    * A reporter's `reason` is a vote and a target's `tag` is the verdict, but
    * they are the same words -- which is what lets a verdict be derived from
-   * the votes at all. Order is load-bearing: it breaks ties between equally
-   * popular reasons on the server, and it is the order every list of them is
-   * shown in here. New tags go before 'other', which stays the bucket of last
-   * resort.
+   * the votes at all.
+   *
+   * Order is load-bearing three times over, so it is a decision rather than a
+   * tidy-up: it is the order every list of them is shown in, the FIRST entry
+   * is what the report sheet offers before anyone touches it, and ties between
+   * equally popular reasons break towards whatever comes first.
+   *
+   * 'redbull' leads because it is what this deployment is mostly used to
+   * report; putting the common case first is the difference between a reporter
+   * confirming a pre-filled answer and hunting through a list every time. New
+   * tags go before 'other', which stays the bucket of last resort.
    */
-  const TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other'];
+  const TAGS = ['redbull', 'clone', 'impersonation', 'scam', 'harassment', 'spam', 'other'];
 
   /**
    * The label for each tag. One dictionary rather than one per page, because
@@ -97,12 +104,30 @@
    * English. So a key echoed straight back is read as "no translation
    * available" and the English wins.
    */
-  const TAG_LABELS = {};
-  for (const tag of TAGS) {
+  function tagLabel(tag) {
     const key = 'tag_' + tag;
     const t = globalThis.CB_T;
     const label = t ? t(key) : key;
-    TAG_LABELS[tag] = label === key ? TAG_LABELS_EN[tag] : label;
+    return label === key ? (TAG_LABELS_EN[tag] || tag) : label;
+  }
+
+  /**
+   * Resolved on READ, not once at load.
+   *
+   * This used to be a plain object built in a loop right here, which froze
+   * every label in whatever language was in force the instant protocol.js
+   * parsed -- before the language override had been fetched from storage. The
+   * result was a report sheet whose headings and buttons were Vietnamese and
+   * whose reason list was English: the one part of that dialog somebody has to
+   * read carefully, in the wrong language. A getter per tag costs nothing and
+   * cannot go stale.
+   */
+  const TAG_LABELS = {};
+  for (const tag of TAGS) {
+    Object.defineProperty(TAG_LABELS, tag, {
+      enumerable: true,
+      get: () => tagLabel(tag)
+    });
   }
 
   // Storage keys (chrome.storage.local unless noted).
@@ -131,6 +156,22 @@
     // Reporting. apiBase is derived from listUrl when left blank, so the common
     // case needs no extra configuration.
     apiBase: '',
+    /**
+     * Which language the extension's own pages speak.
+     *
+     * 'auto' means whatever the browser is set to, which is what chrome.i18n
+     * does on its own and is right for almost everybody. The override exists
+     * because it is NOT right for everybody: plenty of people run an
+     * English-language Chrome and would rather read Vietnamese, and Chrome
+     * offers no per-extension language control -- changing it means changing
+     * the whole browser and restarting it.
+     *
+     * One thing the override cannot reach: the extension's name and
+     * description in chrome://extensions and the Web Store come from the
+     * manifest, which Chrome resolves before any of our code runs.
+     */
+    uiLanguage: 'auto',      // 'auto' | 'en' | 'vi'
+
     reportUiEnabled: true,   // the in-page report affordance on profiles
     // Reporting and blocking are usually the same intent: the person filing
     // the report wants this account gone from their feed now, not once a

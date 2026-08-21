@@ -439,6 +439,18 @@
     "message": "Chế độ ẩn che các bài viết và bình luận của hồ sơ trong danh sách ngay trên trình duyệt của bạn mà không đụng đến tài khoản. Mặc định tắt: chặn thật mới là chức năng chính, còn đây dành cho ai muốn cả danh sách khuất mắt ngay lập tức.",
     "description": "Explains what hiding is and why it ships switched off."
   },
+  "options_languageAuto": {
+    "message": "Theo trình duyệt",
+    "description": "First option of the language picker: follow the browser UI language instead of choosing one."
+  },
+  "options_languageHint": {
+    "message": "Chrome không có tuỳ chọn ngôn ngữ riêng cho từng tiện ích, nên đây là của chúng tôi. Tên tiện ích hiển thị trong chrome://extensions vẫn theo trình duyệt.",
+    "description": "Hint under the language picker, explaining why the setting exists and the one thing it cannot change."
+  },
+  "options_languageLabel": {
+    "message": "Ngôn ngữ",
+    "description": "Label of the language picker at the top of the Settings page."
+  },
   "options_lastSync": {
     "message": "Đồng bộ lần cuối",
     "description": "Row label in the blocklist card; its value is how long ago the list was fetched."

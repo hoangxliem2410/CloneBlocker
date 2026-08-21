@@ -34,7 +34,7 @@
     'hideEnabled', 'hideFeedPosts', 'hideComments',
     'platformBlockDryRun', 'allowRawNetworkFallback',
     'reportUiEnabled', 'debug'];
-  const SELECT_FIELDS = ['hideMode'];
+  const SELECT_FIELDS = ['uiLanguage', 'hideMode'];
 
   // `blockTags` is none of the above: an array of tags, rendered as one
   // checkbox per tag and read back as the list of ticked ones.
@@ -319,6 +319,20 @@
     view.page = await pageCapability();
     $('diag').textContent = JSON.stringify(view, null, 2);
   }
+
+  // Repaint in place. A picker that needs a reload to show its own effect is
+  // a picker people press twice and then distrust.
+  document.getElementById('uiLanguage').addEventListener('change', async () => {
+    const lang = document.getElementById('uiLanguage').value;
+    await sw(P.SW.SET_SETTINGS, { uiLanguage: lang });
+    if (globalThis.CB_LOAD_LOCALE) {
+      await globalThis.CB_LOAD_LOCALE(lang);
+      document.documentElement.lang = globalThis.CB_LOCALE();
+      globalThis.CB_APPLY_I18N(document);
+      // Anything drawn by script rather than by markup has to be asked again.
+      load();
+    }
+  });
 
   document.getElementById('openActivity').addEventListener('click', (e) => {
     e.preventDefault();

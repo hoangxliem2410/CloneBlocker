@@ -439,6 +439,18 @@
     "message": "Hiding suppresses a listed profile’s posts and comments in your browser without touching your account. Off by default: real blocks are the product, and this is for people who also want the whole list out of sight straight away.",
     "description": "Explains what hiding is and why it ships switched off."
   },
+  "options_languageAuto": {
+    "message": "Same as my browser",
+    "description": "First option of the language picker: follow the browser UI language instead of choosing one."
+  },
+  "options_languageHint": {
+    "message": "Chrome has no per-extension language setting, so this one is ours. The extension name shown in chrome://extensions still follows your browser.",
+    "description": "Hint under the language picker, explaining why the setting exists and the one thing it cannot change."
+  },
+  "options_languageLabel": {
+    "message": "Language",
+    "description": "Label of the language picker at the top of the Settings page."
+  },
   "options_lastSync": {
     "message": "Last sync",
     "description": "Row label in the blocklist card; its value is how long ago the list was fetched."

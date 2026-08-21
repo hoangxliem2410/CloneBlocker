@@ -33,7 +33,12 @@
   // a vote for a tag, so one the tags do not contain is a vote nothing can
   // ever count. Built from the shared list rather than written out again --
   // a second copy is the copy that goes stale when a category is added.
-  const REASONS = (globalThis.CB_TAGS || [])
+  //
+  // Read when the sheet is BUILT, not when this file parses. The content
+  // script loads at document_start, long before the language override has
+  // been fetched, so a list captured here would pin the reasons to the
+  // browser's language while the rest of the sheet spoke the chosen one.
+  const reasons = () => (globalThis.CB_TAGS || [])
     .map(t => [t, (globalThis.CB_TAG_LABELS || {})[t] || t]);
 
   function log(...a) { if (settings.debug) console.debug('[CloneBlocker/report]', ...a); }
@@ -371,7 +376,7 @@
     }
 
     const sel = $('#reason');
-    for (const [value, text] of REASONS) {
+    for (const [value, text] of reasons()) {
       const o = document.createElement('option');
       o.value = value; o.textContent = text;
       sel.appendChild(o);
@@ -747,6 +752,14 @@
 
   function updateSettings(next) {
     Object.assign(settings, next || {});
+    // The sheet is painted inside somebody else's page, so it never ran the
+    // boot that extension pages use to pick up a language override. Settings
+    // arriving here is the one moment it learns of one; the load is async and
+    // the sheet is built on demand, so by the time anybody opens it the
+    // dictionary is in place.
+    if (globalThis.CB_LOAD_LOCALE) {
+      globalThis.CB_LOAD_LOCALE(settings.uiLanguage).catch(() => {});
+    }
     if (!settings.reportUiEnabled) { hideChip(); closeModal(); removeThreadButtons(); }
     else queueInject();
   }

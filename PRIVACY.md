@@ -38,7 +38,10 @@ Uninstalling the extension removes all of it.
 
 ## What leaves your device, and to where
 
-Everything below goes **only** to the backend you configured.
+Everything below goes **only** to one backend: the Firebase project the
+extension is configured to use. By default that is the project's own backend
+(`clone-blocker2`), so out of the box your reports go there; if you point the
+extension at a backend you run, they go to yours instead and nowhere else.
 
 ### Fetching the list
 
@@ -99,11 +102,13 @@ threads.net and threads.com.
 
 The data is not sold, rented, or shared. Two parties can technically see it:
 
-- **The owner of the backend you configured.** If that is your own Firebase
-  project, that is you, alone — the security rules make reports readable only
-  by the one admin account. If you point the extension at a list someone else
-  runs, they receive the reports you file — ask them what they do with them,
-  because this policy cannot speak for their backend.
+- **The owner of the configured backend.** With the default backend, that is
+  this project's maintainer, who can read the reports you file (the security
+  rules make them readable only by the project's one admin account, and the
+  reporter identity is only a truncated hash — see above). Point the extension
+  at your own Firebase project and that owner is you, alone; point it at a
+  backend someone else runs and it is them. This policy can only speak for the
+  code, not for what any backend operator does with what they receive.
 - **Google**, as the infrastructure under a Firebase backend. The data sits in
   Firestore inside your Google Cloud project, subject to Google Cloud's own
   terms and privacy commitments, the same way any hosting provider holds the

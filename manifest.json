@@ -12,7 +12,8 @@
     "https://*.facebook.com/*",
     "https://*.threads.net/*",
     "https://*.threads.com/*",
-    "https://firestore.googleapis.com/*"
+    "https://firestore.googleapis.com/*",
+    "https://clone-blocker2.web.app/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

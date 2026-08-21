@@ -120,7 +120,9 @@ Hover a name in the feed, or open the profile, and file a report with the
 posts that prove it.
 
 YOU RUN THE LIST
-Clone Blocker does not ship a blocklist and does not host one. It fetches from
+Clone Blocker ships pointed at the developer's own Firebase project (read-only
+public list) so it works on install, and can be repointed at any backend you
+run. It does not bundle a list of accounts. It fetches from
 a backend you own — your own Firebase project (the included setup provisions
 it in one command, on the free plan, with no server code) or any URL serving
 plain JSON. Reports arrive in your own moderation dashboard, ranked by
@@ -214,24 +216,23 @@ network destinations are the two Meta origins and the endpoint the user typed.
 
 ### Notes for the reviewer
 
-This field matters more than usual here, because an unconfigured install shows
-a reviewer nothing at all. Suggested text:
+This field matters because the extension's effect is only visible on Facebook
+and Threads. Suggested text:
 
 ```
-This extension has no built-in blocklist by design — it fetches from a
-backend the user owns, so out of the box it is inert. There is no server to
-start: the backend is a Firebase project, and any URL serving a plain JSON
-list also works.
+The extension works on install with no configuration: it ships pointed at
+our Firebase project's public, read-only blocklist, and the two backend
+origins it needs are declared as required permissions, so there is no setup
+step and no permission prompt.
 
 To exercise it end to end:
-  1. In the extension's options, set the endpoint to the public list of the
-     demo Firebase project:
+  1. Install it, then load Threads (threads.com) or Facebook. Content from
+     any account on the list is hidden immediately — no configuration needed.
+  2. The list is served read-only from Firestore's public REST endpoint at
      https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current
-     press "Grant access", then "Test & refresh now".
-  2. Alternatively, any static JSON works as an endpoint — for example a
-     file containing {"ids":["100001234567890"],"usernames":["some.handle"]}
-     served from any URL you control.
-  3. Load Threads or Facebook. Content from listed accounts is hidden.
+     — open it in a browser to see the exact bytes the extension fetches.
+  3. To point it at your own backend, set a different URL in options; any URL
+     serving {"ids":[...],"usernames":[...]} works.
 
 Layer 1 (hiding) works immediately and sends nothing.
 Layer 2 (platform blocking) is on by default but tightly paced: profiles the

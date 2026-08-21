@@ -67,8 +67,11 @@
   };
 
   const DEFAULT_SETTINGS = {
-    // Where the blocklist comes from.
-    listUrl: '',
+    // Where the blocklist comes from. Prewired to the project's own backend so
+    // a fresh install works with zero setup and zero permission prompts (the
+    // origin is a required host permission). Self-hosters change it in options;
+    // the report path derives itself from whatever URL is here.
+    listUrl: 'https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current',
     listAuthHeader: '',      // optional "Authorization: ..." value
     refreshMinutes: 60,
 

@@ -410,13 +410,21 @@ account involved loses weight — including on reports they filed earlier.
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select this directory.
-3. Open the extension's **Settings** and set your blocklist endpoint. For a
-   Firebase backend that is the public document URL —
-   `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/blocklist/current`
-   — and any URL returning one of the plain-JSON shapes below works too.
-4. Click **Grant access** next to the URL — this requests host permission for that origin
-   (required; Chrome will not let the extension fetch it otherwise).
-5. Click **Test & refresh now**. You should see the parsed counts.
+3. That is the whole setup. The extension ships pointed at this project's
+   Firebase backend, whose two origins are declared as required permissions,
+   so it starts working with **no configuration and no permission prompts**:
+   the list loads on the first refresh, hiding is on, and Layer 2 runs at its
+   cautious paced defaults.
+
+**Pointing it at your own backend instead** (recommended if you run the
+project yourself — see [Firebase backend](#firebase-backend)):
+
+- Open **Settings** and set the endpoint to your own document URL,
+  `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/blocklist/current`
+  (any URL returning one of the plain-JSON shapes below works too).
+- If that origin is not one the manifest already declares — a self-hosted
+  server, a different Hosting domain — click **Grant access** next to the URL
+  so Chrome permits the fetch, then **Test & refresh now**.
 
 Requires Chrome 120+ (`"world": "MAIN"` needs 111; the 30-second `chrome.alarms` floor
 and MV3 behaviour here assume 120).

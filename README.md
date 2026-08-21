@@ -364,7 +364,12 @@ still has no path to the admin's session.
 
 ### The published document
 
-`blocklist/current` is what every installation polls. Inside its `json` field:
+`blocklist/current` is what the dashboard writes and `tools/publish-static.js`
+mirrors to `https://clone-blocker2.web.app/blocklist.json`, which is what every
+installation actually polls — a static file on the CDN rather than a billed
+document read per install per hour, from an endpoint anyone can hammer. Reports
+still go to Firestore, through `apiBase`; only the read moved. Inside the
+`json` field:
 
 ```jsonc
 {

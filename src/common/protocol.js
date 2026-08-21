@@ -145,8 +145,22 @@
   // which made the first thing a new user saw a question they had no way to
   // answer. Overridable through storage (the harnesses do exactly that) but
   // no UI writes it any more.
-  const LIST_URL =
-    'https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current';
+  // The list is read from Hosting, not from Firestore.
+  //
+  // Every install polls this hourly, and the content changes rarely. Against
+  // Firestore that is one billed document read per poll per install, from an
+  // endpoint anybody can hammer -- read quota becomes a function of user count
+  // and of whoever feels like generating traffic. The CDN copy is free, is
+  // cached at the edge, and answers an unchanged poll with a real 304 that
+  // never reaches a database. tools/publish-static.js mirrors the document
+  // there, and `npm run deploy` runs it.
+  //
+  // Reports still go to Firestore: they are writes, they need the rules, and
+  // Hosting cannot accept them. Hence the separate API base below -- with the
+  // list URL no longer a Firestore URL, it can no longer be derived from it.
+  const LIST_URL = 'https://clone-blocker2.web.app/blocklist.json';
+  const API_BASE =
+    'https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents';
 
   const DEFAULT_SETTINGS = {
     listUrl: LIST_URL,
@@ -155,7 +169,7 @@
 
     // Reporting. apiBase is derived from listUrl when left blank, so the common
     // case needs no extra configuration.
-    apiBase: '',
+    apiBase: API_BASE,
     /**
      * Which language the extension's own pages speak.
      *
@@ -290,6 +304,7 @@
   }
 
   globalThis.CB_LIST_URL = LIST_URL;
+  globalThis.CB_API_BASE = API_BASE;
   globalThis.CB_MODE_OF = modeOf;
   globalThis.CB_BLOCK_MODES = blockModes;
   globalThis.CB_TAGS = TAGS;

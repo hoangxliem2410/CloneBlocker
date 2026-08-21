@@ -495,6 +495,61 @@ async function reset(settings) {
   // The blocklist can now live in a Firestore document; the service worker
   // must decode the envelope, rank the published metadata LOCALLY (nothing
   // about the browser is sent), and file reports as create-only documents.
+  // The shipped default: the list comes off Hosting as plain JSON with a real
+  // HTTP ETag, and reports go to Firestore through an apiBase that can no
+  // longer be derived from the list URL. Both halves are checked, because the
+  // failure mode of getting this wrong is a working list and silently broken
+  // reporting.
+  {
+    const CDN = 'https://clone-blocker2.web.app/blocklist.json';
+    const FS  = 'https://firestore.googleapis.com/v1/projects/clone-blocker2' +
+                '/databases/(default)/documents';
+    const published = { v: 1, ids: ['5100000001'], usernames: ['someclone'],
+                        idTags: { '5100000001': 'redbull' }, targets: [] };
+    const seen = [];
+    global.fetch = async (url, opts) => {
+      seen.push({ url: String(url), method: (opts || {}).method || 'GET' });
+      if (String(url).startsWith(CDN)) {
+        return { ok: true, status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'etag' ? 'W/"abc123"' : null) },
+          text: async () => JSON.stringify(published),
+          json: async () => published };
+      }
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => '{}', json: async () => ({}) };
+    };
+
+    await reset({ platformBlockEnabled: true });
+    await setSettings({ listUrl: CDN, apiBase: FS });
+    const r = await send('sw:refresh-now');
+    check('a plain JSON list on the CDN decodes',
+      r.ok && r.blocklist.ids.includes('5100000001') &&
+      r.blocklist.usernames.includes('someclone'),
+      JSON.stringify(r.blocklist && r.blocklist.ids));
+    check('and its HTTP ETag is kept for the next poll',
+      r.blocklist.etag === 'W/"abc123"', String(r.blocklist.etag));
+    check('the published tag survives the CDN shape',
+      (r.blocklist.idTags || {})['5100000001'] === 'redbull',
+      JSON.stringify(r.blocklist.idTags));
+    check('no request went to Firestore to read the list',
+      seen.every(c => !/firestore/.test(c.url)),
+      JSON.stringify(seen.map(c => c.url)));
+    // A static file cannot use a ranking hint, and on a CDN a per-user query
+    // string is the difference between an edge-cached 304 and a fresh
+    // transfer per install per hour -- besides putting the reader's timezone
+    // in somebody's HTTP logs for nothing.
+    check('and the CDN is asked for the plain URL, describing nobody',
+      seen[0] && seen[0].url === CDN, seen[0] && seen[0].url);
+
+    seen.length = 0;
+    await send('sw:submit-report', { platform: 'threads', profileId: '5100000009',
+      username: 'someclone', reason: 'redbull', viewerId: '778899' });
+    const wrote = seen.find(c => c.method === 'POST');
+    check('a report still reaches Firestore, not the CDN',
+      !!wrote && wrote.url.startsWith(FS + '/reports?documentId='),
+      wrote ? wrote.url.slice(0, 100) : JSON.stringify(seen));
+  }
+
   // These drive the real refresh/submit/status handlers with fetch stubbed.
   {
     const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
@@ -593,8 +648,12 @@ async function reset(settings) {
       JSON.stringify(r.blocklist.targets[0].why));
     check('the document updateTime stands in for the etag',
       r.blocklist.etag === '2026-08-21T03:04:05Z', String(r.blocklist.etag));
-    check('pending report keys ride along for the status chip',
-      r.blocklist.pending && r.blocklist.pending[0] === 'threads:@maybe.clone',
+    // Inverted deliberately. The list used to carry every reported-but-
+    // unreviewed key so the chip could say "already reported" about somebody
+    // else's report -- which published an unreviewed accusation to a document
+    // anyone on the internet can read, filed by anyone, with no account.
+    check('an unreviewed accusation is not cached from the list',
+      !r.blocklist.pending || r.blocklist.pending.length === 0,
       JSON.stringify(r.blocklist.pending));
     check('docIdOverrides still hot-patch through the Firestore path',
       (store.local.docIdOverrides || {}).probe === 'x',
@@ -613,11 +672,26 @@ async function reset(settings) {
     check('an approved id answers blocked from the cached list, no fetch',
       stat1.ok && stat1.blocked === true && stat1.status === 'approved' && calls.length === 0,
       JSON.stringify(stat1));
+    // A target this browser has never reported is simply unknown -- not
+    // "pending", which would be repeating a stranger's accusation.
     const stat2 = await send('sw:report-status',
       { platform: 'threads', username: 'maybe.clone', force: true });
-    check('a pending key answers pending from the cached list',
-      stat2.ok && stat2.blocked === false && stat2.status === 'pending',
+    check('somebody else’s report is not something we claim to know about',
+      stat2.ok && stat2.blocked === false && stat2.status === null,
       JSON.stringify(stat2));
+
+    // But our own submission still shows as pending afterwards, and keeps
+    // showing -- that is the half of the chip worth having, and it needs no
+    // public list to work.
+    {
+      store.local.reportedCache = { 'threads:@maybe.clone':
+        { status: 'pending', count: 1, blocked: false, at: 1 } };   // long stale
+      const mine = await send('sw:report-status',
+        { platform: 'threads', username: 'maybe.clone', force: true });
+      check('our own report still reads pending, however old the record',
+        mine.ok && mine.status === 'pending', JSON.stringify(mine));
+      delete store.local.reportedCache;
+    }
 
     // Submitting a report becomes a create-only document write.
     calls.length = 0;

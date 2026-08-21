@@ -38,7 +38,6 @@ Published payload inside `json`:
   "ids": ["63082166531", ...],          // hide + block layer (numeric ids)
   "usernames": ["somename", ...],       // hide layer only, lowercase, no @
   "docIdOverrides": {},                 // opaque string→string, ≤100, ≤64 chars each
-  "pending": ["threads:9100000001", "threads:@name", ...],   // report keys, status only
   "targets": [                          // per-target ranking METADATA (not ranked!)
     { "platform": "threads", "id": "9100000001",
       "username": "x" , "displayName": "Y",
@@ -52,6 +51,8 @@ Published payload inside `json`:
 ```
 `targets` contains **only approved, id-bearing targets whose id is in `ids`**
 (pending is never blockable — the single most safety-critical invariant).
+
+**No `pending` array.** Removed in the security pass. Reports can be created by anyone -- no account, no review -- so an array of reported-but-unreviewed keys on the one world-readable document let a stranger have any profile they chose named publicly as reported. It also contradicted the rule stated everywhere else here: naming an account in public is a separate decision a person takes about that account, one at a time. The in-page chip now answers from what the browser itself reported, which is the only part of the question it was ever entitled to know.
 Publish caps `targets` at the 2000 most recent to stay far under the 1MB doc cap.
 
 ### `reports/{dedupKey}` — public **create-only**; admin read/update/delete
@@ -132,7 +133,6 @@ tests — `globalThis`/`module.exports` dual export, zero deps, no DOM).
   - approved + no id + username → username into `usernames`
   - status pending/rejected → nothing (and never into `targets`)
   - manual.ids/usernames merged in; docIdOverrides from manual
-  - `pending` array = keys of records with status `'pending'`
   - per-target `trust` = Σ trustOf over its reporters (rank's trust input)
 - `sortQueue(rows)` → verbatim: held last, score desc, updatedAt desc.
 
@@ -171,10 +171,11 @@ Dashboard actions:
   client-side before any write (already the case).
 - **reportStatus** against a Firestore listUrl: no network — derive from the
   cached list: `blocked` = id/username membership, `status` = 'approved' if
-  blocked else 'pending' if key ∈ payload.pending else null. Keep the response
+  blocked else 'pending' if this browser filed the report else null (the list
+  carries no `pending` array — see below). Keep the response
   shape `{ ok, key, status, count, blocked }` (count 0 when unknown).
 - Keep: ETag header handling (dead against Firestore but alive for legacy),
-  queue/warm/cold logic untouched, `pending` keys cached on the blocklist record.
+  queue/warm/cold logic untouched.
 
 `src/options/options.html|js`: endpoint help text now shows the Firestore URL
 pattern first; everything else unchanged. No new settings.

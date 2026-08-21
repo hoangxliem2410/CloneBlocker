@@ -48,6 +48,28 @@ Held in Chrome's extension storage, and never transmitted:
 
 Uninstalling the extension removes all of it.
 
+## What the blocklist request tells us
+
+Nothing about you, on purpose.
+
+The list is a static file on a CDN and is fetched with no query string: no
+timezone, no language, no identifier, no budget hint. Two installations in
+different countries send byte-identical requests. The ranking that decides
+which accounts to work through first is computed inside your browser, from
+metadata the file already carries — it never leaves the machine.
+
+The hosting provider sees what any web server sees when a file is fetched: an
+IP address and a timestamp. We do not join that to anything, because there is
+nothing to join it to.
+
+**Accounts other people have reported are not published.** The list names only
+accounts a person has reviewed and approved. It used to also carry the keys of
+reports still awaiting review, so the in-page chip could say "already reported"
+about somebody else's report — but anyone can file a report, with no account
+and no review, so that let a stranger have any profile they chose named on a
+world-readable document. The chip now only knows about reports this browser
+filed.
+
 ## What leaves your device, and to where
 
 Everything below goes **only** to one backend: the Firebase project at the

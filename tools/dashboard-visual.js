@@ -271,7 +271,8 @@ async function swapRules(uid) {
   }
 
   const emu = spawn(process.execPath,
-    [FIREBASE_BIN, 'emulators:start', '--only', 'firestore,auth,hosting', '--project', PROJECT],
+    [FIREBASE_BIN, 'emulators:start', '--only', 'firestore,auth,hosting',
+     '--project', PROJECT, ...require('./dev-config.js').devConfigArgs()],
     { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: javaEnv() });
   emu.stdout.on('data', () => {});
   emu.stderr.on('data', d => console.error('[emulator]', String(d).trim()));

@@ -6,6 +6,12 @@
 const path = require('path');
 const cached = path.join(require('os').homedir(), '.cache', 'firebase', 'tools', 'bin', 'firebase');
 const args = process.argv.slice(2);
+// The emulators need a CSP that names them; production must not carry one.
+// See tools/dev-config.js -- the dev config is generated here rather than
+// committed, so there is no second file to keep in step with firebase.json.
+if (args.some(a => /^emulators/.test(a)) && !args.includes('--config')) {
+  args.push(...require('./dev-config.js').devConfigArgs());
+}
 const { javaEnv } = require('./java-env.js');
 const env = javaEnv();
 const r = require('fs').existsSync(cached)

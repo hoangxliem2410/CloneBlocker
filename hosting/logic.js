@@ -415,10 +415,20 @@
    */
   function buildPublish(records, rep, manual) {
     const m = manual || {};
-    const ids = [], usernames = [], pending = [], targets = [];
+    const ids = [], usernames = [], targets = [];
 
     for (const r of records) {
-      if (r.status === 'pending') pending.push(r.key);
+      // Reported-but-not-yet-reviewed accounts used to be listed here, as
+      // `pending`, so the in-page chip could say "already reported" about
+      // somebody else's report. That published an unreviewed accusation to a
+      // world-readable document: anyone could file reports, with no account
+      // and no review, and have any profile they liked named publicly as
+      // reported. It also contradicted the rule this project states
+      // everywhere else -- that naming an account in public is a separate
+      // decision a person takes about that account, one at a time.
+      //
+      // The chip now answers from what this browser itself reported, which is
+      // the only part of the question it was ever entitled to know.
       if (r.status !== 'approved') continue;
       if (isId(r.profileId)) {
         if (!ids.includes(String(r.profileId))) ids.push(String(r.profileId));
@@ -478,7 +488,6 @@
       ids, usernames,
       docIdOverrides: (m.docIdOverrides && typeof m.docIdOverrides === 'object')
         ? m.docIdOverrides : {},
-      pending,
       targets,
       idTags,
       // Shipped with the list so both rankers agree without an extension

@@ -15,8 +15,9 @@
     "test:firebase": "node tools/firebase-test.js",
     "fb": "node tools/fb.js",
     "emulators": "node tools/fb.js emulators:start --project demo-clone",
-    "deploy": "node tools/fb.js deploy --only firestore,hosting",
-    "store-assets": "node tools/make-store-assets.js"
+    "deploy": "node tools/fb.js deploy --only firestore,hosting && node tools/publish-static.js",
+    "store-assets": "node tools/make-store-assets.js",
+    "publish": "node tools/publish-static.js"
   },
   "engines": {
     "node": ">=20"

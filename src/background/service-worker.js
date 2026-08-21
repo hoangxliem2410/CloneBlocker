@@ -350,10 +350,26 @@ function clientContext() {
 }
 
 /** Add the ranking hints to the list URL, respecting the privacy setting. */
+/**
+ * True when the list is a PUBLISHED FILE rather than a server that ranks for
+ * us -- a Firestore document, or the static JSON mirrored onto Hosting.
+ *
+ * The distinction decides whether this browser describes itself in the URL,
+ * so it is worth being exact about. A static file cannot use a hint: the
+ * ranking happens locally in rankPublishedTargets from metadata the file
+ * already carries. Sending them anyway would put the reader's timezone and
+ * language in someone's HTTP logs for nothing -- and, on a CDN, give every
+ * user a different URL, which is the difference between an edge-cached 304
+ * and a fresh transfer per install per hour.
+ */
+function isStaticList(url) {
+  const u = String(url || '');
+  if (isFirestoreUrl(u)) return true;
+  try { return /\.json$/i.test(new URL(u).pathname); } catch (e) { return false; }
+}
+
 function withClientContext(listUrl, settings, budget) {
-  // A Firestore document URL takes no hints: nothing about this browser is
-  // sent, and the ranking happens locally in rankPublishedTargets instead.
-  if (isFirestoreUrl(listUrl)) return listUrl;
+  if (isStaticList(listUrl)) return listUrl;
   let u;
   try { u = new URL(listUrl); } catch (e) { return listUrl; }
   if (modeOf(settings) === 'passive') return listUrl;
@@ -615,9 +631,6 @@ async function refreshBlocklist(force) {
     targets,
     targetsAvailable,
     idTags,
-    // Report keys still awaiting a decision, so the report chip can say
-    // "already reported" without asking anyone.
-    pending: Array.isArray(payload.pending) ? payload.pending.slice(0, 5000) : [],
     etag: res.headers.get('etag') || fsUpdateTime || null,
     fetchedAt: Date.now(),
     source: settings.listUrl,
@@ -1598,9 +1611,11 @@ async function reportStatus(q, force) {
     return { ok: true, key, cached: true, status: hit.status, count: hit.count, blocked: hit.blocked };
   }
 
-  // Against a Firestore list there is nothing to ask: the published document
-  // already carries what the chip needs. Blocked is list membership; pending
-  // is the published pending-keys array; anything else is simply unreported.
+  // Against a published list there is nothing to ask. Blocked is list
+  // membership. "Pending" is what THIS browser reported and has not seen
+  // land -- read from the local record rather than from the list, because the
+  // list no longer carries other people's unreviewed reports and should not:
+  // that was an unreviewed accusation on a public endpoint.
   const fsSettings = await getSettings();
   const fsStatusMode = firestoreDocsBase(fsSettings.apiBase + '/') ||
     (!fsSettings.apiBase && firestoreDocsBase(fsSettings.listUrl));
@@ -1610,8 +1625,10 @@ async function reportStatus(q, force) {
     const uname = normUsername(q.username);
     const blocked = !!(rec && (((rec.ids || []).includes(pid)) ||
                                (uname && (rec.usernames || []).includes(uname))));
-    const status = blocked ? 'approved'
-      : (rec && (rec.pending || []).includes(key)) ? 'pending' : null;
+    // `hit` may be stale -- that is why we are here rather than returning
+    // above -- but staleness is irrelevant to the only fact it is being asked
+    // for. Whether this browser filed a report does not expire.
+    const status = blocked ? 'approved' : (hit ? 'pending' : null);
     return { ok: true, key, status, count: 0, blocked };
   }
 

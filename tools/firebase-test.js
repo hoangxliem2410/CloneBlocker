@@ -154,7 +154,7 @@ async function swapRules() {
   } });
   const seedPayload = { v: 1, updatedAt: new Date().toISOString(),
     ids: ['63082166531'], usernames: ['threads'], docIdOverrides: {},
-    pending: [], targets: [] };
+    targets: [] };
   await api('PATCH', '/blocklist/current', listDoc(seedPayload, 1), OWNER);
 
   const pub = await api('GET', '/blocklist/current');
@@ -494,9 +494,17 @@ async function swapRules() {
   check('a pending id never appears in targets',
     !payload.targets.some(t => t.id === '7100000001'),
     JSON.stringify(payload.targets.map(t => t.id)));
-  check('pending keys are published as status only',
-    payload.pending.includes('threads:7100000001') &&
-    !payload.pending.includes('threads:7200000001'));
+  // Was: "pending keys are published as status only". They are not published
+  // at all any more. Anyone could create reports without an account and
+  // without review, so that array let a stranger have any profile they chose
+  // named publicly as reported -- on the one document in this project that is
+  // world-readable by design.
+  check('an unreviewed report names nobody in public',
+    !('pending' in payload),
+    'pending' in payload ? JSON.stringify(payload.pending) : 'absent');
+  check('and no reported-but-unapproved key survives anywhere in the payload',
+    !JSON.stringify(payload).includes('7100000001'),
+    JSON.stringify(payload).slice(0, 120));
 
   const revoked = L.aggregate(pubDocs, [
     dec('threads:6100000001', 'pending'),          // revoke = back to pending

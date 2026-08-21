@@ -389,6 +389,30 @@ Connections are bounded too: 30s request timeout, 20s headers timeout.
 Requires Chrome 120+ (`"world": "MAIN"` needs 111; the 30-second `chrome.alarms` floor
 and MV3 behaviour here assume 120).
 
+## Publishing to the Chrome Web Store
+
+Everything the listing needs is generated and reproducible:
+
+```
+npm run store-assets       # icons, promo tiles, marquee, screenshots -> store/
+```
+
+The icons are drawn from distance fields with no dependencies, so they stay
+crisp at 16px instead of being a downscaled bitmap. The promo tiles and
+screenshots are laid out in HTML and captured at their exact pixel size, and
+the screenshots of the extension's own pages are genuine captures from a
+browser with it loaded rather than mockups.
+
+**[docs/CHROME-WEB-STORE.md](docs/CHROME-WEB-STORE.md)** has the rest: the
+current requirements with sources, the listing copy ready to paste, permission
+justifications, the data-collection disclosures, reviewer notes, a
+pre-submission checklist — and an honest read on where this could be rejected,
+including the parts that cannot be engineered away.
+
+[PRIVACY.md](PRIVACY.md) is the privacy policy the store requires, and its
+claims are checkable against the source: the only outbound requests in the
+extension go to the two Meta origins and the endpoint you typed.
+
 ---
 
 ## Blocklist server contract
@@ -503,6 +527,8 @@ expando properties on DOM nodes.
 ---
 
 ## If it says "block mutation not found"
+
+![The popup reporting that the block module is not loaded yet](docs/shots/popup.png)
 
 That is expected, not a failure. Meta ships the block module lazily — it genuinely is not
 in the page until something needs it, and neither `Bootloader.loadModules` nor
@@ -632,5 +658,9 @@ src/  main/ content/ background/ popup/ options/ common/ ui/
 server/server.js          reference blocklist server
 tools/e2e-test.js         end-to-end browser test
 tools/make-icons.js       dependency-free PNG generation
+tools/make-store-assets.js  listing tiles and screenshots, at exact sizes
 docs/RESEARCH.md          internals findings, with what is and isn't verified
+docs/CHROME-WEB-STORE.md  store requirements, listing copy, rejection risks
+store/                    generated listing assets
+PRIVACY.md                privacy policy (required by the store)
 ```

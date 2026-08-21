@@ -14,7 +14,8 @@
     "test:static": "node tools/check.js",
     "test:server": "node tools/server-test.js",
     "test:report": "node tools/report-test.js",
-    "admin": "echo \"moderation dashboard: http://localhost:8787/admin (start the server first)\""
+    "admin": "echo \"moderation dashboard: http://localhost:8787/admin (start the server first)\"",
+    "store-assets": "node tools/make-store-assets.js"
   },
   "engines": {
     "node": ">=20"

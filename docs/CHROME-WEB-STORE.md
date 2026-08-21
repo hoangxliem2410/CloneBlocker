@@ -104,7 +104,7 @@ whole list.
 BLOCK THEM — rationed, on purpose
 A real platform block is the thing that gets an account checkpointed if you do
 too many of them, which is the exact failure this extension exists to avoid.
-So blocking is opt-in, off by default, and paced:
+So blocking is paced, hard:
 
   • Profiles you actually see on screen are blocked at a normal pace. Blocking
     someone whose profile is in front of you is what ordinary people do.
@@ -233,9 +233,9 @@ To exercise it end to end:
   3. Load Threads or Facebook. Content from listed accounts is hidden.
 
 Layer 1 (hiding) works immediately and sends nothing.
-Layer 2 (platform blocking) is OFF by default and additionally ships with a
-dry-run switch on, so nothing can be blocked until the user deliberately
-turns both off.
+Layer 2 (platform blocking) is on by default but tightly paced: profiles the
+user has seen on screen go at a human rhythm, list suggestions are capped at
+4/hour, and a dry-run switch in settings simulates without sending.
 ```
 
 ---
@@ -273,9 +273,11 @@ injected affiliate link. Blocking is neither of those things — but it is an
 action taken on a third-party site on the user's behalf, and blocks that the
 user never saw coming are the closest thing here to that pattern.
 
-What already argues for it: platform blocking is **off** by default; dry run is
-**on** by default; the cold ceiling defaults to 4/hour; the user sets every cap;
-`acceptServerTargets` can be turned off entirely.
+What argues for it: the cold ceiling defaults to 4/hour; the user sets every
+cap; `acceptServerTargets` can be turned off entirely. Note that blocking is
+now ON by default (an owner decision, 2026-08-21) — that removes the
+"off until deliberately enabled" argument this section previously leaned on,
+and makes the per-account pacing the entire defence in a review dispute.
 
 What argues against it: with blocking enabled, `acceptServerTargets` defaults
 to **true**, so the trending metadata published with the list can put an

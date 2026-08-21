@@ -86,10 +86,12 @@
     hideComments: true,
     hideFeedPosts: true,
 
-    // Layer 2 -- real platform blocks. Off by default: it mutates the
-    // account and is rate-limit sensitive.
-    platformBlockEnabled: false,
-    platformBlockDryRun: true,
+    // Layer 2 -- real platform blocks. ON by default: the warm/cold split,
+    // the hourly ceilings and the randomised pacing are the safety mechanism
+    // now, and they ship at cautious values. (Test harnesses still force this
+    // off -- a test run must never block anyone for real.)
+    platformBlockEnabled: true,
+    platformBlockDryRun: false,
 
     // Raw request fallbacks (hand-built GraphQL, Instagram REST). OFF by
     // default and deliberately so: hand-crafted requests carrying CSRF tokens

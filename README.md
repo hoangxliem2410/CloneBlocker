@@ -17,7 +17,7 @@ and why it was the right call.
 authored by listed profiles. Sends no requests and changes nothing on your
 account. Takes effect the moment the list loads.
 
-**Layer 2 — Real platform block (opt-in, off by default).** Performs genuine blocks
+**Layer 2 — Real platform block (on by default, paced).** Performs genuine blocks
 through the same internal request path the site's own Block button uses. Rate-limited,
 queued, resumable, and shipped with dry-run enabled.
 

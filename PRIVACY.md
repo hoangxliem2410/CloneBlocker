@@ -82,7 +82,8 @@ reversed to discover an unknown account ID.
 
 ### Performing a block
 
-When you have turned platform blocking on, the extension issues a block through
+When platform blocking is enabled (it is by default, and can be turned off in
+settings), the extension issues a block through
 Facebook's or Threads' own in-page mechanism, exactly as pressing their Block
 button does. That request goes to Facebook or Threads, contains only the target
 account, and carries no data from this extension.

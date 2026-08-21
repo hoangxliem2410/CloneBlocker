@@ -150,15 +150,15 @@ for (const rel of ['src/popup/popup.html', 'src/options/options.html']) {
   }
 }
 
-// ---- 6. every element the popup reaches for must exist --------------------
+// ---- 6. every element the popup and activity pages reach for must exist ---
 //
-// Same failure as the options check above, in the file people actually open.
+// Same failure as the options check above, in the files people actually open.
 // $('someId') on a missing element returns null and the next property access
-// throws, which blanks the whole popup -- and both files stay individually
+// throws, which blanks the whole page -- and both files stay individually
 // valid, so nothing else here would catch it.
-{
-  const jsPath = path.join(ROOT, 'src', 'popup', 'popup.js');
-  const htmlPath = path.join(ROOT, 'src', 'popup', 'popup.html');
+for (const page of ['popup', 'activity']) {
+  const jsPath = path.join(ROOT, 'src', page, page + '.js');
+  const htmlPath = path.join(ROOT, 'src', page, page + '.html');
   try {
     const js = fs.readFileSync(jsPath, 'utf8');
     const html = fs.readFileSync(htmlPath, 'utf8');
@@ -168,10 +168,10 @@ for (const rel of ['src/popup/popup.html', 'src/options/options.html']) {
     const list = [...ids];
     const missing = list.filter(f => !html.includes('id="' + f + '"'));
     report(missing.length === 0,
-      'popup.js elements all exist in popup.html (' + list.length + ')',
+      page + '.js elements all exist in ' + page + '.html (' + list.length + ')',
       missing.length ? 'missing: ' + missing.join(', ') : '');
   } catch (e) {
-    report(false, 'popup elements', e.message);
+    report(false, page + ' elements', e.message);
   }
 }
 

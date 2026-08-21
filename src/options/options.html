@@ -6,10 +6,17 @@
   <link rel="stylesheet" href="../ui/ui.css">
 </head>
 <body class="options">
-  <h1>Clone Blocker</h1>
-  <p class="note">
-    Fetches a profile-ID blocklist from your server and applies it on Facebook and Threads.
-  </p>
+  <header class="page-hd">
+    <div>
+      <h1>Clone Blocker</h1>
+      <p class="note">
+        Fetches a profile-ID blocklist from your backend and applies it on Facebook and Threads.
+      </p>
+    </div>
+    <nav class="page-nav">
+      <a href="#" id="openActivity">Activity</a>
+    </nav>
+  </header>
 
   <section class="card">
     <h2>Blocklist source</h2>
@@ -74,14 +81,15 @@
   </section>
 
   <section class="card">
-    <h2>Layer 2 — Real platform blocks (opt-in)</h2>
+    <h2>Layer 2 — Real platform blocks</h2>
 
     <div class="callout">
-      <strong>Read before enabling.</strong> This performs genuine blocks on your account
-      using the site's own internal request path — the same one the Block button uses.
-      Bulk-mutating an account can trigger rate limits or a verification checkpoint.
-      Keep dry run on until you have confirmed the strategy works, keep the caps low,
-      and note that <em>Layer 1 already hides everything</em> without touching your account.
+      <strong>On by default, paced on purpose.</strong> This performs genuine blocks on
+      your account using the site's own internal request path — the same one the Block
+      button uses. What keeps that safe is the pacing, not the switch: profiles you have
+      seen on screen go at a human rhythm, suggestions are held to a tight hourly ceiling,
+      and every cap below is yours. Turn the whole layer off here if you only want hiding —
+      <em>Layer 1 already hides everything</em> without touching your account.
     </div>
 
     <label class="toggle"><input type="checkbox" id="platformBlockEnabled"><span>Enable platform blocking</span></label>

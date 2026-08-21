@@ -517,6 +517,44 @@ async function reset(settings) {
     delete global.fetch;
   }
 
+  // -- 14b. the activity ledger ---------------------------------------------
+  //
+  // Every attempt is recorded with what was known about the target at the
+  // time -- rank and why come from the queue entry and the published metadata,
+  // both of which are gone from the queue the moment a block succeeds.
+  {
+    await reset({ maxColdBlocksPerHour: 50 });
+    store.local.blocklist = { ids: [], usernames: [], pending: [],
+      targets: [{ id: '7500000001', platform: 'facebook', rank: 4.2,
+                  why: { trust: 1.5, recentDays: 0, velocity7d: 3, region: 0.8, lang: 0.8 } }],
+      fetchedAt: Date.now(), source: 'x', count: 0 };
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: [{ id: '7500000001', rank: 4.2 }], warm: false });
+    const c = await send('sw:queue-claim', { platform: 'facebook' });
+    await send('sw:queue-result',
+      { platform: 'facebook', target: c.target, ok: true, dryRun: false, warm: false });
+    const log1 = store.local.blockLog || [];
+    check('a successful block lands in the ledger with its rank and why',
+      log1.length === 1 && log1[0].ok && log1[0].rank === 4.2 &&
+      log1[0].why && log1[0].why.velocity7d === 3 && log1[0].warm === false,
+      JSON.stringify(log1[0]));
+
+    await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7500000002'], warm: true });
+    const c2 = await send('sw:queue-claim', { platform: 'facebook' });
+    await send('sw:queue-result',
+      { platform: 'facebook', target: c2.target, ok: false, dryRun: false, warm: true, detail: 'no mutation' });
+    const log2 = store.local.blockLog || [];
+    check('a failure is recorded with its detail, newest first',
+      log2.length === 2 && !log2[0].ok && log2[0].detail === 'no mutation' && log2[0].warm === true,
+      JSON.stringify(log2[0]));
+
+    const st = await state();
+    check('the ledger rides along in sw:get-state for the activity page',
+      Array.isArray(st.blockLog) && st.blockLog.length === 2 &&
+      st.cooldowns !== undefined && st.failures !== undefined,
+      'blockLog=' + (st.blockLog || []).length);
+  }
+
   // -- 15. the change probe -------------------------------------------------
   //
   // Firestore ignores If-None-Match, so every scheduled poll used to download

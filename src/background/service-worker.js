@@ -706,6 +706,24 @@ async function reportResult(info) {
   const key = platform + ':' + target;
   const now = Date.now();
 
+  // The activity page shows every attempt with what was known about the
+  // target at the time. Capture that BEFORE the queue entry is consumed --
+  // after a success the entry is gone, and the done list is bare ids.
+  {
+    const entry = (q[platform] || []).map(asEntry).find(e => e.id === String(target)) || {};
+    const list = await getLocal(KEYS.BLOCKLIST, null);
+    const meta = list && (list.targets || []).find(t => String(t.id) === String(target));
+    const log = await getLocal('blockLog', []);
+    log.unshift({
+      at: now, platform, id: String(target),
+      ok: !!ok, dryRun: !!dryRun, warm: !!info.warm,
+      rank: entry.rank != null ? entry.rank : (meta ? meta.rank : null),
+      why: meta ? meta.why : null,
+      detail: ok ? null : String(detail || '').slice(0, 200)
+    });
+    await setLocal('blockLog', log.slice(0, 500));
+  }
+
   delete leases[key];
 
   stats.blockTimes = (stats.blockTimes || []).filter(t => now - t < 24 * 3600 * 1000);
@@ -858,14 +876,18 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
 
       case P.SW.GET_STATE: {
-        const [settings, blocklist, queue, done, stats] = await Promise.all([
-          getSettings(),
-          getLocal(KEYS.BLOCKLIST, null),
-          getLocal(KEYS.QUEUE, {}),
-          getLocal(KEYS.DONE, {}),
-          getLocal(KEYS.STATS, {})
-        ]);
-        respond({ ok: true, settings, blocklist, queue, done, stats });
+        const [settings, blocklist, queue, done, stats, blockLog, cooldowns, failures] =
+          await Promise.all([
+            getSettings(),
+            getLocal(KEYS.BLOCKLIST, null),
+            getLocal(KEYS.QUEUE, {}),
+            getLocal(KEYS.DONE, {}),
+            getLocal(KEYS.STATS, {}),
+            getLocal('blockLog', []),
+            getLocal('cooldowns', {}),
+            getLocal('failures', {})
+          ]);
+        respond({ ok: true, settings, blocklist, queue, done, stats, blockLog, cooldowns, failures });
         break;
       }
 

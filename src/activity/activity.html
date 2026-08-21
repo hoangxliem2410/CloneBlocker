@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Clone Blocker — Activity</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body class="activity">
+  <header class="page-hd">
+    <div>
+      <h1>Activity</h1>
+      <p class="note">What has been blocked, what is waiting, and where the list stands.</p>
+    </div>
+    <nav class="page-nav">
+      <a href="#" id="openOptions">Settings</a>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="tiles">
+    <div class="tile"><span class="tv" id="tBlocked">—</span><span class="tk">blocked</span></div>
+    <div class="tile"><span class="tv" id="tQueued">—</span><span class="tk">waiting</span></div>
+    <div class="tile"><span class="tv" id="tHour">—</span><span class="tk" id="tHourK">this hour</span></div>
+    <div class="tile"><span class="tv" id="tDay">—</span><span class="tk" id="tDayK">today</span></div>
+    <div class="tile"><span class="tv" id="tFailed">—</span><span class="tk">failed</span></div>
+    <div class="tile"><span class="tv" id="tHidden">—</span><span class="tk">on the hide list</span></div>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2>List sync</h2>
+      <button id="refresh" class="btn inline">Refresh now</button>
+    </div>
+    <div class="kv" id="syncRows"></div>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2>Waiting to be blocked</h2>
+      <span class="note" id="queueNote"></span>
+    </div>
+    <div id="queueRows"></div>
+    <p class="note hidden" id="queueEmpty">Nothing queued. Targets arrive when a listed
+      profile appears on screen, or from the list's suggestions.</p>
+  </section>
+
+  <section class="card">
+    <div class="sec-hd">
+      <h2>Block history</h2>
+      <span class="filters">
+        <button class="chipbtn active" data-f="">all</button>
+        <button class="chipbtn" data-f="ok">blocked</button>
+        <button class="chipbtn" data-f="failed">failed</button>
+        <button class="chipbtn" data-f="dry">dry runs</button>
+      </span>
+    </div>
+    <div id="logRows"></div>
+    <p class="note hidden" id="logEmpty">No block attempts yet.</p>
+  </section>
+
+  <script src="../common/protocol.js"></script>
+  <script src="activity.js"></script>
+</body>
+</html>

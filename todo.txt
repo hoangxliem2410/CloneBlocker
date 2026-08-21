@@ -1,0 +1,10 @@
+- ranking algorithm base on how many unique report per profile, geolocation, time, etc..
+- remove block list source from setting, we hard code it.
+- remove the "layer 1", use 2 mode: passive and active. passive mode will only block profiles that are exist in the page while user interract with facebook/threads (higher blocking speed, less rate limit).
+- active mean block from block list (with ranking/trending algorithm from server) with more rate limiting.
+- extension popup should tell user to leave facebook and threads tab open or otherwise active blocking won't work.
+- tagging block list profile into: Clone, Spam, Scam.. user can select to block profile that mach tags.
+- support i8n, add support for English and Vietnamese atm.
+- add tag Redbull (Bò đỏ).
+- create a public website for transperant, show block profiles along with reason, proof, report counting, stats, etc..
+- use google auth for admin dashboard.

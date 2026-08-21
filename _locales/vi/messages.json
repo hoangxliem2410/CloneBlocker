@@ -263,6 +263,10 @@
     "message": "Clone Blocker",
     "description": "The product name. Shown in the Chrome Web Store listing, the extensions page, the toolbar tooltip and as the heading of the popup and the settings page. Never translated."
   },
+  "common_idValue": {
+    "message": "id $1",
+    "description": "The numeric account id, shown under the name on Activity rows and in the report sheet. $1 is the id. Not translated: it is a label for a number."
+  },
   "common_noResponse": {
     "message": "không có phản hồi",
     "description": "Error shown when the extension's background service worker answered with nothing at all."
@@ -878,10 +882,6 @@
   "report_iconLabel": {
     "message": "Báo cáo giả mạo",
     "description": "Screen-reader label of the block icon drawn inside the report button on a Threads post."
-  },
-  "report_idValue": {
-    "message": "mã $1",
-    "description": "Shown in the report dialog's identity line. $1 is the account's numeric id."
   },
   "report_noNumericId": {
     "message": "chưa xác định được mã số",

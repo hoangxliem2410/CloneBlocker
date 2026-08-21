@@ -97,12 +97,46 @@
   let state = null;
 
   /** displayName/@username for an id, when the published metadata knows it. */
-  function nameFor(id, platform) {
+  /**
+   * Who an id belongs to, from the best source that has it.
+   *
+   * In order: what the row itself recorded at the time (log rows snapshot the
+   * name, so history does not change under the reader when somebody renames);
+   * the name store the worker keeps, fed by every sighting from every tab and
+   * by the published list; and finally the list's own ranked targets.
+   *
+   * Returns null rather than a placeholder, so the caller decides what an
+   * unknown account is called.
+   */
+  function nameFor(id, platform, entry) {
+    const pick = (u, d) => d || (u ? '@' + u : null);
+
+    if (entry && (entry.username || entry.displayName)) {
+      return pick(entry.username, entry.displayName);
+    }
+    const known = state && state.idNames && state.idNames[platform + ':' + id];
+    if (known && (known.u || known.d)) return pick(known.u, known.d);
+
     const t = state && state.blocklist &&
       (state.blocklist.targets || []).find(x => String(x.id) === String(id) &&
         (!platform || !x.platform || x.platform === platform));
     if (!t) return null;
-    return t.displayName || (t.username ? '@' + t.username : null);
+    return pick(t.username, t.displayName);
+  }
+
+  /**
+   * The main line of a row, and the id line under it.
+   *
+   * The id never disappears. It is what a block is actually issued against,
+   * it is what somebody pastes into the dashboard to look a case up, and it
+   * is the only part of a row that cannot be wrong -- so when there is a name
+   * to show, the id moves down a line rather than being replaced by it.
+   */
+  function titleAndId(id, platform, entry) {
+    const name = nameFor(id, platform, entry);
+    return name
+      ? { title: name, id: T('common_idValue', id) }
+      : { title: T('common_profile', id), id: null };
   }
 
   /**
@@ -310,9 +344,11 @@
       const key = e.platform + ':' + e.id;
       const cool = cooldowns[key] && cooldowns[key] > now ? cooldowns[key] - now : 0;
       const meta = (s.blocklist && (s.blocklist.targets || []).find(t => String(t.id) === String(e.id))) || {};
+      const who = titleAndId(e.id, e.platform, meta);
       host.appendChild(row(
-        nameFor(e.id, e.platform) || T('common_profile', e.id),
-        reasonFor({ warm: e.warm, rank: e.rank, why: meta.why }),
+        who.title,
+        [who.id, reasonFor({ warm: e.warm, rank: e.rank, why: meta.why })]
+          .filter(Boolean).join(' · '),
         [
           chip(e.platform, 'plat'),
           tagChip(e.id),
@@ -337,9 +373,11 @@
     $('logEmpty').classList.toggle('hidden', log.length > 0);
 
     for (const e of log.slice(0, 200)) {
+      const who = titleAndId(e.id, e.platform, e);
       host.appendChild(row(
-        nameFor(e.id, e.platform) || T('common_profile', e.id),
-        reasonFor(e) + (e.detail ? ' — ' + e.detail : ''),
+        who.title,
+        [who.id, reasonFor(e) + (e.detail ? ' — ' + e.detail : '')]
+          .filter(Boolean).join(' · '),
         [
           chip(e.platform, 'plat'),
           tagChip(e.id),

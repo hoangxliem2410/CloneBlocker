@@ -590,6 +590,8 @@ async function refreshBlocklist(force) {
     } else {
       targets = raw.map(t => ({ id: String(t.id), platform: String(t.platform || ''),
                                 rank: Number(t.rank) || 0, why: t.why || null,
+                                username: t.username || null,
+                                displayName: t.displayName || null,
                                 tag: tagOf(t.tag) }));
     }
   }
@@ -622,6 +624,30 @@ async function refreshBlocklist(force) {
     count: norm.ids.length + norm.usernames.length
   };
   await setLocal(KEYS.BLOCKLIST, record);
+
+  // Names off the published list.
+  //
+  // Taken from payload.targets rather than from the `targets` built above,
+  // which is where this went wrong in the first place: that array is rebuilt
+  // field by field for the queue, and username and displayName were simply
+  // not among the fields copied -- so the Activity page, which looked for a
+  // name there, never found one and printed the id on its own.
+  //
+  // Read unconditionally, too. `targets` is only populated when the user has
+  // list blocking switched on; whether somebody wants the list WORKED THROUGH
+  // has nothing to do with whether they should be able to read who an account
+  // is once it turns up in their own history.
+  {
+    const byPlatform = {};
+    for (const t of (Array.isArray(payload.targets) ? payload.targets : [])) {
+      if (!t || !t.id || (!t.username && !t.displayName)) continue;
+      const plat = t.platform || 'facebook';
+      (byPlatform[plat] = byPlatform[plat] || {})[String(t.id)] =
+        { u: t.username || null, d: t.displayName || null };
+    }
+    for (const [plat, m] of Object.entries(byPlatform)) await rememberNames(plat, m);
+  }
+
   if (norm.docIdOverrides) await setLocal('docIdOverrides', norm.docIdOverrides);
   await pruneQueueToList(record);
   await seedServerTargets(record);
@@ -711,6 +737,80 @@ function serialize(fn) {
  * Older builds stored bare id strings; those are read as cold, which is the
  * safe direction for an unknown to fall.
  */
+/**
+ * Who an id belongs to, remembered.
+ *
+ * Keyed platform:id, because the two sites number their accounts separately
+ * and nothing says the same digits cannot appear on both.
+ *
+ * Written from every place a name is known -- the content script resolving an
+ * id out of a page, the published list's ranked targets, the report sheet --
+ * and read by the Activity page, which otherwise has nothing to print but the
+ * number. A name here is a convenience, never a fact anything acts on: blocks
+ * are issued against ids, and a stale or wrong name in this map cannot cause
+ * the wrong account to be blocked.
+ */
+const NAMES_CAP = 4000;
+
+function nameKey(platform, id) { return String(platform) + ':' + String(id); }
+
+/**
+ * @param {Record<string, {u?: string, d?: string}|string>} incoming
+ *        id -> username, or id -> { u: username, d: displayName }
+ */
+async function rememberNames(platform, incoming) {
+  if (!platform || !incoming) return;
+  const pairs = Object.entries(incoming);
+  if (!pairs.length) return;
+
+  const map = await getLocal('idNames', {});
+  const now = Date.now();
+  let touched = false;
+
+  for (const [id, value] of pairs) {
+    if (!/^\d+$/.test(String(id))) continue;
+    const raw = typeof value === 'string' ? { u: value } : (value || {});
+    const u = raw.u ? String(raw.u).replace(/^@/, '').slice(0, 80) : null;
+    const d = raw.d ? String(raw.d).slice(0, 120) : null;
+    if (!u && !d) continue;
+
+    const key = nameKey(platform, id);
+    const was = map[key];
+    // Only overwrite with something, never with nothing: a later sighting
+    // that resolved the username but not the display name must not erase a
+    // display name an earlier one did resolve.
+    const next = {
+      u: u || (was && was.u) || null,
+      d: d || (was && was.d) || null,
+      at: now
+    };
+    if (was && was.u === next.u && was.d === next.d) {
+      // Same name, seen again. Still worth stamping, so the pruner below
+      // drops the accounts nobody has laid eyes on in months first.
+      map[key] = next;
+      continue;
+    }
+    map[key] = next;
+    touched = true;
+  }
+
+  const keys = Object.keys(map);
+  if (keys.length > NAMES_CAP) {
+    // Oldest sighting first. Bounded because this grows with every account
+    // anyone scrolls past, and it is a convenience rather than a record.
+    keys.sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
+    for (const k of keys.slice(0, keys.length - NAMES_CAP)) delete map[k];
+    touched = true;
+  }
+  if (touched || pairs.length) await setLocal('idNames', map);
+}
+
+/** Whatever is known about one id, or null. */
+async function nameOfId(platform, id) {
+  const map = await getLocal('idNames', {});
+  return map[nameKey(platform, id)] || null;
+}
+
 function asEntry(e) {
   if (typeof e === 'string') return { id: e, warm: false, rank: 0, at: 0 };
   return { id: String(e.id), warm: !!e.warm, rank: Number(e.rank) || 0, at: Number(e.at) || 0 };
@@ -957,8 +1057,14 @@ async function reportResult(info) {
     const list = await getLocal(KEYS.BLOCKLIST, null);
     const meta = list && (list.targets || []).find(t => String(t.id) === String(target));
     const log = await getLocal('blockLog', []);
+    // Snapshotted, not looked up at render time. This row is history: if the
+    // account is renamed, or falls out of the name store months later, what
+    // it said here on the day should not change underneath the reader.
+    const known = await nameOfId(platform, target);
     log.unshift({
       at: now, platform, id: String(target),
+      username: (known && known.u) || (meta && meta.username) || null,
+      displayName: (known && known.d) || (meta && meta.displayName) || null,
       ok: !!ok, dryRun: !!dryRun, warm: !!info.warm,
       rank: entry.rank != null ? entry.rank : (meta ? meta.rank : null),
       why: meta ? meta.why : null,
@@ -1151,7 +1257,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
 
       case P.SW.GET_STATE: {
-        const [settings, blocklist, queue, done, stats, blockLog, cooldowns, failures] =
+        const [settings, blocklist, queue, done, stats, blockLog, cooldowns, failures, idNames] =
           await Promise.all([
             getSettings(),
             getLocal(KEYS.BLOCKLIST, null),
@@ -1160,9 +1266,11 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
             getLocal(KEYS.STATS, {}),
             getLocal('blockLog', []),
             getLocal('cooldowns', {}),
-            getLocal('failures', {})
+            getLocal('failures', {}),
+            getLocal('idNames', {})
           ]);
-        respond({ ok: true, settings, blocklist, queue, done, stats, blockLog, cooldowns, failures });
+        respond({ ok: true, settings, blocklist, queue, done, stats, blockLog,
+          cooldowns, failures, idNames });
         break;
       }
 
@@ -1194,6 +1302,11 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           respond({ ok: true, added: 0, queued: 0, skipped: (payload.ids || []).length });
           break;
         }
+
+        // Remembered before the tag filter, and whether or not anything is
+        // ultimately queued. Knowing who an id belongs to is worth keeping
+        // even when this particular sighting is not worth acting on.
+        if (payload.names) await rememberNames(payload.platform, payload.names);
 
         const ids = payload.userInitiated
           ? payload.ids

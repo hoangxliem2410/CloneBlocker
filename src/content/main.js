@@ -196,9 +196,20 @@
     const sig = ids.length + ':' + ids[ids.length - 1];
     if (sig === lastSeeded) return;
     lastSeeded = sig;
+    // The alias map is how these ids were resolved in the first place, so the
+    // username is already in hand. Sent along because nothing downstream can
+    // work it out later: the worker only ever sees numbers, and the Activity
+    // page had nothing to print but the number.
+    const names = {};
+    for (const id of ids) {
+      const u = identity.usernameForId(id);
+      if (u) names[id] = u;
+    }
+
     await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
       platform: bridge.state.platform,
       ids,
+      names,
       // These came out of the page in front of the user. Blocking someone whose
       // posts you are actually looking at is ordinary behaviour, so it is paced
       // normally rather than rationed like a target the server nominated.

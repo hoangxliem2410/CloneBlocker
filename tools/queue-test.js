@@ -512,8 +512,10 @@ async function reset(settings) {
         // the stale one at best 2*0.5^(10/7)*1*1 ~= 0.74 -- so the assertion
         // holds no matter what timezone the test machine is in.
         { platform: 'threads', id: '4100000002', trust: 2, last: old10,
+          username: 'stale.clone', displayName: null,
           days: {}, regions: { 'America/Sao_Paulo': 2 }, langs: { 'pt-br': 2 } },
         { platform: 'threads', id: '4100000001', trust: 2, last: today,
+          username: 'fresh.clone', displayName: 'Fresh Clone',
           days: { [today]: 3 }, regions: { 'Asia/Ho_Chi_Minh': 3 }, langs: { 'vi-vn': 3 } }
       ]
     };
@@ -541,9 +543,43 @@ async function reset(settings) {
       r.ok && r.blocklist && r.blocklist.ids.length === 3 &&
       r.blocklist.usernames.includes('threads'),
       JSON.stringify(r.blocklist && r.blocklist.ids));
+    // The published list is the one name source that arrives without anybody
+    // having laid eyes on the account. It has to be read whatever the user's
+    // switches say: whether they want the list WORKED THROUGH is a different
+    // question from whether Activity may say who an account is.
+    check('a refresh learns the names the list carries',
+      store.local.idNames &&
+      store.local.idNames['threads:4100000001'] &&
+      store.local.idNames['threads:4100000001'].u === 'fresh.clone' &&
+      store.local.idNames['threads:4100000001'].d === 'Fresh Clone' &&
+      store.local.idNames['threads:4100000002'].u === 'stale.clone',
+      JSON.stringify(store.local.idNames || {}));
+    check('a target with no display name is not given an empty one',
+      store.local.idNames &&
+      store.local.idNames['threads:4100000002'].d === null,
+      JSON.stringify((store.local.idNames || {})['threads:4100000002']));
+
     check('no ranking hints are appended to a Firestore URL',
       calls.length === 1 && !calls[0].url.includes('budget=') &&
       !calls[0].url.includes('region='), calls[0] && calls[0].url);
+
+    // The exact bug this was: names were read out of the array the worker
+    // rebuilds for the QUEUE, which is only populated when list blocking is
+    // on -- and which had dropped the name fields anyway.
+    {
+      store.local.idNames = {};
+      await setSettings({ blockFromList: false });
+      await send('sw:refresh-now');
+      const learned = store.local.idNames || {};
+      check('names are learned even with list blocking switched off',
+        learned['threads:4100000001'] && learned['threads:4100000001'].u === 'fresh.clone',
+        JSON.stringify(learned));
+      check('and no cold targets are queued while it is off',
+        !(store.local.blocklist.targets || []).length,
+        JSON.stringify((store.local.blocklist.targets || []).length));
+      await setSettings({ blockFromList: true });
+    }
+
     check('published metadata is ranked locally, freshest and most active first',
       r.blocklist.targets.length === 2 &&
       r.blocklist.targets[0].id === '4100000001' &&

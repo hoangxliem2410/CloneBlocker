@@ -360,7 +360,7 @@
       (ident.username ? '@' + ident.username : T('report_unknownProfile'));
     $('.who .m').textContent = [
       ident.username ? '@' + ident.username : null,
-      ident.profileId ? T('report_idValue', ident.profileId) : T('report_noNumericId'),
+      ident.profileId ? T('common_idValue', ident.profileId) : T('report_noNumericId'),
       PLATFORM
     ].filter(Boolean).join('  ·  ');
 
@@ -473,6 +473,10 @@
           const b = await bridge.sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
             platform: PLATFORM,
             ids: [String(now.profileId)],
+            // This sheet was opened on a named account. Handing the name over
+            // with the id is what lets the Activity page say who was blocked
+            // rather than which number was.
+            names: now.username ? { [String(now.profileId)]: now.username } : undefined,
             warm: true,
             userInitiated: true
           });

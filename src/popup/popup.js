@@ -127,17 +127,25 @@
   }
 
   /** The label for whoever this page is about. */
-  function nameOf(profile) {
+  function nameOf(profile, platform) {
     if (!profile) return null;
     if (profile.username) return '@' + profile.username;
+    // The page did not give up a username this time, but some earlier tab or
+    // the published list may already have said who this id is.
+    const known = knownNames[platform + ':' + profile.profileId];
+    if (known && (known.d || known.u)) return known.d || '@' + known.u;
     if (profile.profileId) return T('common_profile', profile.profileId);
     return null;
   }
+
+  // Filled from every GET_STATE, so nameOf can stay synchronous.
+  let knownNames = {};
 
   let current = { tab: null, profile: null, platform: null };
 
   async function render() {
     const state = await sw(P.SW.GET_STATE);
+    knownNames = (state && state.idNames) || {};
     const settings = (state && state.settings) || {};
     const stats = (state && state.stats) || {};
     const bl = state && state.blocklist;
@@ -188,7 +196,7 @@
   function renderPage(status, settings) {
     const profile = status.profile || null;
     current.profile = profile;
-    const label = nameOf(profile);
+    const label = nameOf(profile, current.platform);
 
     if (!label) {
       $('who').textContent = T('popup_noProfile');
@@ -382,7 +390,10 @@
     // preference, which is about what the extension does unprompted -- a
     // filtered-out click would leave a dead button and no explanation.
     const res = await sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
-      platform: current.platform, ids: [p.profileId], warm: true, userInitiated: true
+      platform: current.platform, ids: [p.profileId], warm: true, userInitiated: true,
+      // The popup is already showing this person's name in its heading; it
+      // costs nothing to make sure the history can show it too.
+      names: p.username ? { [String(p.profileId)]: p.username } : undefined
     });
     if (res && res.ok !== false) {
       $('blockProfile').textContent = T('popup_blockQueued');

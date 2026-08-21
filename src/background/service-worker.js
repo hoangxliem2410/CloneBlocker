@@ -30,6 +30,7 @@ const P = globalThis.CB_PROTOCOL;
 const T = globalThis.CB_T;
 const KEYS = globalThis.CB_KEYS;
 const modeOf = globalThis.CB_MODE_OF;
+const blockModes = globalThis.CB_BLOCK_MODES;
 const DEFAULTS = globalThis.CB_DEFAULT_SETTINGS;
 const TAGS = globalThis.CB_TAGS;
 
@@ -52,21 +53,36 @@ async function getSettings() {
   // started working through the ranked list on upgrade, which is the one thing
   // that fallback exists to prevent. Everything reads settings through here,
   // so this is the only place that needs to know.
-  merged.mode = modeOf(stored);
+  // Resolved from what was actually STORED. DEFAULTS carries both switches
+  // on, so merging first would hand the resolver an answer on every call and
+  // the fallbacks for older installs could never fire.
+  const modes = blockModes(stored);
+  merged.blockSeen = modes.seen;
+  merged.blockFromList = modes.fromList;
+  merged.mode = modes.fromList ? 'active' : 'passive';
   return merged;
 }
 async function setSettings(patch) {
-  const next = Object.assign(await getSettings(), patch || {});
+  const p = Object.assign({}, patch || {});
+  // A caller writing the old `mode` means the pair it stood for. Without this
+  // the write would carry today's resolved blockSeen/blockFromList alongside
+  // it, the explicit pair would win when the settings were next read, and the
+  // mode the caller asked for would be silently ignored.
+  if (p.mode === 'passive' || p.mode === 'active') {
+    p.blockSeen = true;
+    p.blockFromList = p.mode === 'active';
+  }
+  const next = Object.assign(await getSettings(), p);
   await chrome.storage.sync.set({ [KEYS.SETTINGS]: next });
   // Every recorded error is about platform blocking. Switching blocking off
   // makes all of them historical, so none should still be on screen.
-  if (patch && patch.platformBlockEnabled === false) {
+  if (p.platformBlockEnabled === false) {
     const stats = await getLocal(KEYS.STATS, {});
     if (stats.lastError) { clearError(stats); await setLocal(KEYS.STATS, stats); }
   }
   // Switching to passive, or pausing, retires whatever the badge was warning
   // about: those cold targets are no longer waiting on anything.
-  if (patch && ('mode' in patch || 'platformBlockEnabled' in patch)) await updateBadge();
+  if ('mode' in p || 'blockFromList' in p || 'platformBlockEnabled' in p) await updateBadge();
   return next;
 }
 async function getLocal(key, fallback) {
@@ -428,9 +444,9 @@ async function filterByBlockTags(ids, settings) {
  */
 async function seedServerTargets(record) {
   const settings = await getSettings();
-  // Passive mode blocks only what turns up on screen, so a ranked list of
-  // strangers is not something to queue.
-  if (modeOf(settings) === 'passive') return { ok: true, added: 0 };
+  // With the ranked list switched off, a queue of strangers is not something
+  // to build -- whatever is happening with profiles on screen.
+  if (!blockModes(settings).fromList) return { ok: true, added: 0 };
   if (!settings.platformBlockEnabled) return { ok: true, added: 0 };
   const allowed = new Set(blockTagsOf(settings));
   const byPlatform = {};
@@ -559,7 +575,7 @@ async function refreshBlocklist(force) {
   // METADATA (day buckets, region tallies) and the ranking happens right
   // here, with context that never leaves this machine.
   let targets = [], targetsAvailable = Number(payload.targetsAvailable) || 0;
-  if (modeOf(settings) === 'active' && Array.isArray(payload.targets)) {
+  if (blockModes(settings).fromList && Array.isArray(payload.targets)) {
     const raw = payload.targets.filter(t => t && ID_RE.test(String(t.id)));
     // Ranking is about how urgent a target is, not what kind of account it is,
     // so the tag is carried alongside the ranked entry rather than through it.
@@ -799,6 +815,26 @@ async function claim(platform) {
   const verdict = await limiterVerdict(settings);
   if (!verdict.allowed) return { ok: true, target: null, retryInMs: verdict.retryInMs };
 
+  // ---- one block at a time, across every open tab -------------------------
+  //
+  // Each Facebook or Threads tab runs its own worker loop, and each paces
+  // itself from the delay this function hands back. That is fine with one tab
+  // and wrong with five: the leases stop two tabs blocking the SAME profile,
+  // but nothing stopped five tabs blocking five DIFFERENT profiles in the same
+  // second, which is five times the rate the caps were chosen for and exactly
+  // the burst that earns a checkpoint.
+  //
+  // So the pace lives here rather than in the tabs. One gate for the whole
+  // browser: it is closed while a block is in flight, and closed again for the
+  // randomised delay after the result lands. Whichever tab asks first gets the
+  // next target; the others are told when to come back, and their own sleep
+  // becomes belt and braces rather than the only thing holding the line.
+  const gateStats = await getLocal(KEYS.STATS, {});
+  const gateNow = Date.now();
+  if (gateStats.gateUntil && gateNow < gateStats.gateUntil) {
+    return { ok: true, target: null, retryInMs: gateStats.gateUntil - gateNow };
+  }
+
   const q = await getLocal(KEYS.QUEUE, {});
   const leases = await getLocal('leases', {});
   const cooldowns = await getLocal('cooldowns', {});
@@ -837,13 +873,23 @@ async function claim(platform) {
     if (cool && cool > now) { soonest = Math.min(soonest, cool - now); continue; }
     leases[key] = now + LEASE_MS;
     await setLocal('leases', leases);
-    // The tab paces itself from this: a block of someone on screen can follow
-    // the last one quickly, a cold one should not.
+    // How long after this one finishes before anybody may claim again: short
+    // for a profile that was on screen, long for one off the list.
     const s = await getSettings();
-    return { ok: true, target: id, warm: entry.warm, rank: entry.rank,
-             nextDelayMs: entry.warm
-               ? rand(s.warmMinDelayMs | 0, s.warmMaxDelayMs | 0)
-               : rand(s.minDelayMs | 0, s.maxDelayMs | 0) };
+    const nextDelayMs = entry.warm
+      ? rand(s.warmMinDelayMs | 0, s.warmMaxDelayMs | 0)
+      : rand(s.minDelayMs | 0, s.maxDelayMs | 0);
+
+    // Shut the gate for the flight, and remember the delay to apply when the
+    // result arrives. The lease length is the outer bound on how long a block
+    // can be in flight, so a tab that is closed mid-block cannot wedge the
+    // queue for longer than that.
+    const st = await getLocal(KEYS.STATS, {});
+    st.gateUntil = now + LEASE_MS;
+    st.pendingDelayMs = nextDelayMs;
+    await setLocal(KEYS.STATS, st);
+
+    return { ok: true, target: id, warm: entry.warm, rank: entry.rank, nextDelayMs };
   }
   return { ok: true, target: null, coldHeld: heldCold,
            retryInMs: Math.max(30000, Math.min(soonest, 15 * 60 * 1000)) };
@@ -863,7 +909,7 @@ async function updateBadge() {
   try {
     const settings = await getSettings();
     let waiting = 0;
-    if (settings.platformBlockEnabled && modeOf(settings) === 'active') {
+    if (settings.platformBlockEnabled && blockModes(settings).fromList) {
       const q = await getLocal(KEYS.QUEUE, {});
       for (const platform of Object.keys(q)) {
         for (const e of (q[platform] || [])) {
@@ -922,6 +968,12 @@ async function reportResult(info) {
   }
 
   delete leases[key];
+
+  // The block is over, however it went. Re-arm the gate with the delay that
+  // was chosen when this target was handed out, so the pause is measured from
+  // when the work actually finished rather than from when it started.
+  stats.gateUntil = now + (Number(stats.pendingDelayMs) || 0);
+  delete stats.pendingDelayMs;
 
   stats.blockTimes = (stats.blockTimes || []).filter(t => now - t < 24 * 3600 * 1000);
   stats.attemptTimes = (stats.attemptTimes || []).filter(t => now - t < 24 * 3600 * 1000);
@@ -1104,11 +1156,24 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         // with a button that does nothing and no way to find out why. A
         // deliberate act outranks the standing preference.
         const settings = await getSettings();
+        const warm = payload.warm !== false;
+
+        // Same reasoning one level up: with "block clones I run into"
+        // unticked, a profile scrolling past is not a request to block it.
+        // A deliberate act still outranks the standing preference, so a
+        // userInitiated call is never refused here either -- that is the
+        // popup's Block now and the report sheet's tick box, and both are
+        // somebody pressing a button about THIS account.
+        const modes = blockModes(settings);
+        if (!payload.userInitiated && warm && !modes.seen) {
+          respond({ ok: true, added: 0, queued: 0, skipped: (payload.ids || []).length });
+          break;
+        }
+
         const ids = payload.userInitiated
           ? payload.ids
           : await filterByBlockTags(payload.ids, settings);
-        respond(await serialize(() => enqueue(payload.platform, ids,
-          { warm: payload.warm !== false })));
+        respond(await serialize(() => enqueue(payload.platform, ids, { warm })));
         break;
       }
 

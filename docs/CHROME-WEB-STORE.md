@@ -46,17 +46,26 @@ mark, a wordmark, and one line, rather than a shrunken UI.
 **The four screenshots**
 
 1. **Hero** — the claim, no UI.
-2. **The two modes** — the passive/active split, drawn rather than captured
+2. **The two kinds of block** — the warm/cold split, drawn rather than captured
    (see below).
-3. **Options page** — a real capture of the mode picker, which is now the first
-   thing on the page.
+3. **Options page** — a real capture of the two switches, which are now the
+   first thing on the page.
 4. **Moderation dashboard** — a real capture, entirely synthetic fixture data.
 
+**Not yet regenerated for the two switches.** Screenshot 2 and the listing
+paragraphs inside `tools/make-store-assets.js` still say "Two modes" and name
+them *Passive* and *Active*, which is the vocabulary the product no longer uses;
+the options capture is live, so it already shows the tick boxes and currently
+disagrees with the image beside it. `npm run store-assets` has to be rerun
+against the new wording before submission, and the generator's copy edited
+first. Nothing else in the asset pipeline changes.
+
 Screenshot 2 is drawn rather than captured, and it and the options capture were
-both brought forward with the modes: the explainer is "Two modes, because they
-cost different things" (passive/active), and the options shot no longer hunts
-for a heading or fills in an endpoint field, because neither exists. One
-display-only correction survives in the generator: a dev session forces
+both brought forward with this chapter of the product: the explainer is two
+cards, because the two kinds of block genuinely cost different things, and the
+options shot no longer hunts for a heading or fills in an endpoint field,
+because neither exists. One display-only correction survives in the generator:
+a dev session forces
 blocking off for safety and the page honestly says so, which is the harness's
 state rather than the product's, so the paused note is cleared in the DOM for
 the capture without writing any setting.
@@ -122,20 +131,25 @@ Someone is running accounts that pretend to be you. Clone Blocker blocks them
 for real — through Facebook's and Threads' own block mechanism, at a pace that
 keeps your own account out of trouble.
 
-The one thing you choose is how far it goes looking.
+What you choose is where it looks. Two switches, both on to begin with, and
+each one works on its own.
 
-PASSIVE — block the clones you run into
-Only profiles that turn up on the page while you browse. They were on your
-screen anyway, so blocking them is the most ordinary thing an account can do:
-these go through quickly and stay well clear of the rate limits.
+BLOCK THE CLONES YOU RUN INTO
+Profiles that turn up on the page while you browse. They were on your screen
+anyway, so blocking them is the most ordinary thing an account can do: these go
+through quickly and stay well clear of the rate limits.
 
-ACTIVE — also work through the list
-Adds the clones the list says are most active near you, whether or not you ever
+WORK THROUGH THE LIST AS WELL
+The clones the list says are most active near you, whether or not you ever
 scroll past them. Grinding through strangers is what gets an account
 checkpointed, so this half is paced slowly and held to an hourly ceiling you
-set — set it to zero and nobody you have not seen is ever blocked. It also
-needs a Facebook or Threads tab open, because a block is issued through the
-site's own code, in the page.
+set. Turn it off and the extension only ever blocks what you have actually
+seen; leave it on and turn the other one off and it works the list alone.
+
+Blocking of either kind needs a Facebook or Threads tab open, because a block
+is issued through the site's own code, in the page. One tab is enough and any
+of them will do — and opening more does not block anything faster, because the
+pacing is shared across the whole browser rather than kept per tab.
 
 Every delay, cap and ceiling is yours to change, and the cautious values are
 the ones it ships with. A pause switch stops all of it at once, and a dry run
@@ -333,14 +347,17 @@ To exercise it end to end:
   4. Settings > "Dry run" resolves a real block and sends nothing, if you
      want to watch the blocking path without changing an account.
 
-Real blocking is on by default but tightly paced, and the user picks how far
-it goes. Passive mode blocks only profiles that appeared on the page in front
-of them, at a human rhythm. Active mode (the default) additionally works
-through the published list, capped at 4 per hour and paced 20-45s apart, and
-only while a Facebook or Threads tab is open — the block is issued by the
-site's own code, from a content script. Settings also carries a tick box per
-kind of account (clone, impersonation, scam, harassment, spam, other), so a
-user can narrow what a block is ever spent on.
+Real blocking is on by default but tightly paced, and the user picks where it
+may look. Two independent tick boxes, both on by default: "Block clones I run
+into" covers profiles that appeared on the page in front of them, at a human
+rhythm; "Work through the list too" additionally blocks accounts from the
+published list, capped at 4 per hour and paced 20-45s apart. Either can be turned off
+without the other. Blocking of any kind runs only while a Facebook or Threads
+tab is open — the block is issued by the site's own code, from a content script
+— and the pace is held by one gate in the service worker covering the whole
+browser, so several open tabs do not block any faster than one. Settings also
+carries a tick box per kind of account (clone, impersonation, scam, harassment,
+spam, other), so a user can narrow what a block is ever spent on.
 
 The extension is in English and Vietnamese and follows the browser's own UI
 language; launching Chrome with --lang=vi shows the Vietnamese build of every
@@ -396,23 +413,27 @@ action taken on a third-party site on the user's behalf, and blocks that the
 user never saw coming are the closest thing here to that pattern.
 
 What argues for it: the cold ceiling defaults to 4/hour; the user sets every
-cap; the mode picker is the first thing on the options page and passive mode
-turns list-nominated blocks off in one click. Blocking itself is ON by default
-(an owner decision, 2026-08-21), so the per-account pacing and that visible
-choice are the whole defence in a review dispute.
+cap; the two switches are the first thing on the options page, and unticking
+**Work through the list too** turns list-nominated blocks off in one click while
+leaving everything else working. Blocking itself is ON by default (an owner
+decision, 2026-08-21), so the per-account pacing and that visible choice are
+the whole defence in a review dispute.
 
-What argues against it: the default mode is **active**, so the trending
+What argues against it: **`blockFromList` ships ticked**, so the trending
 metadata published with the list can put an account the user has never seen
 into the queue, and it will be blocked without a per-account confirmation.
 (The ranking itself runs locally in the extension, but the effect a reviewer
 would care about is the same: the list's publisher chooses candidates the user
 never looked at.)
 
-**Worth considering before submitting:** ship the default as **passive**. Then
-every block in a default install traces to a profile the user looked at, and
-working through the list becomes something they opt into knowingly. It costs
-little — a user who wants the list worked through is exactly the user who will
-find the mode picker, since it is the first control on the page.
+**Worth considering before submitting:** ship `blockFromList` **unticked**,
+leaving `blockSeen` on. Then every block in a default install traces to a
+profile the user looked at, and working through the list becomes something they
+opt into knowingly. It costs little — a user who wants the list worked through
+is exactly the user who will find the switch, since it is the first control on
+the page. This is a cleaner change than it was under the old mode picker: the
+two switches are independent, so turning one default off does not quietly turn
+anything else off with it.
 
 ### c. Meta's terms of service — *the risk that is not ours to fix*
 
@@ -474,13 +495,15 @@ exposes, and the override only selects among them — say so if asked.
 - [ ] Single purpose, permission justifications, data disclosures filled in
 - [ ] Limited Use certification ticked
 - [ ] Reviewer notes pasted
-- [ ] Confirm the default mode: it currently ships **active** (§6b)
+- [ ] Confirm the defaults for the two switches: `blockSeen` and
+      `blockFromList` both currently ship **on** (§6b)
 - [ ] Decide whether the `redbull` tag is named in the listing copy and the
       reviewer notes (§3) — open, and the last product decision outstanding
 - [ ] Localise the listing itself into Vietnamese in the dashboard (§3); the
       in-extension strings are already there
 - [x] `_locales/en` and `_locales/vi` at key parity, checked by `check.js`
-- [x] Store assets regenerated against the passive/active modes (§2)
+- [ ] Store assets regenerated against the two switches — the drawn screenshot
+      and the generator's own copy still say "two modes" (§2)
 - [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
 
 The upload zip only needs what the extension actually loads: `manifest.json`,

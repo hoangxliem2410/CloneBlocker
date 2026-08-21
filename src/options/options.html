@@ -16,37 +16,46 @@
     </nav>
   </header>
 
-  <!-- The one decision anyone actually has to make. Everything else on this
-       page is a detail of how the chosen mode behaves, which is why the rest
-       of it sits behind Advanced. -->
+  <!-- The two jobs the extension can be asked to do. Everything else on this
+       page is a detail of how they behave, which is why the rest of it sits
+       behind Advanced.
+
+       Tick boxes rather than the radio pair this used to be. The old picker
+       said passive OR active, which was never true -- active always meant
+       both -- and it left "work through the list but leave what I scroll past
+       alone" with no way to say it. Two independent switches, both on. -->
   <section class="card">
     <h2 data-i18n="options_workHeading"></h2>
 
-    <div class="modes">
-      <label class="mode">
-        <span class="mode-hd">
-          <input type="radio" name="mode" id="modePassive" value="passive">
-          <span data-i18n="options_modePassiveTitle"></span>
+    <div class="jobs">
+      <label class="job">
+        <span class="job-hd">
+          <input type="checkbox" id="blockSeen">
+          <span data-i18n="options_blockSeenTitle"></span>
         </span>
-        <p data-i18n="options_modePassiveWhat"></p>
-        <p class="cost" data-i18n="options_modePassiveCost"></p>
+        <p data-i18n="options_blockSeenWhat"></p>
+        <p class="cost" data-i18n="options_blockSeenCost"></p>
       </label>
 
-      <label class="mode">
-        <span class="mode-hd">
-          <input type="radio" name="mode" id="modeActive" value="active">
-          <span data-i18n="options_modeActiveTitle"></span>
+      <label class="job">
+        <span class="job-hd">
+          <input type="checkbox" id="blockFromList">
+          <span data-i18n="options_blockFromListTitle"></span>
         </span>
-        <p data-i18n="options_modeActiveWhat"></p>
-        <p class="cost" data-i18n="options_modeActiveCost"></p>
+        <p data-i18n="options_blockFromListWhat"></p>
+        <p class="cost" data-i18n="options_blockFromListCost"></p>
         <!-- Its own paragraph, not a bolded clause spliced into the one above:
              a sentence assembled around a translated fragment is a sentence no
              other language may reorder. The emphasis travels inside the
              message instead. -->
-        <p class="cost" data-i18n="options_modeActiveNeedsTab"></p>
+        <p class="cost" data-i18n="options_blockFromListNeedsTab"></p>
       </label>
     </div>
 
+    <!-- Both unticked is a legitimate setting, not an error -- but a silent
+         one, since two empty boxes look the same as a page that has not
+         loaded yet. Say what it means. -->
+    <p id="blockNothingNote" class="note warn hidden" data-i18n="options_blockNothingNote"></p>
     <p id="pausedNote" class="note hidden" data-i18n="options_pausedNote"></p>
   </section>
 

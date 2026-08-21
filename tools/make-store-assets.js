@@ -265,25 +265,25 @@ function layersHtml() {
   <div class="field"></div>
   <div class="crowd">${crowd(12, 118, 700, 112, -8)}</div>
   <div class="page">
-    <h1>Two modes, because they cost <em>different things</em></h1>
+    <h1>Two jobs, because they cost <em>different things</em></h1>
     <p class="sub">A list of thousands cannot be blocked by one account &mdash; that is exactly what
-       gets an account checkpointed. So you choose how hard it works.</p>
+       gets an account checkpointed. So each job is switched on separately, and paced apart.</p>
     <div class="cards">
-      ${card('Passive &middot; cheap', 'As you run into them', [
-        'Only profiles that appear as you browse',
+      ${card('Cheap &middot; on by default', 'Clones you run into', [
+        'Profiles that appear as you browse',
         'They were on your screen anyway',
         'Blocked within seconds of each other',
         'Stays well clear of the rate limits'
       ], '#8ee6a8')}
-      ${card('Active &middot; costly', 'Also works the list', [
-        'Adds the clones most active near you',
+      ${card('Costly &middot; on by default', 'The list, worked through', [
+        'The clones most active near you',
         'Even ones you never scroll past',
         'Paced slowly, capped every hour',
-        'Needs a tab open to do the work'
+        'Needs a tab open &mdash; any tab'
       ], '#ff8a86')}
     </div>
-    <p class="foot">Blocking someone whose profile is on your screen is ordinary.
-       Grinding through strangers is not &mdash; so the budget is spent on what you actually see, first.</p>
+    <p class="foot">Both at once, or either alone. Open ten tabs if you like: the blocks still
+       go out one at a time, on purpose, because it is the account that gets checkpointed.</p>
   </div>`;
 }
 

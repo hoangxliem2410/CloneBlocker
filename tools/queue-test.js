@@ -2,11 +2,12 @@
  * Unit tests for the service worker's queue, leases and rate limiter.
  *
  * The browser test runs with platform blocking disabled (deliberately -- it
- * must never block anyone for real), which leaves this logic uncovered there,
- * along with the mode that decides what gets queued at all. It is also
- * the logic most likely to misbehave in ways a user would not notice quickly:
- * a starved queue or a limiter that fails to count looks like "nothing is
- * happening" rather than an error.
+ * must never block anyone for real), which leaves this logic uncovered there:
+ * the two switches that decide what gets queued at all, and the gate that
+ * decides how fast the browser as a whole may spend it. It is also the logic
+ * most likely to misbehave in ways a user would not notice quickly: a starved
+ * queue or a limiter that fails to count looks like "nothing is happening"
+ * rather than an error.
  *
  * Drives the real message handler, so serialize() and the storage round-trips
  * are exercised exactly as they run in the extension.
@@ -105,6 +106,38 @@ async function setSettings(patch) {
 }
 async function state() { return send('sw:get-state'); }
 
+/**
+ * Fast-forward past the pacing gate.
+ *
+ * One gate paces the whole browser: after a block, nobody may claim again
+ * until the randomised delay has run. A real tab gets past it by sleeping for
+ * seconds; a test gets past it by moving the clock, because the suite is
+ * about which target is served and in what order, not about waiting. The
+ * tests that are genuinely about the gate never call this.
+ */
+function openGate() {
+  if (store.local.stats) delete store.local.stats.gateUntil;
+}
+
+/**
+ * Time passing, expressed as every deadline moving back.
+ *
+ * A lease is ninety seconds, so the tests that are genuinely about waiting
+ * cannot wait. Rather than mock the clock out from under the whole worker,
+ * this ages what the queue actually keeps -- the gate, the leases, the
+ * cooldowns -- which is what the passage of time looks like from storage. Only
+ * deadlines: the timestamps the rate limiter counts are a different question
+ * and the tests that care about those set them directly.
+ */
+function rewind(ms) {
+  const st = store.local.stats;
+  if (st && st.gateUntil) st.gateUntil -= ms;
+  for (const map of ['leases', 'cooldowns']) {
+    const m = store.local[map];
+    if (m) for (const k of Object.keys(m)) m[k] -= ms;
+  }
+}
+
 async function reset(settings) {
   store.local = {};
   store.sync = {};
@@ -132,10 +165,12 @@ async function reset(settings) {
   await reset();
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['1111111111', '2222222222', '3333333333'] });
 
+  openGate();
   const first = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', {
     platform: 'facebook', target: first.target, ok: false, dryRun: false, detail: 'simulated failure'
   });
+  openGate();
   const second = await send('sw:queue-claim', { platform: 'facebook' });
 
   check('a failed target goes into cooldown instead of being retried immediately',
@@ -150,6 +185,7 @@ async function reset(settings) {
     // Clear the cooldown so we can drive the failure count deterministically
     // without waiting out the real backoff.
     store.local.cooldowns = {};
+    openGate();
     const c = await send('sw:queue-claim', { platform: 'facebook' });
     if (!c.target) { abandonedAfter = i - 1; break; }
     await send('sw:queue-result', { platform: 'facebook', target: c.target, ok: false, dryRun: false, detail: 'x' });
@@ -164,6 +200,7 @@ async function reset(settings) {
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['5555555555', '6666666666', '7777777777'] });
   let realAttempts = 0;
   for (let i = 0; i < 6; i++) {
+    openGate();
     const c = await send('sw:queue-claim', { platform: 'facebook' });
     if (!c.target) break;
     realAttempts++;
@@ -177,6 +214,7 @@ async function reset(settings) {
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['8888888888', '9999999999'] });
   const seen = [];
   for (let i = 0; i < 4; i++) {
+    openGate();
     const c = await send('sw:queue-claim', { platform: 'facebook' });
     if (!c.target) break;
     seen.push(c.target);
@@ -191,19 +229,59 @@ async function reset(settings) {
   check('dry runs leave targets queued',
     (st4.queue.facebook || []).length === 2, JSON.stringify(st4.queue.facebook));
 
-  // -- 5. concurrent claims never hand out the same target ------------------
+  // -- 5. concurrent claims are serialised, not shared out ------------------
+  //
+  // This used to assert that two tabs claiming at once got two DIFFERENT
+  // targets, which is the flooding it should have been preventing: five open
+  // tabs meant five blocks in the same second, five times the rate the caps
+  // were chosen for. Leases only stopped two tabs taking the same profile.
+  // One gate now paces the whole browser, so the second tab is told to wait.
   await reset();
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['1212121212', '3434343434'] });
   const [a, b] = await Promise.all([
     send('sw:queue-claim', { platform: 'facebook' }),
     send('sw:queue-claim', { platform: 'facebook' })
   ]);
-  check('concurrent claims from two tabs get different targets',
-    a.target && b.target && a.target !== b.target, `a=${a.target} b=${b.target}`);
+  const got = [a, b].filter(x => x.target);
+  const waiting = [a, b].filter(x => !x.target);
+  check('two tabs claiming at once yield exactly one block',
+    got.length === 1 && waiting.length === 1, `a=${a.target} b=${b.target}`);
+  check('and the other tab is told when to come back, not left guessing',
+    waiting[0] && waiting[0].retryInMs > 0, JSON.stringify(waiting[0]));
+
+  // Five tabs, one after another, with nothing reported: still one block.
+  await reset();
+  await send('sw:enqueue-platform-block',
+    { platform: 'facebook', ids: ['1111111111', '2222222222', '3333333333', '4444444444', '5555555555'] });
+  const five = await Promise.all([1, 2, 3, 4, 5].map(() => send('sw:queue-claim', { platform: 'facebook' })));
+  check('five tabs claiming at once still yield exactly one block',
+    five.filter(x => x.target).length === 1,
+    JSON.stringify(five.map(x => x.target)));
+
+  // The gate opens again once the result lands, so work does not stall.
+  const served = five.find(x => x.target);
+  await send('sw:queue-result',
+    { platform: 'facebook', target: served.target, ok: true, dryRun: true, warm: true });
+  // The gate re-arms with the DELAY, not with the lease: work resumes after
+  // seconds, not after a minute and a half. Both halves matter -- a gate that
+  // never reopened would be a queue that stopped.
+  const stillWaiting = await send('sw:queue-claim', { platform: 'facebook' });
+  const settings0 = (await state()).settings;
+  check('the pause after a result is the warm delay, not the lease',
+    !stillWaiting.target &&
+    stillWaiting.retryInMs > 0 &&
+    stillWaiting.retryInMs <= (settings0.warmMaxDelayMs | 0) + 500,
+    `retryInMs=${stillWaiting.retryInMs} warmMax=${settings0.warmMaxDelayMs}`);
+  openGate();
+  const nextServed = await send('sw:queue-claim', { platform: 'facebook' });
+  check('and once it has run, the next tab is served',
+    !!nextServed.target && nextServed.target !== served.target,
+    `${served.target} -> ${nextServed.target}`);
 
   // -- 6. success retires the target ---------------------------------------
   await reset();
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['5656565656'] });
+  openGate();
   const c6 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', { platform: 'facebook', target: c6.target, ok: true, dryRun: false });
   const st6 = await state();
@@ -216,11 +294,13 @@ async function reset(settings) {
   // -- 7. a checkpoint halts everything -------------------------------------
   await reset();
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7878787878'] });
+  openGate();
   const c7 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', {
     platform: 'facebook', target: c7.target, ok: false, dryRun: false, checkpoint: true, detail: 'challenge'
   });
   const st7 = await state();
+  openGate();
   const after7 = await send('sw:queue-claim', { platform: 'facebook' });
   check('a checkpoint disables platform blocking and stops handing out work',
     st7.settings.platformBlockEnabled === false && !after7.target,
@@ -229,6 +309,7 @@ async function reset(settings) {
   // -- 8. already-blocked targets are not re-queued -------------------------
   await reset();
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['9090909090'] });
+  openGate();
   const c8 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', { platform: 'facebook', target: c8.target, ok: true, dryRun: false });
   const re = await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['9090909090'] });
@@ -268,6 +349,7 @@ async function reset(settings) {
   await send('sw:enqueue-platform-block',
     { platform: 'facebook', ids: ['6000000002'], warm: true });
 
+  openGate();
   const w1 = await send('sw:queue-claim', { platform: 'facebook' });
   check('a profile that was on screen is claimed before a server-nominated one',
     w1.target === '6000000002' && w1.warm === true,
@@ -278,6 +360,7 @@ async function reset(settings) {
   await send('sw:queue-result',
     { platform: 'facebook', target: '6000000002', ok: true, warm: true });
 
+  openGate();
   const c1 = await send('sw:queue-claim', { platform: 'facebook' });
   check('the cold target is claimed once nothing warm is left',
     c1.target === '6000000001' && c1.warm === false, `${c1.target} warm=${c1.warm}`);
@@ -289,17 +372,20 @@ async function reset(settings) {
     { platform: 'facebook', target: '6000000001', ok: true, warm: false });
   await send('sw:enqueue-platform-block',
     { platform: 'facebook', ids: ['6000000003', '6000000004'], warm: false });
+  openGate();
   const c2 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result',
     { platform: 'facebook', target: c2.target, ok: true, warm: false });
 
   // Two cold blocks spent against a ceiling of two.
+  openGate();
   const c3 = await send('sw:queue-claim', { platform: 'facebook' });
   check('cold work stops at its hourly ceiling',
     !c3.target && c3.coldHeld === true, `${c3.target} held=${c3.coldHeld}`);
 
   await send('sw:enqueue-platform-block',
     { platform: 'facebook', ids: ['6000000005'], warm: true });
+  openGate();
   const w2 = await send('sw:queue-claim', { platform: 'facebook' });
   check('warm work continues after the cold ceiling is reached',
     w2.target === '6000000005' && w2.warm === true, `${w2.target} warm=${w2.warm}`);
@@ -308,6 +394,7 @@ async function reset(settings) {
   await reset({ maxColdBlocksPerHour: 0 });
   await send('sw:enqueue-platform-block',
     { platform: 'facebook', ids: [{ id: '6100000001', rank: 5 }], warm: false });
+  openGate();
   const before = await send('sw:queue-claim', { platform: 'facebook' });
   check('with no cold budget at all, a cold target is not handed out',
     !before.target, String(before.target));
@@ -317,6 +404,7 @@ async function reset(settings) {
   check('re-seeing it on screen promotes it rather than duplicating it',
     promo.promoted === 1 && promo.added === 0 && promo.queued === 1,
     JSON.stringify(promo));
+  openGate();
   const after = await send('sw:queue-claim', { platform: 'facebook' });
   check('once promoted it is claimable, because it is now the ordinary case',
     after.target === '6100000001' && after.warm === true,
@@ -328,6 +416,7 @@ async function reset(settings) {
     platform: 'facebook', warm: false,
     ids: [{ id: '6200000001', rank: 1 }, { id: '6200000002', rank: 50 }, { id: '6200000003', rank: 10 }]
   });
+  openGate();
   const r1 = await send('sw:queue-claim', { platform: 'facebook' });
   check('the highest-ranked cold target goes first',
     r1.target === '6200000002', `${r1.target} rank=${r1.rank}`);
@@ -348,6 +437,7 @@ async function reset(settings) {
   // blocking off. These lock the clearing behaviour in.
   await reset({ maxColdBlocksPerHour: 50 });
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000001'], warm: true });
+  openGate();
   const f1 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', {
     platform: 'facebook', target: f1.target, ok: false, dryRun: false,
@@ -362,6 +452,7 @@ async function reset(settings) {
     String(afterFail.stats.lastErrorAt));
 
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000002'], warm: true });
+  openGate();
   const f2 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', { platform: 'facebook', target: f2.target, ok: true, dryRun: false });
   const afterOk = await state();
@@ -372,10 +463,12 @@ async function reset(settings) {
   // A dry run resolves a strategy end to end, so it settles the question too.
   await reset({ platformBlockDryRun: true, maxColdBlocksPerHour: 50 });
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000003'], warm: true });
+  openGate();
   const d1 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', {
     platform: 'facebook', target: d1.target, ok: false, dryRun: true, detail: 'nothing to drive' });
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000004'], warm: true });
+  openGate();
   const d2 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', { platform: 'facebook', target: d2.target, ok: true, dryRun: true });
   const afterDry = await state();
@@ -386,6 +479,7 @@ async function reset(settings) {
   // all of them historical.
   await reset({ maxColdBlocksPerHour: 50 });
   await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7300000005'], warm: true });
+  openGate();
   const f3 = await send('sw:queue-claim', { platform: 'facebook' });
   await send('sw:queue-result', {
     platform: 'facebook', target: f3.target, ok: false, dryRun: false, detail: 'signed out' });
@@ -563,6 +657,7 @@ async function reset(settings) {
       fetchedAt: Date.now(), source: 'x', count: 0 };
     await send('sw:enqueue-platform-block',
       { platform: 'facebook', ids: [{ id: '7500000001', rank: 4.2 }], warm: false });
+    openGate();
     const c = await send('sw:queue-claim', { platform: 'facebook' });
     await send('sw:queue-result',
       { platform: 'facebook', target: c.target, ok: true, dryRun: false, warm: false });
@@ -573,6 +668,7 @@ async function reset(settings) {
       JSON.stringify(log1[0]));
 
     await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['7500000002'], warm: true });
+    openGate();
     const c2 = await send('sw:queue-claim', { platform: 'facebook' });
     await send('sw:queue-result',
       { platform: 'facebook', target: c2.target, ok: false, dryRun: false, warm: true, detail: 'no mutation' });
@@ -718,6 +814,7 @@ async function reset(settings) {
     // the whole of what passive means, not "do nothing".
     const warmAdd = await send('sw:enqueue-platform-block',
       { platform: 'facebook', ids: ['8100000001'], warm: true });
+    openGate();
     const warmClaim = await send('sw:queue-claim', { platform: 'facebook' });
     check('passive mode still queues a profile that turned up on screen',
       warmAdd.added === 1 && warmClaim.target === '8100000001' && warmClaim.warm === true,
@@ -733,6 +830,7 @@ async function reset(settings) {
       ra.ok && seeded.length === 2 &&
       seeded.includes('8100000001') && seeded.includes('8100000002'),
       JSON.stringify(seeded));
+    openGate();
     const coldClaim = await send('sw:queue-claim', { platform: 'facebook' });
     check('what it seeded is cold: best rank first, paced slowly',
       coldClaim.target === '8100000001' && coldClaim.warm === false &&
@@ -776,6 +874,7 @@ async function reset(settings) {
       rpaused.ok && (await queuedIds()).length === 0, JSON.stringify(await queuedIds()));
     await send('sw:enqueue-platform-block',
       { platform: 'facebook', ids: ['8100000002'], warm: true });
+    openGate();
     const pausedClaim = await send('sw:queue-claim', { platform: 'facebook' });
     check('and nothing already queued is handed out, warm or not',
       !pausedClaim.target, String(pausedClaim.target));
@@ -834,6 +933,7 @@ async function reset(settings) {
     // the count would overwrite it.
     await reset({ mode: 'active', maxColdBlocksPerHour: 50 });
     await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['8300000004'], warm: true });
+    openGate();
     const cp = await send('sw:queue-claim', { platform: 'facebook' });
     await send('sw:queue-result', { platform: 'facebook', target: cp.target, ok: false,
       dryRun: false, checkpoint: true, detail: 'challenge' });
@@ -1071,6 +1171,233 @@ async function reset(settings) {
       shown(dialled) + ' vs ' + shown(local));
 
     delete global.fetch;
+  }
+
+  // -- 20. the two switches --------------------------------------------------
+  //
+  // blockSeen and blockFromList are not two halves of one dial. The radio they
+  // replaced could only say "just what I see" or "both", so "work through the
+  // list but leave what I scroll past alone" was unsayable -- and that is the
+  // combination worth proving hardest, because nothing before this could
+  // express it at all.
+  //
+  // Both sources are driven the way the extension drives them: a real refresh
+  // whose payload carries ranked targets for the cold side, and a real enqueue
+  // marked warm for the side that comes off the page in front of you.
+  {
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const today = new Date().toISOString().slice(0, 10);
+    const published = {
+      v: 1, updatedAt: new Date().toISOString(),
+      ids: ['8200000001', '8200000002'], usernames: [], docIdOverrides: {}, pending: [],
+      targets: [
+        { platform: 'facebook', id: '8200000001', trust: 2, last: today,
+          days: { [today]: 2 }, regions: {}, langs: {} },
+        { platform: 'facebook', id: '8200000002', trust: 1, last: today,
+          days: {}, regions: {}, langs: {} }
+      ]
+    };
+    const envelope = {
+      name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+      fields: { json: { stringValue: JSON.stringify(published) } },
+      createTime: '2026-08-21T00:00:00Z', updateTime: '2026-08-21T09:00:00Z'
+    };
+    global.fetch = async () => ({
+      ok: true, status: 200, headers: { get: () => null },
+      text: async () => JSON.stringify(envelope), json: async () => envelope
+    });
+    const queuedIds = async () =>
+      ((await state()).queue.facebook || []).map(e => (typeof e === 'string' ? e : e.id));
+
+    // A profile on the list that this browser has never met until it scrolls
+    // past, so what these prove is the switch rather than the seeding.
+    const ON_SCREEN = '8200000003';
+
+    /**
+     * Run both sources past one settings object and report what each of them
+     * managed to queue.
+     *
+     * Kept apart, because the whole question is whether one can be on while
+     * the other is off: a single count would pass just as happily if the
+     * wrong source had filled it.
+     */
+    async function bothSources(settings) {
+      await reset(Object.assign({ listUrl: FS_URL, maxColdBlocksPerHour: 50 }, settings));
+      const r = await send('sw:refresh-now');
+      const fromList = await queuedIds();
+      await send('sw:enqueue-platform-block',
+        { platform: 'facebook', ids: [ON_SCREEN], warm: true });
+      const after = await queuedIds();
+      return { ok: r.ok, listKept: (r.blocklist && r.blocklist.ids) || [],
+               fromList, seen: after.filter(id => !fromList.includes(id)) };
+    }
+
+    // The combination the radio could not say: work the list, leave what
+    // scrolls past alone.
+    const listOnly = await bothSources({ blockSeen: false, blockFromList: true });
+    check('blockSeen off, blockFromList on: the ranked list still seeds cold work',
+      listOnly.fromList.length === 2 &&
+      listOnly.fromList.includes('8200000001') && listOnly.fromList.includes('8200000002'),
+      JSON.stringify(listOnly.fromList));
+    check('and a profile that turns up on screen is not queued',
+      listOnly.seen.length === 0, JSON.stringify(listOnly.seen));
+    // Seeded is not the same as workable: the cold side has to survive the
+    // claim too, or "the list keeps running" would be a claim about storage.
+    openGate();
+    const listOnlyClaim = await send('sw:queue-claim', { platform: 'facebook' });
+    check('and the cold work it seeded is handed out, paced as cold',
+      listOnlyClaim.target === '8200000001' && listOnlyClaim.warm === false &&
+      listOnlyClaim.nextDelayMs >= 20000,
+      `${listOnlyClaim.target} warm=${listOnlyClaim.warm} delay=${listOnlyClaim.nextDelayMs}`);
+
+    // The converse: what is in front of you, and nothing else.
+    const seenOnly = await bothSources({ blockSeen: true, blockFromList: false });
+    check('blockSeen on, blockFromList off: the list still arrives in full',
+      seenOnly.ok && seenOnly.listKept.length === 2, JSON.stringify(seenOnly.listKept));
+    check('but none of its ranked targets are queued',
+      seenOnly.fromList.length === 0, JSON.stringify(seenOnly.fromList));
+    check('and a profile that turns up on screen still is',
+      seenOnly.seen.includes(ON_SCREEN), JSON.stringify(seenOnly.seen));
+
+    // Both off is a real setting -- the extension still hides, still reports,
+    // still keeps the list -- and it has to be quiet from both directions.
+    const neither = await bothSources({ blockSeen: false, blockFromList: false });
+    check('both switches off: neither source queues anybody',
+      neither.fromList.length === 0 && neither.seen.length === 0,
+      `fromList=${JSON.stringify(neither.fromList)} seen=${JSON.stringify(neither.seen)}`);
+
+    // Pressing a button is a decision, not a sweep. The popup's Block now and
+    // the report sheet's block-too tick box both send userInitiated, and it
+    // has to outrank the standing preference: a control that silently did
+    // nothing would be worse than no control at all.
+    const byHand = await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8200000004'], warm: true, userInitiated: true });
+    check('but a block the user asked for by hand still goes through',
+      byHand.added === 1 && (await queuedIds()).includes('8200000004'),
+      JSON.stringify(await queuedIds()));
+
+    // The ordinary shipped state, where the two do not interfere.
+    const both = await bothSources({ blockSeen: true, blockFromList: true });
+    check('both switches on: the list and the page each queue their own',
+      both.fromList.length === 2 && both.seen.includes(ON_SCREEN),
+      `fromList=${JSON.stringify(both.fromList)} seen=${JSON.stringify(both.seen)}`);
+
+    /**
+     * An install written before the pair existed.
+     *
+     * Its settings go straight into sync storage: going through set-settings
+     * would merge today's defaults in and hide the very thing under test,
+     * which is what the worker makes of a settings object that has neither
+     * blockSeen nor blockFromList in it.
+     */
+    async function legacyInstall(stored) {
+      store.local = {};
+      store.sync = { settings: Object.assign({
+        listUrl: FS_URL, platformBlockEnabled: true, platformBlockDryRun: false,
+        maxColdBlocksPerHour: 50
+      }, stored) };
+      const r = await send('sw:refresh-now');
+      const fromList = await queuedIds();
+      await send('sw:enqueue-platform-block',
+        { platform: 'facebook', ids: [ON_SCREEN], warm: true });
+      const after = await queuedIds();
+      return { ok: r.ok, targets: (r.blocklist && r.blocklist.targets) || [], fromList,
+               seen: after.filter(id => !fromList.includes(id)),
+               settings: (await state()).settings };
+    }
+
+    const wasPassive = await legacyInstall({ mode: 'passive' });
+    check('an install carrying mode passive still refuses cold work end to end',
+      wasPassive.ok && wasPassive.targets.length === 0 && wasPassive.fromList.length === 0,
+      JSON.stringify(wasPassive.fromList));
+    check('and still blocks what it sees, which is all passive ever meant',
+      wasPassive.seen.includes(ON_SCREEN), JSON.stringify(wasPassive.seen));
+    check('and it reads back as the pair it behaves as',
+      wasPassive.settings.blockSeen === true && wasPassive.settings.blockFromList === false,
+      `seen=${wasPassive.settings.blockSeen} fromList=${wasPassive.settings.blockFromList}`);
+
+    // Older still: the flag that predates modes entirely. Somebody who turned
+    // server targets off must not get them back by upgrading twice.
+    const refusedTargets = await legacyInstall({ acceptServerTargets: false });
+    check('an install carrying acceptServerTargets false refuses it the same way',
+      refusedTargets.ok && refusedTargets.targets.length === 0 &&
+      refusedTargets.fromList.length === 0, JSON.stringify(refusedTargets.fromList));
+    check('and it too keeps blocking what turns up on screen',
+      refusedTargets.seen.includes(ON_SCREEN), JSON.stringify(refusedTargets.seen));
+
+    delete global.fetch;
+  }
+
+  // -- 21. one pacing gate for the whole browser -----------------------------
+  //
+  // The gate is what stops five open tabs producing five times the rate the
+  // caps were chosen for. Section 5 proves it holds between tabs on one site;
+  // the question here is what it does across the two sites, because a gate
+  // kept per platform would let a Facebook tab and a Threads tab block in the
+  // same second and quietly double the rate again. Facebook and Threads are
+  // one Meta account, and the account is the thing that gets checkpointed --
+  // so one gate covers the browser, not one per site.
+  {
+    await reset();
+    await send('sw:enqueue-platform-block', { platform: 'threads', ids: ['9100000001'], warm: true });
+    await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['9100000002'], warm: true });
+
+    openGate();
+    const onThreads = await send('sw:queue-claim', { platform: 'threads' });
+    const onFacebook = await send('sw:queue-claim', { platform: 'facebook' });
+    check('a block in flight on Threads holds a Facebook tab back too',
+      onThreads.target === '9100000001' && !onFacebook.target && onFacebook.retryInMs > 0,
+      `threads=${onThreads.target} facebook=${onFacebook.target} retry=${onFacebook.retryInMs}`);
+
+    await send('sw:queue-result',
+      { platform: 'threads', target: onThreads.target, ok: true, dryRun: true, warm: true });
+    const stillHeld = await send('sw:queue-claim', { platform: 'facebook' });
+    const s21 = (await state()).settings;
+    check('and the pause after that block lands is shared across both sites',
+      !stillHeld.target && stillHeld.retryInMs > 0 &&
+      stillHeld.retryInMs <= (s21.warmMaxDelayMs | 0) + 500,
+      `retryInMs=${stillHeld.retryInMs} warmMax=${s21.warmMaxDelayMs}`);
+
+    openGate();
+    const servedNext = await send('sw:queue-claim', { platform: 'facebook' });
+    check('once the pause has run the other site is served, not starved',
+      servedNext.target === '9100000002', String(servedNext.target));
+  }
+
+  // -- 22. a tab that dies mid-block must not wedge the queue ----------------
+  //
+  // The gate is shut by the claim and reopened by the result, so a tab that is
+  // closed, crashed or navigated away between the two never reports anything.
+  // Nothing would notice: there is no error and no failed target, just a
+  // browser that stopped blocking. The claim bounds the shut gate by the lease
+  // for exactly this reason, and a bound is only worth having if it is tested.
+  {
+    // The worker's lease window. Hardcoded because it is a module-local const
+    // in the service worker: if it moves, this should fail loudly rather than
+    // quietly stop testing anything.
+    const LEASE_MS = 90 * 1000;
+
+    await reset();
+    await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['9200000001'], warm: true });
+    openGate();
+    const claimed = await send('sw:queue-claim', { platform: 'facebook' });
+
+    // The tab is gone. No result is ever reported for this target.
+    const wedged = await send('sw:queue-claim', { platform: 'facebook' });
+    const s22 = (await state()).settings;
+    check('with a block in flight the gate is shut for the lease, not for the delay',
+      claimed.target === '9200000001' && !wedged.target &&
+      wedged.retryInMs > (s22.warmMaxDelayMs | 0) && wedged.retryInMs <= LEASE_MS,
+      `retryInMs=${wedged.retryInMs} warmMax=${s22.warmMaxDelayMs} lease=${LEASE_MS}`);
+
+    rewind(LEASE_MS + 1000);
+    const recovered = await send('sw:queue-claim', { platform: 'facebook' });
+    check('and once the lease has run out the target is claimable again',
+      recovered.target === '9200000001',
+      `target=${recovered.target} retry=${recovered.retryInMs}`);
+    check('with nothing lost from the queue while it was held',
+      ((await state()).queue.facebook || []).length === 1,
+      JSON.stringify((await state()).queue.facebook));
   }
 
   finish();

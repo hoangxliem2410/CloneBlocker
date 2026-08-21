@@ -341,26 +341,27 @@ function findChrome() {
   let optOk = false;
   try {
     optOk = await evalIn(browser, optSession,
-      `!!document.getElementById('modeActive') && typeof chrome.storage === 'object'`, false);
+      `!!document.getElementById('blockFromList') && typeof chrome.storage === 'object'`, false);
   } catch (e) { /* reported below */ }
   check('options page renders with chrome APIs', !!optOk);
 
-  // The mode picker is the one decision this page asks anyone to make, and it
-  // is a pair of radios: with neither of them checked the page states nothing
-  // about what the extension is doing, which is worse than stating it wrongly.
+  // The two tick boxes are the decisions this page asks anyone to make. They
+  // are independent, so any combination is legitimate -- what must not happen
+  // is the page rendering them unticked on an install whose settings say
+  // otherwise, because an empty box states the opposite of the truth.
   let picker = null;
   try {
     picker = JSON.parse(await evalIn(browser, optSession, `
       JSON.stringify({
-        passive: !!document.getElementById('modePassive'),
-        active: !!document.getElementById('modeActive'),
-        checked: (document.getElementById('modeActive') || {}).checked ? 'active'
-               : (document.getElementById('modePassive') || {}).checked ? 'passive' : null
+        seen: !!document.getElementById('blockSeen'),
+        fromList: !!document.getElementById('blockFromList'),
+        seenOn: (document.getElementById('blockSeen') || {}).checked === true,
+        fromListOn: (document.getElementById('blockFromList') || {}).checked === true
       })
     `, false));
   } catch (e) { picker = { error: e.message }; }
-  check('options page renders the mode picker with a mode selected',
-    !!(picker && picker.passive && picker.active && picker.checked),
+  check('options page renders both blocking tick boxes, ticked by default',
+    !!(picker && picker.seen && picker.fromList && picker.seenOn && picker.fromListOn),
     JSON.stringify(picker));
 
   let swTarget = null;

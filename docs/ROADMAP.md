@@ -34,7 +34,7 @@ block something that has to happen outside the repository.
 
 | phase | landed in | what it added |
 |---|---|---|
-| 1 — modes, baked-in list, tab guidance | `db8fe2c` | `mode: passive \| active` as the one primary control, `LIST_URL` compiled in, the "no tab open" badge/banner/note |
+| 1 — modes, baked-in list, tab guidance | `db8fe2c` | `mode: passive \| active` as the one primary control, `LIST_URL` compiled in, the "no tab open" badge/banner/note — **the mode was retired afterwards; see below** |
 | 2 — tags | `7aec010` | one seven-tag vocabulary shared by the rules, `hosting/logic.js` and `protocol.js`; `blockTags` in the extension; tag chip, retag control and tag filter in the dashboard |
 | 3 — ranking tune-up | `7aec010` | `rankWeights` published with the list and tuned from the dashboard, with a live top-10 preview; a unique-reporter term that ships at 0 |
 | 4 — public transparency site | `acbed3f` | `blocklist/publicView`, the per-target `public` opt-in, the page at the hosting root, `/transparency.json` |
@@ -44,12 +44,45 @@ block something that has to happen outside the repository.
 Suites at the end of it: `check.js` clean, `queue-test.js` 90, `firebase-test.js`
 132, `e2e-test.js` 26, `dashboard-visual.js` green.
 
-The shape that came out the other end: an extension whose one visible choice is
-how hard it works, applying a hand-reviewed list it does not have to be told the
-address of, filtered by the kinds of account its owner is willing to spend a
-block on, in the reader's own language — and, behind it, a moderation dashboard
-and a separate public page that names only the accounts a person deliberately
-decided to name.
+The shape that came out the other end: an extension whose visible choices are
+where it may look for blocks, applying a hand-reviewed list it does not have to
+be told the address of, filtered by the kinds of account its owner is willing to
+spend a block on, in the reader's own language — and, behind it, a moderation
+dashboard and a separate public page that names only the accounts a person
+deliberately decided to name.
+
+### After the six phases: two switches, and one gate
+
+Two things phase 1 got wrong, both fixed after it shipped. Recorded here rather
+than edited into the plan above, because the plan is what was believed at the
+time.
+
+**The mode is gone; there are two switches.** `mode: 'passive' | 'active'` said
+the two kinds of blocking were alternatives. They never were — `active` always
+meant *both* — and the radio made "work through the ranked list but leave what I
+scroll past alone" impossible to express. It is now `blockSeen` and
+`blockFromList`, two independent tick boxes, both default true. Nothing changes
+under an existing install: `CB_BLOCK_MODES()` reads the pair when it is there
+and falls back to `mode`, then to the older `acceptServerTargets`, so a passive
+install stays warm-only and one that had server targets switched off keeps them
+switched off. `CB_MODE_OF()` survives for callers that only want the old word.
+`check.js` fails the build if `mode` is read anywhere but those two back-compat
+readers, or if a page hardcodes either value.
+
+**Pacing is per browser now, not per tab.** Each Facebook or Threads tab runs
+its own worker loop and paced itself from the delay the claim handed back. The
+leases stopped two tabs blocking the *same* profile; nothing stopped five tabs
+blocking five *different* ones in the same second, which is five times the rate
+the ceilings were chosen for. `stats.gateUntil` now shuts one gate for the whole
+browser while a block is in flight — bounded by the lease, so a tab that dies
+mid-block cannot wedge the queue — and again for the randomised delay after the
+result lands; `claim()` answers a shut gate with a null target and a
+`retryInMs`. The tab-side sleeps are belt and braces. One gate covers both
+sites, because Facebook and Threads are one Meta account and the account is what
+gets checkpointed.
+
+Suites after that work: `check.js` clean, `queue-test.js` 114,
+`firebase-test.js` 149, `e2e-test.js` 26, `dashboard-visual.js` green.
 
 ---
 
@@ -61,7 +94,7 @@ rebuilding:
 | todo | existing machinery |
 |---|---|
 | [1] ranking by unique reports, geo, time | `rank = trust × recency × (1+velocity7d) × locality` — trust already sums per-unique-reporter weights, locality is region/language affinity, recency+velocity are the time axis |
-| [3][4] passive/active modes | the warm/cold split: warm = on-screen targets at 4–11s pacing, cold = ranked list targets under the 4/hour ceiling |
+| [3][4] passive/active modes | the warm/cold split: warm = on-screen targets at 4–11s pacing, cold = ranked list targets under the 4/hour ceiling *(shipped as one mode, since split into the two switches)* |
 | [5] "keep a tab open" | true mechanic today — blocks execute through a content script, so no open tab means the cold queue stalls; it just isn't surfaced anywhere |
 
 The genuinely new work: tags, the transparency site, Google sign-in, i18n.
@@ -98,7 +131,10 @@ storage — but no UI writes it. `optional_host_permissions` drops to nothing
 (the two required origins cover the product; e2e patches its own manifest
 copy for the emulator origin). README loses the self-hosting pitch.
 
-**Passive / Active modes [3][4].** One new setting `mode: 'passive' | 'active'`
+**Passive / Active modes [3][4].** *(Superseded: this setting was replaced by
+the `blockSeen` / `blockFromList` pair after the phase shipped — see "After the
+six phases" above. The plan as written follows.)* One new setting
+`mode: 'passive' | 'active'`
 (default: active, since real blocking now defaults on) that maps onto existing
 switches — passive ⇒ block only what appears on screen, warm pacing,
 effectively no rate-limit pressure; active ⇒ warm + ranked cold targets under

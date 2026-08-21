@@ -188,8 +188,9 @@ for (const page of ['popup', 'activity']) {
 //
 // The product used to be described as Layer 1 (hide) and Layer 2 (real block).
 // That named the implementation rather than the choice anyone was making, and
-// the passive/active mode picker replaced it. It is the kind of vocabulary
-// that creeps back one label at a time, so this fails the build if it does.
+// a mode picker replaced it -- which was itself replaced, see 7b. It is the
+// kind of vocabulary that creeps back one label at a time, so this fails the
+// build if it does.
 //
 // Only what a reader can actually see is scanned: every HTML page under src/,
 // plus the quoted strings in the scripts those pages run. Comments still
@@ -236,6 +237,106 @@ for (const page of ['popup', 'activity']) {
 
   report(offenders.length === 0, 'the "Layer 1 / Layer 2" framing is gone from the UI',
     offenders.join('; '));
+}
+
+// ---- 7b. the retired passive/active mode ---------------------------------
+//
+// What the extension is allowed to block used to be one setting called `mode`,
+// with the values 'passive' and 'active'. It is now two independent switches,
+// blockSeen and blockFromList, because the pair the radio could not express --
+// work through the ranked list but leave what I scroll past alone -- is a
+// perfectly reasonable thing to want.
+//
+// Two ways that could rot. A page could go on reading the dead setting and
+// silently show the wrong state, or somebody could reintroduce the words as a
+// label and leave the product with two vocabularies for one thing. So:
+//
+//   1. nothing under src/ may read `mode`, compare against its values or call
+//      CB_MODE_OF, except the back-compat readers in protocol.js and
+//      service-worker.js -- which exist precisely to keep old installs working
+//      and must not be tidied away;
+//   2. no page script may hardcode 'passive' or 'active' as a mode string, and
+//      no page may keep the radio buttons that used to write it.
+//
+// Comments are stripped before any of this. An explanation of where the old
+// setting went is worth keeping, and a check that punished it would only get
+// the explanation deleted.
+{
+  const stripJsComments = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+
+  const htmlPages = (dir, acc) => {
+    acc = acc || [];
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (!e.name.startsWith('.')) htmlPages(p, acc); }
+      else if (e.name.endsWith('.html')) acc.push(p);
+    }
+    return acc;
+  };
+
+  // `mode` as a settings key, however it is spelled. `hideMode` is a different
+  // setting and stays: the word boundary keeps them apart without a list of
+  // exceptions.
+  const MODE_KEY = /\.mode\b|\[\s*['"]mode['"]\s*\]/;
+  // Its values, in the shapes a value actually turns up in: assigned, compared,
+  // or handed over as a property. Deliberately not a bare /'active'/ -- that is
+  // also the CSS class on a selected chip, and a check that cried wolf about
+  // styling would be switched off within the week.
+  const MODE_VALUE =
+    /(?:\bmode\s*(?:=|===?|!==?|:)\s*|[!=]==?\s*|\?\s*|:\s*)(['"])(?:passive|active)\1/;
+  const MODE_READER = /\bCB_MODE_OF\b|\bmodeOf\s*\(/;
+  // The flag that predates modes entirely and means what blockFromList off
+  // means. protocol.js reads it so nobody's old install changes behaviour
+  // under them; nothing else should know the name at all.
+  const LEGACY_FLAG = /\bacceptServerTargets\b/;
+
+  const ALLOWED = ['src/common/protocol.js', 'src/background/service-worker.js'];
+
+  const offenders = [];
+  for (const file of jsFiles(path.join(ROOT, 'src'))) {
+    const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+    if (ALLOWED.includes(rel)) continue;
+    stripJsComments(fs.readFileSync(file, 'utf8')).split(/\r?\n/).forEach((line, i) => {
+      if (MODE_KEY.test(line) || MODE_VALUE.test(line) ||
+          MODE_READER.test(line) || LEGACY_FLAG.test(line)) {
+        offenders.push(`${rel}:${i + 1} ${line.trim().slice(0, 50)}`);
+      }
+    });
+  }
+  report(offenders.length === 0,
+    'the removed `mode` setting is read nowhere but the back-compat readers',
+    offenders.join('; '));
+
+  // The words themselves, in the files that put text on a screen. This is what
+  // stops the vocabulary creeping back one label at a time: a 'passive' or
+  // 'active' string in a page script is a mode string whatever it is doing
+  // there, because the two switches have no such values to spell.
+  const PAGE_SCRIPTS = ['src/popup/popup.js', 'src/options/options.js',
+                        'src/activity/activity.js', 'src/content/report-ui.js',
+                        'src/content/dom-blocker.js', 'src/content/main.js'];
+  const said = [];
+  for (const rel of PAGE_SCRIPTS) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) { report(false, 'exists ' + rel); continue; }
+    stripJsComments(fs.readFileSync(file, 'utf8')).split(/\r?\n/).forEach((line, i) => {
+      if (MODE_VALUE.test(line)) said.push(`${rel}:${i + 1} ${line.trim().slice(0, 50)}`);
+    });
+  }
+  // And the controls that used to write it. The pages are built around two
+  // tick boxes now; a stray radio would be a second way to set the same thing.
+  for (const file of htmlPages(path.join(ROOT, 'src'))) {
+    const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+    fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+      if (/id="mode(Passive|Active)"|name="mode"/.test(line)) {
+        said.push(`${rel}:${i + 1} ${line.trim().slice(0, 50)}`);
+      }
+    });
+  }
+  report(said.length === 0,
+    'no page hardcodes a passive/active mode string or picker',
+    said.join('; '));
 }
 
 // ---- 8. one tag vocabulary, spelled the same in all three places ---------

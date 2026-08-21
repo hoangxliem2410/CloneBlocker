@@ -143,22 +143,24 @@
     submitToken: '',         // only if the server was started with --submit-token
 
     /**
-     * How hard the extension works.
+     * What the extension is allowed to block. Two independent switches, not
+     * two halves of one dial.
      *
-     *   passive -- block only profiles that turn up on the page while you use
-     *              the site. Every target was on screen, which is the pattern
-     *              the platform finds unremarkable, so these go fast (seconds
-     *              apart) and barely touch the rate limits.
-     *   active  -- the above, plus work through the ranked list itself. Those
-     *              targets were never on your screen, which is the pattern
-     *              that draws a checkpoint, so they are paced slowly and held
-     *              to a much tighter hourly ceiling.
+     *   blockSeen     -- profiles that turn up on the page while you browse.
+     *                    They were on your screen anyway, which is the pattern
+     *                    the platform finds unremarkable, so these go quickly.
+     *   blockFromList -- the ranked list itself: accounts that are active near
+     *                    you but that you may never scroll past. Never on your
+     *                    screen, which is the pattern that draws a checkpoint,
+     *                    so these are paced slowly under a tighter ceiling.
      *
-     * This replaced a pair of switches (acceptServerTargets and the old
-     * "Layer 1 / Layer 2" framing) that described the implementation rather
-     * than the choice being made.
+     * These used to be one `mode` with values 'passive' and 'active', which
+     * said they were alternatives. They never were -- the old 'active' meant
+     * BOTH -- and the radio buttons made "work the list but leave what I scroll
+     * past alone" unsayable. Two tick boxes say what is actually true.
      */
-    mode: 'active',          // 'passive' | 'active'
+    blockSeen: true,
+    blockFromList: true,
 
     /**
      * Which kinds of account this install is willing to spend a block on.
@@ -226,14 +228,29 @@
    * see", so an install carrying it lands in passive rather than silently
    * gaining a behaviour its owner had turned off.
    */
-  function modeOf(settings) {
+  function blockModes(settings) {
     const s = settings || {};
-    if (s.mode === 'passive' || s.mode === 'active') return s.mode;
-    return s.acceptServerTargets === false ? 'passive' : 'active';
+    // Explicit pair wins.
+    if (typeof s.blockSeen === 'boolean' || typeof s.blockFromList === 'boolean') {
+      return { seen: s.blockSeen !== false, fromList: s.blockFromList !== false };
+    }
+    // Then the single mode that replaced acceptServerTargets, then
+    // acceptServerTargets itself. An install that had turned the ranked list
+    // off must not gain it back by upgrading; the whole point of reading the
+    // old keys is that nobody's settings change under them.
+    if (s.mode === 'passive') return { seen: true, fromList: false };
+    if (s.mode === 'active') return { seen: true, fromList: true };
+    return { seen: true, fromList: s.acceptServerTargets !== false };
+  }
+
+  /** Kept so a caller that only wants the old vocabulary still reads right. */
+  function modeOf(settings) {
+    return blockModes(settings).fromList ? 'active' : 'passive';
   }
 
   globalThis.CB_LIST_URL = LIST_URL;
   globalThis.CB_MODE_OF = modeOf;
+  globalThis.CB_BLOCK_MODES = blockModes;
   globalThis.CB_TAGS = TAGS;
   globalThis.CB_TAG_LABELS = TAG_LABELS;
   globalThis.CB_PROTOCOL = PROTOCOL;

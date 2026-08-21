@@ -43,15 +43,23 @@
     'https://*.facebook.com/*', 'https://*.threads.net/*', 'https://*.threads.com/*'
   ];
 
-  /** Is there anywhere for a queued block to run right now? */
-  async function siteTabOpen() {
+  /**
+   * How many Facebook or Threads tabs are open, anywhere.
+   *
+   * The count, not a yes/no. "Nothing is moving because there is nowhere for
+   * it to run" and "nothing looks like it is moving because six tabs are
+   * sharing one block at a time" are the same picture from the outside and
+   * opposite situations underneath, and only the number tells them apart.
+   *
+   * null means the lookup itself failed. A warning that might be wrong is
+   * worse than no warning, so callers say nothing rather than guess.
+   */
+  async function siteTabCount() {
     try {
       const tabs = await chrome.tabs.query({ url: SITE_TAB_URLS });
-      return (tabs || []).length > 0;
+      return (tabs || []).length;
     } catch (e) {
-      // A warning that might be wrong is worse than no warning: if the lookup
-      // fails, assume there is a tab and say nothing.
-      return true;
+      return null;
     }
   }
 
@@ -161,11 +169,16 @@
    * One banner, in order of urgency.
    *
    * A pause or a checkpoint has stopped blocking for a reason the reader can
-   * do nothing about from here, so those win. The missing tab comes last: it
-   * is a real stall, but only of the cold queue, and only while everything
-   * else is healthy.
+   * do nothing about from here, so those win. Then a recent failure. Then the
+   * two ways work can be going nowhere with nothing visibly wrong: both
+   * switches off, and no tab anywhere to run a block in.
+   *
+   * Note what is NOT here any more. A queue that is not moving because six
+   * tabs are sharing one block at a time is not a stall and gets no banner --
+   * the queue note says "paced" and names the tabs. The banner is for the
+   * cases where nothing will happen until the reader does something.
    */
-  function renderBanner(stats, needsTab, cold) {
+  function renderBanner(stats, ctx) {
     const b = $('banner');
     const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
       ? stats.pausedUntil - Date.now() : 0;
@@ -181,12 +194,15 @@
     } else if (err && !oldErr) {
       b.textContent = err + (stats.lastErrorAt ? '  (' + ago(stats.lastErrorAt) + ')' : '');
       b.className = 'banner err';
-    } else if (needsTab) {
+    } else if (ctx.nothingOn) {
+      b.textContent = T('activity_bannerNothingOn');
+      b.className = 'banner warn';
+    } else if (ctx.needsTab) {
       // One message per case rather than a count spliced into a sentence: the
       // singular and the plural of this differ by more than an 's' in English
       // and by nothing at all in Vietnamese, and neither fits a fragment.
-      b.textContent = cold === 1
-        ? T('activity_needsTabOne') : T('activity_needsTabMany', cold);
+      b.textContent = ctx.actionable === 1
+        ? T('activity_needsTabOne') : T('activity_needsTabMany', ctx.actionable);
       b.className = 'banner warn';
     } else {
       b.className = 'banner hidden';
@@ -261,19 +277,31 @@
 
     $('queueEmpty').classList.toggle('hidden', entries.length > 0);
 
-    // Why nothing is moving, when nothing is moving. Passive mode and a
-    // missing tab look identical from the outside -- a queue that sits there
-    // -- and only one of them is fixed by opening a tab.
-    const cold = (ctx && ctx.cold) || 0;
+    // Why nothing is moving, when nothing is moving -- and, just as much, why
+    // it IS moving when it looks like it is not. A switched-off list, a
+    // missing tab and a queue being drained one block at a time all look
+    // identical from the outside: rows that sit there. Only one of the three
+    // is fixed by opening a tab, and the third is not a fault at all.
     const bits = [];
     if (!s.settings.platformBlockEnabled) {
       bits.push(T('activity_queuePaused'));
+    } else if (ctx.nothingOn) {
+      bits.push(T('activity_queueNothingOn'));
     } else {
       if (s.settings.platformBlockDryRun) bits.push(T('activity_queueDryRun'));
-      if (cold && globalThis.CB_MODE_OF(s.settings) === 'passive') {
-        bits.push(T('activity_queuePassive', cold));
-      } else if (ctx && ctx.needsTab) {
-        bits.push(T('activity_queueNeedsTab', cold));
+      if (ctx.cold && !ctx.modes.fromList) {
+        bits.push(ctx.cold === 1
+          ? T('activity_queueListOffOne') : T('activity_queueListOffMany', ctx.cold));
+      }
+      if (ctx.actionable && ctx.tabs === 0) {
+        bits.push(ctx.actionable === 1
+          ? T('activity_queueNoTabOne') : T('activity_queueNoTabMany', ctx.actionable));
+      } else if (ctx.actionable && ctx.tabs > 0) {
+        // Said out loud because the alternative is a user opening five tabs to
+        // go five times faster and never finding out that the gate is one
+        // block at a time for the whole browser, on purpose.
+        bits.push(ctx.tabs === 1
+          ? T('activity_queuePacedOne') : T('activity_queuePacedMany', ctx.tabs));
       }
     }
     $('queueNote').textContent = bits.join(' · ');
@@ -326,16 +354,25 @@
     const s = await sw(P.SW.GET_STATE);
     if (!s.ok) { $('banner').textContent = s.error; $('banner').className = 'banner err'; return; }
     state = s;
-    // The one condition both the banner and the queue note turn on: work that
-    // only an open Facebook or Threads tab can carry out, and no such tab.
+    // The facts the banner and the queue note both read, worked out once.
     const cold = coldQueued(s);
-    const needsTab = !!s.settings.platformBlockEnabled &&
-      globalThis.CB_MODE_OF(s.settings) === 'active' &&
-      cold > 0 && !(await siteTabOpen());
-    renderBanner(s.stats || {}, needsTab, cold);
+    const total = Object.values(s.queue || {}).reduce((n, a) => n + a.length, 0);
+    const modes = globalThis.CB_BLOCK_MODES(s.settings);
+    const on = !!s.settings.platformBlockEnabled;
+    const tabs = await siteTabCount();
+    // Work an open tab could actually carry out. Cold targets are excluded
+    // while the list is switched off: they are parked by a setting, and
+    // telling their owner to open a tab would not move them.
+    const actionable = total - (modes.fromList ? 0 : cold);
+    const nothingOn = on && !modes.seen && !modes.fromList;
+    // A genuine stall, as opposed to a paced queue: there is work, and
+    // nowhere in the whole browser for it to run.
+    const needsTab = on && !nothingOn && actionable > 0 && tabs === 0;
+    const ctx = { cold, total, actionable, tabs, modes, nothingOn, needsTab };
+    renderBanner(s.stats || {}, ctx);
     renderTiles(s);
     renderSync(s);
-    renderQueue(s, { cold, needsTab });
+    renderQueue(s, ctx);
     renderLog(s);
   }
 
@@ -373,6 +410,7 @@
     let pending = null;
     const soon = () => { clearTimeout(pending); pending = setTimeout(render, 400); };
     chrome.tabs.onRemoved.addListener(soon);
+    chrome.tabs.onCreated.addListener(soon);
     chrome.tabs.onUpdated.addListener((id, ch) => { if (ch && ch.url) soon(); });
   } catch (e) { /* the page is still correct without it, just slower */ }
 })();

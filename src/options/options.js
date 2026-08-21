@@ -1,11 +1,11 @@
 /**
- * Options page: the mode picker, blocklist status, and everything else folded
- * into Advanced.
+ * Options page: what the extension is allowed to block, blocklist status, and
+ * everything else folded into Advanced.
  *
  * The page used to open on a text field asking for a server endpoint, which is
  * a question a new user has no way to answer. The address is baked into
- * protocol.js now, so the first thing here is the only real decision: how hard
- * the extension should work.
+ * protocol.js now, so the first thing here is the real decision: which of the
+ * two jobs the extension should do.
  */
 (function () {
   'use strict';
@@ -13,17 +13,24 @@
   const P = globalThis.CB_PROTOCOL;
   const T = globalThis.CB_T;
   const KEYS = globalThis.CB_KEYS;
-  const modeOf = globalThis.CB_MODE_OF;
+  const blockModes = globalThis.CB_BLOCK_MODES;
   const $ = (id) => document.getElementById(id);
 
-  // Fields that map straight onto a settings key of the same name. Two things
-  // deliberately stay out: `mode` (a pair of radios, not one input) and
-  // `platformBlockEnabled` (shown inverted, as "Pause blocking").
+  // Fields that map straight onto a settings key of the same name. One thing
+  // deliberately stays out: `platformBlockEnabled`, which is shown inverted as
+  // "Pause blocking".
+  //
+  // `blockSeen` and `blockFromList` are in here even though load() reads them
+  // through CB_BLOCK_MODES rather than straight off the settings object: being
+  // listed is what gets them saved, wired to `change` and -- the part worth
+  // the small redundancy -- checked by tools/check.js against the ids in the
+  // HTML, so a box that is renamed in one file and not the other fails the
+  // build instead of silently never saving.
   const TEXT_FIELDS = ['apiBase', 'submitToken'];
   const NUM_FIELDS = ['maxBlocksPerHour', 'maxBlocksPerDay',
     'minDelayMs', 'maxDelayMs', 'maxColdBlocksPerHour', 'targetBudget',
     'warmMinDelayMs', 'warmMaxDelayMs'];
-  const BOOL_FIELDS = ['shareRegion',
+  const BOOL_FIELDS = ['blockSeen', 'blockFromList', 'shareRegion',
     'hideEnabled', 'hideFeedPosts', 'hideComments',
     'platformBlockDryRun', 'allowRawNetworkFallback',
     'reportUiEnabled', 'debug'];
@@ -104,11 +111,14 @@
     for (const f of BOOL_FIELDS) $(f).checked = !!s[f];
     for (const f of SELECT_FIELDS) if (s[f]) $(f).value = s[f];
 
-    // modeOf tolerates installs written before modes existed, so the picker
-    // agrees with what the service worker will actually do.
-    const mode = modeOf(s);
-    $('modePassive').checked = mode === 'passive';
-    $('modeActive').checked = mode === 'active';
+    // Read through CB_BLOCK_MODES rather than off the two keys directly: an
+    // install written before the pair existed carries `mode` or the older
+    // `acceptServerTargets` instead, and the boxes have to show what the
+    // service worker will actually do, not what this object happens to spell.
+    const modes = blockModes(s);
+    $('blockSeen').checked = modes.seen;
+    $('blockFromList').checked = modes.fromList;
+    renderBlockNothing();
 
     // Inverted on purpose: the switch means "blocking is on", the control means
     // "pause it". Only an explicit false counts as paused, so a settings object
@@ -138,7 +148,6 @@
     for (const f of BOOL_FIELDS) patch[f] = $(f).checked;
     for (const f of SELECT_FIELDS) patch[f] = $(f).value;
 
-    patch.mode = $('modeActive').checked ? 'active' : 'passive';
     patch.platformBlockEnabled = !$('pauseBlocking').checked;
     // Filtered through TAGS so the stored array is always vocabulary, in
     // vocabulary order, whatever the DOM happens to contain.
@@ -149,6 +158,7 @@
 
     await sw(P.SW.SET_SETTINGS, patch);
     renderPaused();
+    renderBlockNothing();
     renderTagNote();
   }
 
@@ -158,18 +168,27 @@
   for (const f of BOOL_FIELDS.concat(SELECT_FIELDS)) {
     $(f).addEventListener('change', save);
   }
-  for (const f of ['modePassive', 'modeActive', 'pauseBlocking']) {
-    $(f).addEventListener('change', save);
-  }
+  $('pauseBlocking').addEventListener('change', save);
   for (const box of tagInputs.values()) box.addEventListener('change', save);
 
   /**
-   * Pause lives in Advanced, so on a collapsed page the mode picker would
+   * Pause lives in Advanced, so on a collapsed page the two boxes above would
    * otherwise claim work is happening while nothing is. Say so where the claim
    * is made.
    */
   function renderPaused() {
     $('pausedNote').classList.toggle('hidden', !$('pauseBlocking').checked);
+  }
+
+  /**
+   * Untick both and the extension blocks nobody. That is a setting someone may
+   * genuinely want -- the list still syncs, hiding still runs, Block now still
+   * works -- but two empty boxes look exactly like a page that failed to load,
+   * so the state has to name itself.
+   */
+  function renderBlockNothing() {
+    const none = !$('blockSeen').checked && !$('blockFromList').checked;
+    $('blockNothingNote').classList.toggle('hidden', !none);
   }
 
   // -- blocklist status ------------------------------------------------------
@@ -274,8 +293,10 @@
     const state = await sw(P.SW.GET_STATE);
     if (!state.ok) { $('diag').textContent = state.error || T('options_diagUnavailable'); return; }
     const bl = state.blocklist;
+    const modes = blockModes(state.settings || {});
     const view = {
-      mode: modeOf(state.settings || {}),
+      blockSeen: modes.seen,
+      blockFromList: modes.fromList,
       blocklist: bl ? {
         ids: bl.ids.length,
         usernames: bl.usernames.length,

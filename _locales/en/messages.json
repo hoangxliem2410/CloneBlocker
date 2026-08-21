@@ -7,6 +7,10 @@
     "message": "$1 reported, not yet decided",
     "description": "Value of the 'awaiting review' row. $1 is how many reported profiles an admin has not ruled on."
   },
+  "activity_bannerNothingOn": {
+    "message": "Nothing is being blocked. Neither blocking profiles you run into nor working through the list is switched on — turn one on in Settings.",
+    "description": "Banner across the top of the Activity page when both blocking switches -- profiles you run into, and working through the list -- are off."
+  },
   "activity_chipBlocked": {
     "message": "blocked",
     "description": "Chip on a history row: this attempt succeeded."
@@ -84,12 +88,12 @@
     "description": "Shown in place of the block history when nothing has been attempted."
   },
   "activity_needsTabMany": {
-    "message": "$1 profiles from the list are waiting to be blocked. Active blocking runs inside a Facebook or Threads tab — open one and leave it open.",
-    "description": "Banner across the top of the Activity page when queued profiles cannot be blocked for want of an open site tab. $1 is how many; never 1."
+    "message": "$1 profiles are waiting to be blocked and no Facebook or Threads tab is open. Blocking runs inside those tabs — open one and leave it open.",
+    "description": "Banner across the top of the Activity page when $1 queued profiles cannot be blocked because no Facebook or Threads tab is open anywhere. $1 is never 1."
   },
   "activity_needsTabOne": {
-    "message": "1 profile from the list is waiting to be blocked. Active blocking runs inside a Facebook or Threads tab — open one and leave it open.",
-    "description": "Banner across the top of the Activity page when exactly one queued profile cannot be blocked for want of an open site tab."
+    "message": "1 profile is waiting to be blocked and no Facebook or Threads tab is open. Blocking runs inside those tabs — open one and leave it open.",
+    "description": "Banner across the top of the Activity page when exactly one queued profile cannot be blocked because no Facebook or Threads tab is open anywhere."
   },
   "activity_noList": {
     "message": "no list configured — open Settings",
@@ -115,13 +119,33 @@
     "message": "Waiting to be blocked",
     "description": "Heading of the Activity card listing queued profiles."
   },
-  "activity_queueNeedsTab": {
-    "message": "$1 from the list need a Facebook or Threads tab open",
-    "description": "Note beside the queue heading. $1 is how many queued profiles cannot be blocked for want of an open site tab."
+  "activity_queueListOffMany": {
+    "message": "$1 from the list are parked — working through the list is switched off",
+    "description": "Note beside the queue heading when $1 queued profiles came from the ranked list and working through the list is switched off. $1 is never 1."
   },
-  "activity_queuePassive": {
-    "message": "$1 from the list — paused by passive mode",
-    "description": "Note beside the queue heading. $1 is how many queued profiles came from the ranked list and are therefore going nowhere in passive mode."
+  "activity_queueListOffOne": {
+    "message": "1 from the list is parked — working through the list is switched off",
+    "description": "Note beside the queue heading when exactly one queued profile came from the ranked list and working through the list is switched off."
+  },
+  "activity_queueNoTabMany": {
+    "message": "$1 waiting — no Facebook or Threads tab open to block them in",
+    "description": "Note beside the queue heading: $1 profiles are waiting and no Facebook or Threads tab is open to block them in. $1 is never 1."
+  },
+  "activity_queueNoTabOne": {
+    "message": "1 waiting — no Facebook or Threads tab open to block it in",
+    "description": "Note beside the queue heading: one profile is waiting and no Facebook or Threads tab is open to block it in."
+  },
+  "activity_queueNothingOn": {
+    "message": "neither kind of blocking is switched on — nothing is being blocked at all",
+    "description": "Note beside the queue heading when both blocking switches are off, so nothing in the queue is going anywhere."
+  },
+  "activity_queuePacedMany": {
+    "message": "paced — one block at a time, shared across the $1 Facebook or Threads tabs you have open",
+    "description": "Note beside the queue heading when the queue is draining normally and $1 Facebook or Threads tabs are open. It names the pacing on purpose: more tabs do not mean more blocks. $1 is never 1."
+  },
+  "activity_queuePacedOne": {
+    "message": "paced — one block at a time, in the Facebook or Threads tab you have open",
+    "description": "Note beside the queue heading when the queue is draining normally and exactly one Facebook or Threads tab is open."
   },
   "activity_queuePaused": {
     "message": "blocking is paused — these wait until it is switched back on",
@@ -279,6 +303,38 @@
     "message": "derived from the blocklist address",
     "description": "Greyed-out text inside the empty API base field, saying what happens if it is left blank."
   },
+  "options_blockFromListCost": {
+    "message": "Paced slowly and capped per hour, because working through strangers is the pattern that draws a checkpoint.",
+    "description": "What the second tick box costs in risk, under its description. A ‘checkpoint’ is the security challenge Facebook or Threads puts an account behind."
+  },
+  "options_blockFromListNeedsTab": {
+    "message": "<b>Needs a Facebook or Threads tab open</b> — blocks are issued through the site’s own code. Any tab will do, and the work carries on for as long as one is open.",
+    "description": "The one condition the second tick box has, under its description. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated and nothing else may be marked up."
+  },
+  "options_blockFromListTitle": {
+    "message": "Work through the list too",
+    "description": "Label of the second tick box on the settings page: also block listed profiles you never scroll past. The word ‘too’ carries the meaning that the two boxes are independent and both ship on."
+  },
+  "options_blockFromListWhat": {
+    "message": "Adds the clones the list says are most active near you, even ones you never scroll past.",
+    "description": "What the second tick box does, under its label."
+  },
+  "options_blockNothingNote": {
+    "message": "Neither box is ticked, so the extension will not block anyone on its own. That is a real setting, not a fault: the list still syncs, hiding still applies if it is on, and Block now in the popup still works.",
+    "description": "Note shown when both tick boxes are off. It has to read as a state someone chose, not as an error. ‘Block now’ names the popup’s button, so the two must match."
+  },
+  "options_blockSeenCost": {
+    "message": "They were on your screen anyway, so these go through quickly and stay well clear of the rate limits.",
+    "description": "What the first tick box costs in risk, under its description. ‘Rate limits’ are the platform’s own limits on how often an account may block people."
+  },
+  "options_blockSeenTitle": {
+    "message": "Block clones I run into",
+    "description": "Label of the first tick box on the settings page: block listed profiles that appear while you browse."
+  },
+  "options_blockSeenWhat": {
+    "message": "Profiles from the list that appear on the page while you browse.",
+    "description": "What the first tick box does, under its label."
+  },
   "options_blockingHeading": {
     "message": "Blocking",
     "description": "Heading of the first card inside Advanced, which holds the pause switch and two debugging switches."
@@ -415,34 +471,6 @@
     "message": "Max blocks per hour (all sources)",
     "description": "Label of the number field capping every block in an hour, whatever it came from."
   },
-  "options_modeActiveCost": {
-    "message": "Paced slowly and capped per hour, because working through strangers is the pattern that draws a checkpoint.",
-    "description": "What active mode costs in risk, under its description. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind."
-  },
-  "options_modeActiveNeedsTab": {
-    "message": "<b>Needs a Facebook or Threads tab open to do this work</b> — blocks are issued through the site’s own code, so with nothing open they simply wait.",
-    "description": "The one condition active mode has, under its description. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated and nothing else may be marked up."
-  },
-  "options_modeActiveTitle": {
-    "message": "Active — also works through the list in the background",
-    "description": "Label of the 'active' radio button in the mode picker."
-  },
-  "options_modeActiveWhat": {
-    "message": "Adds the clones the list says are most active near you, even if you never scroll past them.",
-    "description": "What active mode does, under its radio button."
-  },
-  "options_modePassiveCost": {
-    "message": "They were on your screen anyway, so these go through quickly and stay well clear of the rate limits.",
-    "description": "What passive mode costs in risk, under its description. 'Rate limits' are the platform's own limits on how often an account may block people."
-  },
-  "options_modePassiveTitle": {
-    "message": "Passive — blocks clones as you run into them",
-    "description": "Label of the 'passive' radio button in the mode picker."
-  },
-  "options_modePassiveWhat": {
-    "message": "Only profiles that appear on the page while you browse.",
-    "description": "What passive mode does, under its radio button."
-  },
   "options_noneCaptured": {
     "message": "none captured yet",
     "description": "Status beside the Forget captured templates button when nothing has been learned."
@@ -472,12 +500,12 @@
     "description": "Tick box that stops every real block until it is switched back."
   },
   "options_pauseHint": {
-    "message": "Stops every real block, in both modes, until you switch it back. Nothing is lost — queued profiles wait. Hiding, below, is unaffected.",
-    "description": "Explains the Pause blocking tick box. 'Hiding' is the separate feature further down that only suppresses content in your own browser."
+    "message": "Stops every real block, whichever box asked for it, until you switch it back. Nothing is lost — queued profiles wait. Hiding, below, is unaffected.",
+    "description": "Explains the Pause blocking tick box. ‘Hiding’ is the separate feature further down that only suppresses content in your own browser."
   },
   "options_pausedNote": {
-    "message": "Blocking is paused right now, so neither mode is doing anything. Unpause it under Advanced.",
-    "description": "Warning under the mode picker when blocking has been paused, since the pause control lives further down in the collapsed Advanced section."
+    "message": "Blocking is paused right now, so neither of these is doing anything. Unpause it under Advanced.",
+    "description": "Warning under the two tick boxes when blocking has been paused, since the pause control lives further down in the collapsed Advanced section."
   },
   "options_profileIdMany": {
     "message": "$1 profile ids",
@@ -581,7 +609,7 @@
   },
   "options_workHeading": {
     "message": "How much work it does",
-    "description": "Heading of the first card on the settings page, which holds the passive/active mode picker."
+    "description": "Heading of the first card on the settings page, which holds the two tick boxes for what the extension is allowed to block."
   },
   "popup_activityLink": {
     "message": "Activity",
@@ -599,9 +627,17 @@
     "message": "Queueing…",
     "description": "The Block now button while the request to queue the block is in flight."
   },
+  "popup_blockingNothingOn": {
+    "message": "Neither kind of blocking is switched on, so nothing is being blocked anywhere. Turn one on in Settings.",
+    "description": "Note in the popup's queue card when both blocking switches -- profiles you run into, and working through the list -- are off, so nothing is blocked at all."
+  },
   "popup_blockingOffHidden": {
     "message": "Platform blocking is off, so this profile is hidden but not blocked.",
     "description": "Note under the popup's buttons when blocking is paused and the open profile is on the blocklist."
+  },
+  "popup_blockingPaused": {
+    "message": "Blocking is paused in Settings, so no tab is doing any of it.",
+    "description": "Note in the popup's queue card when the user has paused blocking entirely and nothing is queued."
   },
   "popup_couldNotIdentify": {
     "message": "Could not identify a profile here.",
@@ -639,13 +675,25 @@
     "message": "Open someone’s profile, or hover any name in the feed and use the Report chip.",
     "description": "Explains what to do, under the popup headline, when the page is not showing a profile. 'Report chip' is the small button that appears when you hover a name in the feed."
   },
+  "popup_noTabIdle": {
+    "message": "No Facebook or Threads tab is open. Nothing is waiting, but blocking needs one of those tabs to run in.",
+    "description": "Note in the popup's queue card when no Facebook or Threads tab is open and nothing is queued either."
+  },
+  "popup_noTabMany": {
+    "message": "$1 profiles are waiting and no Facebook or Threads tab is open for them to be blocked in — open one and leave it open.",
+    "description": "Note in the popup's queue card when $1 profiles are waiting and no Facebook or Threads tab is open for them to be blocked in. $1 is never 1."
+  },
+  "popup_noTabOne": {
+    "message": "1 profile is waiting and no Facebook or Threads tab is open for it to be blocked in — open one and leave it open.",
+    "description": "Note in the popup's queue card when exactly one profile is waiting and no Facebook or Threads tab is open for it to be blocked in."
+  },
   "popup_notListed": {
     "message": "Not on your blocklist",
     "description": "Status line under the profile name in the popup when this profile is not on the downloaded blocklist."
   },
   "popup_notOnSite": {
-    "message": "Not on Facebook or Threads",
-    "description": "Headline of the popup's action card when the current tab is some other site."
+    "message": "This tab isn’t Facebook or Threads",
+    "description": "Headline of the popup's action card when the current tab is some other site. It is a statement about this tab only -- whether blocking is running at all is answered separately, lower down the popup."
   },
   "popup_openProfileNote": {
     "message": "Open a Facebook or Threads profile to report or block it.",
@@ -671,21 +719,21 @@
     "message": "not a supported site",
     "description": "Small pill at the top right of the popup when the current tab is neither Facebook nor Threads."
   },
-  "popup_queueNeedsTab": {
-    "message": "$1 of these came from the list — active blocking needs a Facebook or Threads tab open.",
-    "description": "Note in the popup's queue card when queued profiles cannot be blocked because no Facebook or Threads tab is open. $1 is how many."
+  "popup_queueListOffMany": {
+    "message": "$1 of these came from the list, and working through the list is switched off — they stay parked until you switch it back on.",
+    "description": "Note in the popup's queue card when $1 queued profiles came from the ranked list and working through the list is switched off. $1 is never 1."
+  },
+  "popup_queueListOffOne": {
+    "message": "1 of these came from the list, and working through the list is switched off — it stays parked until you switch it back on.",
+    "description": "Note in the popup's queue card when exactly one queued profile came from the ranked list and working through the list is switched off."
   },
   "popup_queuePacing": {
-    "message": "Paced in the background, a few at a time.",
-    "description": "Note in the popup's queue card when the queue is draining normally."
+    "message": "Paced in the background — one block at a time, however many tabs are open.",
+    "description": "Note in the popup's queue card when the queue is draining normally. It names the pacing on purpose: someone who opens several tabs expecting several times the speed should learn here why that is not what happens."
   },
   "popup_queueParked": {
     "message": "Blocking is paused, so these stay where they are.",
     "description": "Note in the popup's queue card when the user has paused blocking and profiles are queued."
-  },
-  "popup_queuePassive": {
-    "message": "$1 of these came from the list — paused by passive mode, which blocks only profiles you scroll past.",
-    "description": "Note in the popup's queue card. $1 is how many queued profiles came from the ranked list rather than from the screen."
   },
   "popup_queuedCountLabel": {
     "message": "Waiting to be blocked",
@@ -726,6 +774,26 @@
   "popup_settingsLink": {
     "message": "Settings",
     "description": "Footer link in the popup: opens the extension's settings page."
+  },
+  "popup_tabsElsewhereMany": {
+    "message": "Not here — but blocking is running in the $1 Facebook or Threads tabs you have open, one block at a time across all of them, on purpose.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads but $1 such tabs are open elsewhere. $1 is never 1."
+  },
+  "popup_tabsElsewhereOne": {
+    "message": "Not here — but blocking is running in the one Facebook or Threads tab you have open.",
+    "description": "Note in the popup when the current tab is neither Facebook nor Threads but exactly one such tab is open elsewhere. It exists to stop the popup reading as 'the extension is idle' when it is not."
+  },
+  "popup_tabsHere": {
+    "message": "Blocking is running in this tab.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and is the only such tab open."
+  },
+  "popup_tabsHereAndMany": {
+    "message": "Blocking is running here and in $1 other Facebook or Threads tabs — still one block at a time across all of them, on purpose.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and $1 other such tabs are also open. $1 is never 1."
+  },
+  "popup_tabsHereAndOne": {
+    "message": "Blocking is running here and in one other Facebook or Threads tab — still one block at a time across both, on purpose.",
+    "description": "Note in the popup saying where blocking is running, when the current tab is Facebook or Threads and exactly one other such tab is open."
   },
   "popup_thisIsYou": {
     "message": "This is you",

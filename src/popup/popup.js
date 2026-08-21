@@ -11,7 +11,18 @@
  * The hide toggle went the same way. Hiding ships off by default -- real
  * blocks are the product -- so it is a Settings choice rather than a switch to
  * flip from here. What took its place is the queue: how much is waiting, and
- * the one condition that silently stops it moving.
+ * whatever silently stops it moving.
+ *
+ * Two questions live here and they are not the same one:
+ *
+ *   can I act on the profile in front of me?  That is the active tab, and the
+ *     Report and Block buttons are right to go away when it is not a profile.
+ *   is blocking working?                      That is whether ANY Facebook or
+ *     Threads tab is open, anywhere. The active tab has nothing to do with it.
+ *
+ * The popup used to answer the second with the first, and told anyone reading
+ * their email in a fourth tab that the extension was doing nothing while it
+ * was blocking away in the other three.
  */
 (function () {
   'use strict';
@@ -63,15 +74,25 @@
     'https://*.facebook.com/*', 'https://*.threads.net/*', 'https://*.threads.com/*'
   ];
 
-  /** Is there anywhere for a queued block to run right now? */
-  async function siteTabOpen() {
+  /**
+   * How many Facebook or Threads tabs are open, anywhere.
+   *
+   * "Can I act on the profile in front of me?" and "is blocking working?" are
+   * different questions, and this popup used to answer both with the active
+   * tab. The first one it was right about; the second it was not. Somebody
+   * with three Threads tabs open in another window, reading their email, was
+   * told "Not on Facebook or Threads" -- which reads as "the extension is
+   * off" while it is in fact blocking away in all three.
+   *
+   * null means the lookup itself failed. A warning that might be wrong is
+   * worse than no warning, so callers say nothing rather than guess.
+   */
+  async function siteTabCount() {
     try {
       const tabs = await chrome.tabs.query({ url: SITE_TAB_URLS });
-      return (tabs || []).length > 0;
+      return (tabs || []).length;
     } catch (e) {
-      // A warning that might be wrong is worse than no warning: if the lookup
-      // fails, assume there is a tab and say nothing.
-      return true;
+      return null;
     }
   }
 
@@ -156,10 +177,11 @@
       }
     }
 
-    // Deliberately outside those branches. The queue is the one thing worth
-    // reading here when you are NOT on Facebook or Threads -- that is exactly
-    // when cold targets are stuck with nowhere to run.
-    await renderBlocking(state, settings, stats, status);
+    // Deliberately outside those branches, and it is told whether this tab is
+    // a supported one rather than deciding for itself. Everything above is
+    // about the page in front of you; everything below is about whether
+    // blocking is running at all, which the active tab does not determine.
+    await renderBlocking(state, settings, stats, status, !!tab);
   }
 
   /** The action card: who this is, and the one or two things to do about it. */
@@ -224,38 +246,83 @@
   }
 
   /** The queue in two numbers, plus whatever is holding it up. */
-  async function renderBlocking(state, settings, stats, status) {
+  async function renderBlocking(state, settings, stats, status, onSite) {
     const counts = queueCounts(state);
     const on = !!settings.platformBlockEnabled;
-    const mode = globalThis.CB_MODE_OF(settings);
+    // Two independent switches, not two halves of one dial: one for profiles
+    // you run into, one for working through the ranked list. Either can be off
+    // without the other, and "off" means a different sentence in each case.
+    const modes = globalThis.CB_BLOCK_MODES(settings);
     const cold = counts.cold;
     $('queuedCount').textContent = String(counts.total);
+
+    const tabs = await siteTabCount();
+    // What an open tab could actually carry out right now. Cold targets do not
+    // count while the list is switched off -- those are parked by a setting,
+    // and telling their owner to go and open a tab would not move them.
+    const actionable = counts.total - (modes.fromList ? 0 : cold);
+    const blocking = on && (modes.seen || modes.fromList);
+
+    // Where blocking is running, said with the count, whether or not this tab
+    // is one of the places. Silent when nothing is blocking at all or when the
+    // tab lookup failed: the note below has the honest answer in both cases.
+    const where = $('tabsNote');
+    if (!blocking || !tabs) {
+      where.textContent = '';
+    } else if (onSite) {
+      // The pacing is worth naming here. Someone who opens five tabs expecting
+      // five times the speed should find out from the popup that the gate is
+      // one block at a time for the whole browser, deliberately.
+      where.textContent = tabs === 1 ? T('popup_tabsHere')
+        : tabs === 2 ? T('popup_tabsHereAndOne')
+        : T('popup_tabsHereAndMany', tabs - 1);
+    } else {
+      where.textContent = tabs === 1 ? T('popup_tabsElsewhereOne')
+        : T('popup_tabsElsewhereMany', tabs);
+    }
 
     // A checkpoint pause is otherwise invisible: blocking silently stops and
     // the extension just looks broken, so say so plainly.
     const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
       ? Math.ceil((stats.pausedUntil - Date.now()) / 60000) : 0;
-    // The stall nobody could guess at. False whenever this popup is open on
-    // Facebook or Threads: that tab is itself somewhere for a block to run.
-    const needsTab = on && mode === 'active' && cold > 0 && !(await siteTabOpen());
 
     const note = $('blockingNote');
     note.className = 'note';
-    if (pausedFor) {
+    if (!on) {
+      note.textContent = T(counts.total ? 'popup_queueParked' : 'popup_blockingPaused');
+    } else if (!modes.seen && !modes.fromList) {
+      // Both switches off. Nothing else below is worth saying -- no tab, no
+      // pause and no pacing explains a queue that nobody is working.
+      note.textContent = T('popup_blockingNothingOn');
+    } else if (pausedFor) {
       // Two whole messages rather than one sentence with a swappable tail: a
       // checkpoint and a rate limit ask different things of the reader, and a
       // tail that has to graft onto a translated stem is the one shape no
       // other language can be relied on to accept.
       note.textContent = T(stats.halted ? 'popup_pausedCheckpoint' : 'popup_pausedRateLimit',
         forMinutes(pausedFor));
-    } else if (!on && counts.total) {
-      note.textContent = T('popup_queueParked');
-    } else if (on && mode === 'passive' && cold) {
-      note.textContent = T('popup_queuePassive', cold);
-    } else if (needsTab) {
+    } else if (tabs === 0 && actionable) {
+      // The genuinely stalled case, and the only one an open tab fixes.
       note.className = 'note warn';
-      note.textContent = T('popup_queueNeedsTab', cold);
-    } else if (on && counts.total) {
+      note.textContent = actionable === 1
+        ? T('popup_noTabOne') : T('popup_noTabMany', actionable);
+    } else if (cold && !modes.fromList) {
+      // Above the empty-handed tab note on purpose. Work parked by a switch
+      // would not move if a tab were open, so naming the tab first would send
+      // the reader to fix the wrong thing -- and "nothing is waiting" directly
+      // under a queue count of 2 is simply untrue.
+      note.textContent = cold === 1
+        ? T('popup_queueListOffOne') : T('popup_queueListOffMany', cold);
+    } else if (tabs === 0) {
+      // Nothing queued, nowhere to run it either. Worth saying, quietly: this
+      // is the state someone checks the popup in when they wonder whether the
+      // extension is alive at all.
+      note.className = 'note warn';
+      note.textContent = T('popup_noTabIdle');
+    } else if (counts.total && !(tabs > 1)) {
+      // Skipped when there are several tabs, because the line above has just
+      // said the same thing in the form that actually needs saying: more tabs
+      // do not mean more blocks.
       note.textContent = T('popup_queuePacing');
     } else {
       note.textContent = '';

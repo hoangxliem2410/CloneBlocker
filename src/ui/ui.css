@@ -224,13 +224,14 @@ footer a:hover { text-decoration: underline; }
    where there is no room for two. */
 .taglist { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 16px; }
 
-/* options: the mode picker.
-   This is the page's one primary decision, so the two choices are cards you
-   click anywhere on rather than a pair of radios in a list -- and the whole
-   card carries the selection, because the cost line under each title is the
-   part people need to read before choosing. */
-.modes { display: grid; gap: 10px; }
-.mode {
+/* options: the two jobs the extension can be asked to do.
+   These are the page's primary decisions, so each is a card you click
+   anywhere on rather than a tick box in a list -- and the whole card carries
+   the state, because the cost line under each title is the part people need
+   to read before deciding. The two are independent, so both cards can be lit
+   at once; a card left dark is a job simply switched off. */
+.jobs { display: grid; gap: 10px; }
+.job {
   display: block;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -238,19 +239,19 @@ footer a:hover { text-decoration: underline; }
   background: var(--bg);
   cursor: pointer;
 }
-.mode:hover { border-color: var(--accent); }
-.mode:has(input:checked) {
+.job:hover { border-color: var(--accent); }
+.job:has(input:checked) {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-.mode-hd {
+.job-hd {
   display: flex; align-items: flex-start; gap: 9px;
   font-weight: 650; font-size: 13.5px; letter-spacing: -0.01em;
 }
-.mode-hd input { margin: 2px 0 0; flex: 0 0 auto; }
-.mode p { margin: 6px 0 0 23px; font-size: 12.5px; }
-.mode p.cost { color: var(--muted); font-size: 12px; }
-.mode p.cost strong { color: var(--fg); }
+.job-hd input { margin: 2px 0 0; flex: 0 0 auto; }
+.job p { margin: 6px 0 0 23px; font-size: 12.5px; }
+.job p.cost { color: var(--muted); font-size: 12px; }
+.job p.cost strong { color: var(--fg); }
 
 /* options: everything an ordinary user should not have to meet */
 details.adv { margin-top: 18px; }

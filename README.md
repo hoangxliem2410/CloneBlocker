@@ -17,27 +17,45 @@ to name.
 
 ---
 
-## Two modes, plus tags, hiding and reporting
+## Two switches, plus tags, hiding and reporting
 
-Real blocks are the product, and the only question worth putting to a user is
-how far the extension should go looking for them.
+Real blocks are the product, and what a user is asked is where the extension may
+go looking for them. Two tick boxes, both on by default, and neither one is the
+other's alternative.
 
-**Passive — block the clones you run into.** Only profiles that appear on the
-page while you browse. Every one of them was on your screen anyway, which is
-the pattern the platform finds entirely unremarkable, so they go through
-quickly (4–11 seconds apart) and barely touch the rate limits.
+**Block clones I run into** (`blockSeen`). Profiles that turn up on the page
+while you browse. Every one of them was on your screen anyway, which is the
+pattern the platform finds entirely unremarkable, so they go through quickly
+(4–11 seconds apart) and barely touch the rate limits.
 
-**Active — also work through the list.** The default. Everything passive does,
-plus the accounts the published list says are most active near you, whether or
-not you ever scroll past them. Those were never on your screen, which *is* the
-pattern that draws a checkpoint, so they are paced slowly (20–45 seconds) and
-held to a separate hourly ceiling of their own (`maxColdBlocksPerHour`,
-default 4). **Active work needs a Facebook or Threads tab open**: a block is
-issued by driving the site's own code from a content script, so with nothing
-open the queue just waits — the popup, the activity page and a toolbar badge
-all say so, with the count.
+**Work through the list too** (`blockFromList`). The accounts the published list
+says are most active near you, whether or not you ever scroll past them. Those
+were never on your screen, which *is* the pattern that draws a checkpoint, so
+they are paced slowly (20–45 seconds) and held to a separate hourly ceiling of
+their own (`maxColdBlocksPerHour`, default 4).
 
-**Pause blocking** (Advanced) stops both modes. Nothing is lost; queued
+These were one picker with two positions, *passive* and *active*, until it
+became clear that it was describing them as alternatives when they never were:
+active always meant both. Worse, the shape made a perfectly reasonable request —
+work through the list but leave what I scroll past alone — impossible to say at
+all. One tick box each says the true thing: either, both, or neither.
+
+**Untick both and nothing sweeps**, but the extension is not off: it still
+hides, still reports, and still blocks the profile you press **Block now** on or
+tick the block box for while filing a report. Pressing a button is a decision,
+not a sweep, so it outranks the standing preferences — including the per-tag
+ones.
+
+**Blocking needs a tab, any tab, and more tabs do not mean more blocks.** Every
+block is issued by driving the site's own code from inside a Facebook or Threads
+tab, so blocking works whenever at least one of them is open — it does not
+matter which, and a background tab counts. It also does not matter how many:
+the pace is held by one gate in the service worker covering the whole browser,
+not by each tab pacing itself, so five open tabs block at exactly the rate one
+does. With none open, work from the list simply waits — the popup, the activity
+page and a toolbar badge all say so, with the count.
+
+**Pause blocking** (Advanced) stops both switches. Nothing is lost; queued
 profiles wait.
 
 **Hiding — a separate extra, off by default.** Suppresses a listed profile's
@@ -468,7 +486,7 @@ because it is expensive. A real block is what gets an account checkpointed, so
 it has to be spent on the few clones that are active *now* and operating
 *where you are*.
 
-### Warm and cold — what the two modes are underneath
+### Warm and cold — what the two switches are underneath
 
 Not all blocks look the same to the platform. Blocking someone whose profile is
 on your screen is what an ordinary person does all day. Working through a list of
@@ -483,14 +501,25 @@ So the queue tracks how each target got there:
   seen in this browser. Paced slowly (20–45s) and held to a much tighter
   ceiling of its own (`maxColdBlocksPerHour`, default 4).
 
-**Passive mode is warm only; active mode is warm plus cold.** That is the
-entire difference between them, and it is why the choice is a mode rather than
-a checkbox labelled after some internal switch: the two halves of the queue
-carry genuinely different risk, so they get different pacing, different
-ceilings, and a user who can decline the expensive half without giving up the
-cheap one. Every block runs inside a Facebook or Threads tab, so warm work has
-one by definition; cold work is the half that can sit waiting for one, which is
+**`blockSeen` is the warm half; `blockFromList` is the cold half.** That is all
+the two switches are underneath, and it is why there are two of them rather
+than one dial: the halves carry genuinely different risk, so they get different
+pacing, different ceilings, and either can be declined without giving up the
+other. Every block runs inside a Facebook or Threads tab, so warm work has one
+by definition; cold work is the half that can sit waiting for one, which is
 what the badge counts.
+
+**The pacing is per browser, not per tab.** Each open tab runs its own worker
+loop, and a loop that paced itself would be fine with one tab and wrong with
+five: leases stop two tabs blocking the *same* profile, but nothing stopped
+five tabs blocking five *different* ones in the same second — five times the
+rate these ceilings were chosen for. So the pace is held in the service worker
+instead. One gate for the whole browser: shut while a block is in flight,
+bounded by the lease so a tab that dies mid-block cannot wedge the queue, and
+shut again for the randomised delay after the result lands. Whichever tab asks
+first gets the next target; the rest are told when to come back. It spans both
+sites as well as both tabs, because Facebook and Threads are one Meta account
+and the account is what gets checkpointed.
 
 Warm is claimed first — it is both the safer and the more relevant signal, so the
 two orderings agree far more often than they conflict. Reaching the cold ceiling
@@ -500,8 +529,10 @@ does not carry would just make the extension feel broken.
 **Seeing a cold target on screen promotes it to warm.** The same block is
 unremarkable now and conspicuous later, so it is taken while it is cheap.
 
-Set `maxColdBlocksPerHour` to **0** to never block anyone who has not appeared on
-your screen — which is passive mode, said in one click.
+Set `maxColdBlocksPerHour` to **0** to never block anyone who has not appeared
+on your screen — the same end as unticking **Work through the list too**, reached by
+the ceiling rather than by the switch. The switch is the honest way to say it:
+with the ceiling at zero the list still seeds a queue nobody will ever spend.
 
 ### The trending matrix
 
@@ -621,9 +652,11 @@ account involved loses weight — including on reports they filed earlier.
 2. **Load unpacked** → select this directory.
 3. That is the whole setup. There is no address to enter and no permission
    prompt to accept: the list's origins are required permissions, so the list
-   loads on the first refresh and active mode starts working at its cautious
-   paced defaults. Hiding waits in Settings for anyone who wants it, as do the
-   per-tag tick boxes, which start with every tag ticked. It comes up in
+   loads on the first refresh and both switches — **Block clones I run into**
+   and **Work through the list too** — start working at their cautious paced
+   defaults, as soon as a Facebook or Threads tab is open. Either can be
+   unticked in Settings. Hiding waits there too for anyone who wants it, as do
+   the per-tag tick boxes, which start with every tag ticked. It comes up in
    Vietnamese if that is what Chrome is running in, and in English otherwise.
 
 Requires Chrome 120+ (`"world": "MAIN"` needs 111; the 30-second `chrome.alarms` floor
@@ -798,10 +831,13 @@ node tools/dashboard-visual.js # the dashboard, rendered against fixtures
 npm test                       # the first four
 ```
 
-`check.js` also holds the two rules that keep vocabulary from drifting back:
-the retired "Layer 1 / Layer 2" framing fails the build if it reappears in
-anything a user can read, and the locale checks fail it if the two message files
-disagree. Those are key parity in both directions, a non-empty message and a
+`check.js` also holds the rules that keep vocabulary from drifting back: the
+retired "Layer 1 / Layer 2" framing fails the build if it reappears in anything
+a user can read; so does the `mode` setting the two switches replaced — nothing
+under `src/` may read it, compare against `'passive'` or `'active'` or call
+`CB_MODE_OF` except the two back-compat readers that keep old installs working,
+and no page may hardcode either word or keep the radio buttons that wrote it.
+The locale checks fail the build if the two message files disagree. Those are key parity in both directions, a non-empty message and a
 non-empty description on every key, matching `$1` placeholders across languages,
 every key the UI asks for existing in `en` — and no user-visible text anywhere in
 a page's markup outside a `data-i18n` element, so a string added later cannot
@@ -837,6 +873,19 @@ and warm enqueue, that an unticked tag is skipped in both, that an
 untagged id counts as `other`, and that the popup's user-initiated **Block now**
 goes through regardless — and that both rankers read the published weights the
 same way, at the defaults and at tuned values.
+
+The two switches get all four combinations, driven end to end through a real
+refresh for the cold side and a real enqueue for the warm one: `blockSeen` off
+with `blockFromList` on (the pair the old radio could not express), the
+converse, both, and neither — with **Block now** still going through when
+neither is ticked, because pressing a button is a decision rather than a sweep.
+Installs written before the pair existed are held to their old behaviour: `mode:
+'passive'`, and the older `acceptServerTargets: false`, each still refuse cold
+work while still blocking what turns up on screen. The pacing gate gets the
+cases a single tab cannot show: five simultaneous claims yield one block, a
+block in flight on Threads holds a Facebook tab back too, the pause after a
+result is the warm delay rather than the lease, and a tab that dies mid-block
+wedges the queue only until its lease expires.
 
 `e2e-test.js` loads the extension into real Chrome and exercises it against live
 `threads.com` and `facebook.com`: manifest load, service-worker boot, a list
@@ -900,10 +949,12 @@ Real blocking was tested end to end on a real Threads account:
   neither.
 - **Blocking needs the block module primed.** Until the site has loaded it, the
   extension reports that plainly and does nothing rather than firing a request.
-- **Active mode only moves while a tab is open.** Blocks are issued from inside
-  facebook.com or threads.com, so with neither open the cold queue holds and
-  the toolbar badge counts what is waiting. A pinned background tab or an
-  offscreen document would lift the constraint; neither is built yet.
+- **Blocking only moves while a tab is open.** Blocks are issued from inside
+  facebook.com or threads.com, so with neither open the queue holds and the
+  toolbar badge counts what is waiting. Any one tab is enough, and opening more
+  buys nothing: one gate in the service worker paces the whole browser. A
+  pinned background tab or an offscreen document would lift the constraint;
+  neither is built yet.
 - **Rate limits are guesses.** No public source documents Meta's block thresholds. The
   defaults are deliberately conservative. Bulk-mutating an account can trigger a
   verification checkpoint — the extension detects that, halts, and stops blocking.

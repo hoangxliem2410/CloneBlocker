@@ -7,6 +7,11 @@
  * only two things anyone opens this popup to do: report the profile they are
  * looking at, or block it. Those are now the first thing in the window, named
  * after the actual profile.
+ *
+ * The hide toggle went the same way. Hiding ships off by default -- real
+ * blocks are the product -- so it is a Settings choice rather than a switch to
+ * flip from here. What took its place is the queue: how much is waiting, and
+ * the one condition that silently stops it moving.
  */
 (function () {
   'use strict';
@@ -45,6 +50,46 @@
     return tab;
   }
 
+  // Blocks are issued by the content script, through the site's own code, so a
+  // queued block has nowhere to run unless a Facebook or Threads tab is open.
+  // These are the same patterns the service worker's badge counts against.
+  const SITE_TAB_URLS = [
+    'https://*.facebook.com/*', 'https://*.threads.net/*', 'https://*.threads.com/*'
+  ];
+
+  /** Is there anywhere for a queued block to run right now? */
+  async function siteTabOpen() {
+    try {
+      const tabs = await chrome.tabs.query({ url: SITE_TAB_URLS });
+      return (tabs || []).length > 0;
+    } catch (e) {
+      // A warning that might be wrong is worse than no warning: if the lookup
+      // fails, assume there is a tab and say nothing.
+      return true;
+    }
+  }
+
+  /**
+   * How much is queued, and how much of that is cold.
+   *
+   * Warm targets were on screen when they were queued, so in practice they
+   * never sit waiting for a tab -- there was one. The cold ones came from the
+   * ranked list, and nothing on screen will ever trigger them, so they are the
+   * ones that can wait indefinitely. A bare string predates the warm flag and
+   * the queue treats it as cold.
+   */
+  function queueCounts(state) {
+    const q = (state && state.queue) || {};
+    let total = 0, cold = 0;
+    for (const platform of Object.keys(q)) {
+      for (const e of q[platform] || []) {
+        total++;
+        if (!(e && typeof e === 'object' && e.warm)) cold++;
+      }
+    }
+    return { total, cold };
+  }
+
   async function tabStatus(tab) {
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, { type: 'tab:status' }, (res) => {
@@ -70,13 +115,14 @@
     const stats = (state && state.stats) || {};
     const bl = state && state.blocklist;
 
-    $('hideEnabled').checked = settings.hideEnabled !== false;
     $('listLine').textContent = bl
       ? `${bl.ids.length + bl.usernames.length} on your list · ${ago(bl.fetchedAt)}`
       : 'list not loaded';
 
     const tab = await activeTab();
     current.tab = tab;
+    let status = null;
+
     if (!tab) {
       $('platform').textContent = 'not a supported site';
       $('who').textContent = 'Not on Facebook or Threads';
@@ -86,28 +132,28 @@
       show('blockProfile', false);
       $('actionNote').textContent = 'Open a Facebook or Threads profile to report or block it.';
       $('hiddenCount').textContent = '—';
-      $('blockingNote').textContent = '';
-      show('blockError', false);
-      return;
+    } else {
+      status = await tabStatus(tab);
+      current.platform = (status && status.platform) || null;
+      $('platform').textContent = current.platform || 'loading…';
+      $('hiddenCount').textContent = status && status.dom ? String(status.dom.hidden) : '—';
+
+      if (!status) {
+        $('who').textContent = 'Page not ready';
+        $('whoState').textContent = '';
+        $('whoState').className = 'state';
+        show('reportProfile', false);
+        show('blockProfile', false);
+        $('actionNote').textContent = 'Reload the page and open this again.';
+      } else {
+        renderPage(status, settings);
+      }
     }
 
-    const status = await tabStatus(tab);
-    current.platform = (status && status.platform) || null;
-    $('platform').textContent = current.platform || 'loading…';
-    $('hiddenCount').textContent = status && status.dom ? String(status.dom.hidden) : '—';
-
-    if (!status) {
-      $('who').textContent = 'Page not ready';
-      $('whoState').textContent = '';
-      $('whoState').className = 'state';
-      show('reportProfile', false);
-      show('blockProfile', false);
-      $('actionNote').textContent = 'Reload the page and open this again.';
-      return;
-    }
-
-    renderPage(status, settings);
-    renderBlockingNote(state, settings, stats, status);
+    // Deliberately outside those branches. The queue is the one thing worth
+    // reading here when you are NOT on Facebook or Threads -- that is exactly
+    // when cold targets are stuck with nowhere to run.
+    await renderBlocking(state, settings, stats, status);
   }
 
   /** The action card: who this is, and the one or two things to do about it. */
@@ -175,31 +221,49 @@
     }
   }
 
-  /** One line about the background queue, and any failure worth showing. */
-  function renderBlockingNote(state, settings, stats, status) {
-    const queued = state && state.queue
-      ? Object.keys(state.queue).reduce((n, k) => n + ((state.queue[k] || []).length), 0) : 0;
+  /** The queue in two numbers, plus whatever is holding it up. */
+  async function renderBlocking(state, settings, stats, status) {
+    const counts = queueCounts(state);
+    const on = !!settings.platformBlockEnabled;
+    const mode = globalThis.CB_MODE_OF(settings);
+    const cold = counts.cold;
+    $('queuedCount').textContent = String(counts.total);
+
     // A checkpoint pause is otherwise invisible: blocking silently stops and
     // the extension just looks broken, so say so plainly.
     const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
       ? Math.ceil((stats.pausedUntil - Date.now()) / 60000) : 0;
+    // The stall nobody could guess at. False whenever this popup is open on
+    // Facebook or Threads: that tab is itself somewhere for a block to run.
+    const needsTab = on && mode === 'active' && cold > 0 && !(await siteTabOpen());
 
+    const note = $('blockingNote');
+    note.className = 'note';
     if (pausedFor) {
-      $('blockingNote').textContent =
+      note.textContent =
         `Blocking paused for ${pausedFor > 90 ? Math.ceil(pausedFor / 60) + 'h' : pausedFor + 'm'}` +
         (stats.halted ? ' after an account checkpoint. Resolve it on the site, then use ' +
                         'Reset queue & stats in Settings.' : ' by rate limiting.');
-    } else if (settings.platformBlockEnabled && queued) {
-      $('blockingNote').textContent = `${queued} waiting to be blocked, paced in the background.`;
+    } else if (!on && counts.total) {
+      note.textContent = 'Blocking is paused, so these stay where they are.';
+    } else if (on && mode === 'passive' && cold) {
+      note.textContent = `${cold} of these came from the list — paused by passive mode, ` +
+        'which blocks only profiles you scroll past.';
+    } else if (needsTab) {
+      note.className = 'note warn';
+      note.textContent = `${cold} of these came from the list — active blocking needs ` +
+        'a Facebook or Threads tab open.';
+    } else if (on && counts.total) {
+      note.textContent = 'Paced in the background, a few at a time.';
     } else {
-      $('blockingNote').textContent = '';
+      note.textContent = '';
     }
 
     // A recorded failure is only worth showing while it is still true. A
     // signed-out complaint is plainly stale once the page reports a viewer,
     // and anything older than the last hour is history rather than status.
     const err = stats.lastError;
-    const staleSignedOut = err && /Signed out of the site/.test(err) && status.viewerId;
+    const staleSignedOut = err && /Signed out of the site/.test(err) && status && status.viewerId;
     const old = stats.lastErrorAt && (Date.now() - stats.lastErrorAt) > 3600 * 1000;
     if (err && !staleSignedOut && !old) {
       $('blockError').textContent = stats.lastErrorAt
@@ -211,11 +275,6 @@
   }
 
   // -- actions ---------------------------------------------------------------
-
-  $('hideEnabled').addEventListener('change', async () => {
-    await sw(P.SW.SET_SETTINGS, { hideEnabled: $('hideEnabled').checked });
-    render();
-  });
 
   // Reporting has to happen in the page: the report sheet is rendered by the
   // content script, which is what knows the profile's identity. The popup just

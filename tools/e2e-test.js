@@ -132,12 +132,14 @@ function buildTestExtension() {
   walk('icons');
 
   // The only divergence from the shipped build: the local emulator is added
-  // to host_permissions so the fetch path can be exercised without a
-  // user-gesture permission prompt. Both spellings of loopback are granted
-  // because the origin the extension asks about is whichever one the listUrl
-  // was written with.
+  // to host_permissions. The shipped manifest has no optional_host_permissions
+  // at all any more -- the list address is baked in and its origin is required
+  // -- so this adds the emulator to the required list, which is also what
+  // keeps the fetch path free of any permission prompt. Both spellings of
+  // loopback are granted because the origin the extension asks about is
+  // whichever one the listUrl was written with.
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
-  m.host_permissions = m.host_permissions.concat([
+  m.host_permissions = (m.host_permissions || []).concat([
     `http://127.0.0.1:${EMULATOR_PORT}/*`,
     `http://localhost:${EMULATOR_PORT}/*`
   ]);
@@ -335,9 +337,27 @@ function findChrome() {
   let optOk = false;
   try {
     optOk = await evalIn(browser, optSession,
-      `!!document.getElementById('listUrl') && typeof chrome.storage === 'object'`, false);
+      `!!document.getElementById('modeActive') && typeof chrome.storage === 'object'`, false);
   } catch (e) { /* reported below */ }
   check('options page renders with chrome APIs', !!optOk);
+
+  // The mode picker is the one decision this page asks anyone to make, and it
+  // is a pair of radios: with neither of them checked the page states nothing
+  // about what the extension is doing, which is worse than stating it wrongly.
+  let picker = null;
+  try {
+    picker = JSON.parse(await evalIn(browser, optSession, `
+      JSON.stringify({
+        passive: !!document.getElementById('modePassive'),
+        active: !!document.getElementById('modeActive'),
+        checked: (document.getElementById('modeActive') || {}).checked ? 'active'
+               : (document.getElementById('modePassive') || {}).checked ? 'passive' : null
+      })
+    `, false));
+  } catch (e) { picker = { error: e.message }; }
+  check('options page renders the mode picker with a mode selected',
+    !!(picker && picker.passive && picker.active && picker.checked),
+    JSON.stringify(picker));
 
   let swTarget = null;
   let allWorkers = [];
@@ -357,12 +377,19 @@ function findChrome() {
   await browser.send('Runtime.enable', {}, swSession);
 
   // ---- 2. configure + fetch blocklist -----------------------------------
+  //
+  // listUrl is written straight into storage on purpose: the address is baked
+  // into protocol.js and no UI writes it any more, but the setting is still
+  // read, which is exactly how a harness points the extension at the emulator.
+  // mode is written explicitly rather than left to the default, so the run
+  // asserts the behaviour it means to and does not quietly change with it.
   try {
     const setRes = await evalIn(browser, optSession, `
       (async () => {
         await chrome.storage.sync.set({ settings: {
           listUrl: '${LIST_URL}',
           refreshMinutes: 60,
+          mode: 'active',
           hideEnabled: true,
           hideMode: 'collapse',
           hideComments: true,

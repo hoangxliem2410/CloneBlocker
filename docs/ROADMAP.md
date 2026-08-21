@@ -18,8 +18,20 @@ The genuinely new work: tags, the transparency site, Google sign-in, i18n.
 
 ---
 
-## Phase 1 — Product shape: modes, hardcoded source, tab guidance
+## Phase 1 — Product shape: modes, hardcoded source, tab guidance — **DONE**
 *(todo 2, 3, 4, 5 — extension only, no schema changes)*
+
+**Shipped 2026-08-21**, as planned except that `mode` became a first-class
+setting read through `CB_MODE_OF()` rather than a mapping onto
+`acceptServerTargets` — that key is gone from the defaults and survives only as
+a fallback for installs written before modes existed — and the README kept its
+self-hosting material instead of losing it, moved into the Firebase backend
+chapter and cut down to "edit `LIST_URL`, add the origin, reload", because the
+accepted payload shapes still have to be documented somewhere. Left behind for
+whoever submits to the store: `tools/make-store-assets.js` and the images in
+`store/` still use the retired layer wording and still reach for options-page
+controls that no longer exist (recorded in `docs/CHROME-WEB-STORE.md` §2), and
+the manifest `description` still leads with hiding, which now ships off.
 
 **Hardcode the list source [2].** `LIST_URL` becomes a constant in
 `protocol.js`; the whole "Blocklist source" section (endpoint, auth header,

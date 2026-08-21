@@ -1,8 +1,9 @@
 /**
  * Unit tests for the service worker's queue, leases and rate limiter.
  *
- * The browser test runs with Layer 2 disabled (deliberately -- it must never
- * block anyone for real), which leaves this logic uncovered there. It is also
+ * The browser test runs with platform blocking disabled (deliberately -- it
+ * must never block anyone for real), which leaves this logic uncovered there,
+ * along with the mode that decides what gets queued at all. It is also
  * the logic most likely to misbehave in ways a user would not notice quickly:
  * a starved queue or a limiter that fails to count looks like "nothing is
  * happening" rather than an error.
@@ -37,6 +38,29 @@ let messageHandler = null;
 let alarmHandler = null;
 const alarms = new Map();
 
+// Tabs and the toolbar badge are things the worker READS, not just calls it
+// makes: a queued cold block has nowhere to run unless a Facebook or Threads
+// tab is open, and the badge is the only place that says so. So the mock has
+// to be able to answer "nothing is open" and to remember what the badge was
+// last told.
+let openTabs = [];                       // [{ id, url }] as chrome.tabs.query sees them
+const badge = { text: null, color: null };
+
+/**
+ * chrome.tabs.query, matching url patterns the way the real one does.
+ *
+ * Answering every query with every tab would let a "no Facebook tab open"
+ * case pass while a Threads tab was open, which is the opposite of the
+ * condition under test.
+ */
+function tabMatches(tab, patterns) {
+  if (!patterns) return true;
+  const list = Array.isArray(patterns) ? patterns : [patterns];
+  return list.some((p) => new RegExp('^' + String(p)
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*') + '$').test(tab.url || ''));
+}
+
 global.chrome = {
   storage: { local: area('local'), sync: area('sync'), onChanged: { addListener() {} } },
   alarms: {
@@ -51,8 +75,14 @@ global.chrome = {
     onStartup: { addListener() {} },
     onMessage: { addListener(fn) { messageHandler = fn; } }
   },
-  tabs: { async query() { return []; }, sendMessage() {} },
-  action: { async setBadgeText() {}, async setBadgeBackgroundColor() {} },
+  tabs: {
+    async query(info) { return openTabs.filter(t => tabMatches(t, info && info.url)).map(clone); },
+    sendMessage() {}
+  },
+  action: {
+    async setBadgeText(o) { badge.text = o ? o.text : undefined; },
+    async setBadgeBackgroundColor(o) { badge.color = o ? o.color : undefined; }
+  },
   permissions: { async contains() { return true; } }
 };
 
@@ -78,6 +108,9 @@ async function state() { return send('sw:get-state'); }
 async function reset(settings) {
   store.local = {};
   store.sync = {};
+  openTabs = [];
+  badge.text = null;
+  badge.color = null;
   await setSettings(Object.assign({
     platformBlockEnabled: true,
     platformBlockDryRun: false,
@@ -634,6 +667,182 @@ async function reset(settings) {
       JSON.stringify(store.local.blocklist.ids));
 
     delete global.fetch;
+  }
+
+  // -- 16. passive and active ------------------------------------------------
+  //
+  // The mode is the only decision the options page asks anyone to make, and
+  // the difference is invisible from inside the extension: passive looks
+  // exactly like active with an empty list. So these drive a real refresh
+  // whose payload carries ranked targets, and watch what reaches the queue.
+  {
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const today = new Date().toISOString().slice(0, 10);
+    const published = {
+      v: 1, updatedAt: new Date().toISOString(),
+      ids: ['8100000001', '8100000002'], usernames: [], docIdOverrides: {}, pending: [],
+      // Same trust era, different activity, so the ranking is deterministic
+      // wherever this runs: neither target names a region or a language, so
+      // locality is identical and only trust and velocity separate them.
+      targets: [
+        { platform: 'facebook', id: '8100000001', trust: 2, last: today,
+          days: { [today]: 2 }, regions: {}, langs: {} },
+        { platform: 'facebook', id: '8100000002', trust: 1, last: today,
+          days: {}, regions: {}, langs: {} }
+      ]
+    };
+    const envelope = {
+      name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+      fields: { json: { stringValue: JSON.stringify(published) } },
+      createTime: '2026-08-21T00:00:00Z', updateTime: '2026-08-21T09:00:00Z'
+    };
+    global.fetch = async () => ({
+      ok: true, status: 200, headers: { get: () => null },
+      text: async () => JSON.stringify(envelope), json: async () => envelope
+    });
+    const queuedIds = async () =>
+      ((await state()).queue.facebook || []).map(e => (typeof e === 'string' ? e : e.id));
+
+    // Passive: the list still arrives, but nobody is queued off the back of it.
+    await reset({ mode: 'passive', listUrl: FS_URL, maxColdBlocksPerHour: 50 });
+    const rp = await send('sw:refresh-now');
+    check('passive mode still fetches and keeps the whole list',
+      rp.ok && rp.blocklist.ids.length === 2,
+      JSON.stringify(rp.blocklist && rp.blocklist.ids));
+    const passiveQueue = await queuedIds();
+    check('passive mode seeds none of the ranked targets',
+      (rp.blocklist.targets || []).length === 0 && passiveQueue.length === 0,
+      JSON.stringify(passiveQueue));
+
+    // The profile in front of you is still blocked, at warm pacing: that is
+    // the whole of what passive means, not "do nothing".
+    const warmAdd = await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8100000001'], warm: true });
+    const warmClaim = await send('sw:queue-claim', { platform: 'facebook' });
+    check('passive mode still queues a profile that turned up on screen',
+      warmAdd.added === 1 && warmClaim.target === '8100000001' && warmClaim.warm === true,
+      `added=${warmAdd.added} target=${warmClaim.target} warm=${warmClaim.warm}`);
+    check('and paces it as warm work, seconds rather than half a minute',
+      warmClaim.nextDelayMs > 0 && warmClaim.nextDelayMs <= 12000, String(warmClaim.nextDelayMs));
+
+    // Active: the identical payload, and now the ranked targets are the point.
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50 });
+    const ra = await send('sw:refresh-now');
+    const seeded = await queuedIds();
+    check('active mode seeds the same payload as cold work',
+      ra.ok && seeded.length === 2 &&
+      seeded.includes('8100000001') && seeded.includes('8100000002'),
+      JSON.stringify(seeded));
+    const coldClaim = await send('sw:queue-claim', { platform: 'facebook' });
+    check('what it seeded is cold: best rank first, paced slowly',
+      coldClaim.target === '8100000001' && coldClaim.warm === false &&
+      coldClaim.nextDelayMs >= 20000,
+      `${coldClaim.target} warm=${coldClaim.warm} delay=${coldClaim.nextDelayMs}`);
+
+    // An install written before modes existed. Its stored settings carry
+    // acceptServerTargets and no mode at all, which is why this writes sync
+    // storage directly: going through set-settings would merge today's
+    // defaults in and hide the very thing under test.
+    store.local = {};
+    store.sync = { settings: {
+      listUrl: FS_URL, platformBlockEnabled: true, platformBlockDryRun: false,
+      maxColdBlocksPerHour: 50, acceptServerTargets: false
+    } };
+    const rl = await send('sw:refresh-now');
+    const legacyQueue = await queuedIds();
+    check('an install that refused server targets before modes existed stays passive',
+      rl.ok && (rl.blocklist.targets || []).length === 0 && legacyQueue.length === 0,
+      JSON.stringify(legacyQueue));
+    const legacyMode = (await state()).settings.mode;
+    check('and it reports the mode it actually behaves as',
+      legacyMode === 'passive', String(legacyMode));
+
+    // The same vintage with the flag the other way round is an ordinary active
+    // install: the fallback must not sweep every old install into passive.
+    store.local = {};
+    store.sync = { settings: {
+      listUrl: FS_URL, platformBlockEnabled: true, maxColdBlocksPerHour: 50,
+      acceptServerTargets: true
+    } };
+    const rl2 = await send('sw:refresh-now');
+    check('an equally old install that accepted them is active',
+      rl2.ok && (await queuedIds()).length === 2, JSON.stringify(await queuedIds()));
+
+    // Pausing outranks the mode entirely.
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50,
+                  platformBlockEnabled: false });
+    const rpaused = await send('sw:refresh-now');
+    check('with blocking paused, even active mode queues nobody',
+      rpaused.ok && (await queuedIds()).length === 0, JSON.stringify(await queuedIds()));
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8100000002'], warm: true });
+    const pausedClaim = await send('sw:queue-claim', { platform: 'facebook' });
+    check('and nothing already queued is handed out, warm or not',
+      !pausedClaim.target, String(pausedClaim.target));
+
+    delete global.fetch;
+  }
+
+  // -- 17. the toolbar badge -------------------------------------------------
+  //
+  // Cold targets are issued through the site's own code, so they only move
+  // while a Facebook or Threads tab is open -- and nothing else in the product
+  // says so: the queue just sits there looking healthy. The badge is the only
+  // signal that reaches someone who is not looking at the extension at all,
+  // so it has to be right about every condition it depends on.
+  {
+    await reset({ mode: 'active', maxColdBlocksPerHour: 50 });
+    await send('sw:enqueue-platform-block', { platform: 'facebook', warm: false,
+      ids: [{ id: '8300000001', rank: 3 }, { id: '8300000002', rank: 2 }] });
+
+    // Picking a mode is what the options page writes, and writing settings is
+    // what re-evaluates the badge.
+    await setSettings({ mode: 'active' });
+    check('cold work with nowhere to run puts the count on the badge',
+      badge.text === '2' && badge.color === '#b7791f',
+      `text=${JSON.stringify(badge.text)} color=${badge.color}`);
+
+    await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['8300000003'], warm: true });
+    await setSettings({ mode: 'active' });
+    check('warm entries are not counted: they only ever arrive while a tab is open',
+      badge.text === '2', JSON.stringify(badge.text));
+
+    openTabs = [{ id: 11, url: 'https://www.facebook.com/' }];
+    await setSettings({ mode: 'active' });
+    check('the badge clears once there is a tab for the work to run in',
+      badge.text === '', JSON.stringify(badge.text));
+
+    // A Threads tab counts too, and a tab on anything else does not.
+    openTabs = [{ id: 12, url: 'https://www.threads.com/@someone' }];
+    await setSettings({ mode: 'active' });
+    check('a Threads tab is somewhere for the work to run as well',
+      badge.text === '', JSON.stringify(badge.text));
+    openTabs = [{ id: 13, url: 'https://example.com/' }];
+    await setSettings({ mode: 'active' });
+    check('an unrelated tab is not, and the warning comes back',
+      badge.text === '2', JSON.stringify(badge.text));
+
+    openTabs = [];
+    await setSettings({ mode: 'passive' });
+    check('passive mode is not waiting on a tab, so the badge clears',
+      badge.text === '', JSON.stringify(badge.text));
+    await setSettings({ mode: 'active', platformBlockEnabled: false });
+    check('paused blocking is not waiting on a tab either',
+      badge.text === '', JSON.stringify(badge.text));
+
+    // A checkpoint owns the badge outright: it is the more urgent message and
+    // the count would overwrite it.
+    await reset({ mode: 'active', maxColdBlocksPerHour: 50 });
+    await send('sw:enqueue-platform-block', { platform: 'facebook', ids: ['8300000004'], warm: true });
+    const cp = await send('sw:queue-claim', { platform: 'facebook' });
+    await send('sw:queue-result', { platform: 'facebook', target: cp.target, ok: false,
+      dryRun: false, checkpoint: true, detail: 'challenge' });
+    check('a checkpoint marks the badge itself', badge.text === '!', JSON.stringify(badge.text));
+    await send('sw:enqueue-platform-block', { platform: 'facebook', warm: false,
+      ids: [{ id: '8300000005', rank: 1 }] });
+    await setSettings({ mode: 'active' });
+    check('and keeps it while halted, whatever else is queued',
+      badge.text === '!', JSON.stringify(badge.text));
   }
 
   finish();

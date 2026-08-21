@@ -1,19 +1,31 @@
-/** Options page: settings, host-permission grant, and diagnostics. */
+/**
+ * Options page: the mode picker, blocklist status, and everything else folded
+ * into Advanced.
+ *
+ * The page used to open on a text field asking for a server endpoint, which is
+ * a question a new user has no way to answer. The address is baked into
+ * protocol.js now, so the first thing here is the only real decision: how hard
+ * the extension should work.
+ */
 (function () {
   'use strict';
 
   const P = globalThis.CB_PROTOCOL;
   const KEYS = globalThis.CB_KEYS;
+  const modeOf = globalThis.CB_MODE_OF;
   const $ = (id) => document.getElementById(id);
 
-  const TEXT_FIELDS = ['listUrl', 'listAuthHeader', 'apiBase', 'submitToken'];
-  const NUM_FIELDS = ['refreshMinutes', 'maxBlocksPerHour', 'maxBlocksPerDay',
+  // Fields that map straight onto a settings key of the same name. Two things
+  // deliberately stay out: `mode` (a pair of radios, not one input) and
+  // `platformBlockEnabled` (shown inverted, as "Pause blocking").
+  const TEXT_FIELDS = ['apiBase', 'submitToken'];
+  const NUM_FIELDS = ['maxBlocksPerHour', 'maxBlocksPerDay',
     'minDelayMs', 'maxDelayMs', 'maxColdBlocksPerHour', 'targetBudget',
     'warmMinDelayMs', 'warmMaxDelayMs'];
-  const BOOL_FIELDS = ['acceptServerTargets', 'shareRegion',
+  const BOOL_FIELDS = ['shareRegion',
     'hideEnabled', 'hideFeedPosts', 'hideComments',
-                       'platformBlockEnabled', 'platformBlockDryRun',
-                       'allowRawNetworkFallback', 'reportUiEnabled', 'debug'];
+    'platformBlockDryRun', 'allowRawNetworkFallback',
+    'reportUiEnabled', 'debug'];
   const SELECT_FIELDS = ['hideMode'];
 
   function sw(type, payload) {
@@ -30,6 +42,17 @@
     el.className = 'status' + (cls ? ' ' + cls : '');
   }
 
+  function ago(ts) {
+    if (!ts) return 'never';
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
   async function load() {
     const res = await sw(P.SW.GET_SETTINGS);
     const s = (res && res.settings) || {};
@@ -37,7 +60,20 @@
     for (const f of NUM_FIELDS) $(f).value = s[f] != null ? s[f] : '';
     for (const f of BOOL_FIELDS) $(f).checked = !!s[f];
     for (const f of SELECT_FIELDS) if (s[f]) $(f).value = s[f];
-    await refreshPermStatus();
+
+    // modeOf tolerates installs written before modes existed, so the picker
+    // agrees with what the service worker will actually do.
+    const mode = modeOf(s);
+    $('modePassive').checked = mode === 'passive';
+    $('modeActive').checked = mode === 'active';
+
+    // Inverted on purpose: the switch means "blocking is on", the control means
+    // "pause it". Only an explicit false counts as paused, so a settings object
+    // missing the key reads as running, exactly like the default.
+    $('pauseBlocking').checked = s.platformBlockEnabled === false;
+    renderPaused();
+
+    await refreshList();
     await refreshDiag();
     await refreshLearnedStatus();
   }
@@ -52,10 +88,14 @@
     for (const f of BOOL_FIELDS) patch[f] = $(f).checked;
     for (const f of SELECT_FIELDS) patch[f] = $(f).value;
 
+    patch.mode = $('modeActive').checked ? 'active' : 'passive';
+    patch.platformBlockEnabled = !$('pauseBlocking').checked;
+
     // Keep the delay range coherent rather than letting it invert.
     if (patch.maxDelayMs <= patch.minDelayMs) patch.maxDelayMs = patch.minDelayMs + 5000;
 
     await sw(P.SW.SET_SETTINGS, patch);
+    renderPaused();
   }
 
   for (const f of TEXT_FIELDS.concat(NUM_FIELDS)) {
@@ -64,52 +104,45 @@
   for (const f of BOOL_FIELDS.concat(SELECT_FIELDS)) {
     $(f).addEventListener('change', save);
   }
-
-  // -- host permission ------------------------------------------------------
-  function originOf(url) {
-    try { return new URL(url).origin + '/*'; } catch (e) { return null; }
+  for (const f of ['modePassive', 'modeActive', 'pauseBlocking']) {
+    $(f).addEventListener('change', save);
   }
 
-  async function refreshPermStatus() {
-    const url = $('listUrl').value.trim();
-    const origin = originOf(url);
-    if (!origin) { setStatus($('permStatus'), ''); return; }
-    const has = await chrome.permissions.contains({ origins: [origin] });
-    setStatus($('permStatus'),
-      has ? `Access granted for ${origin}` : `Access not granted for ${origin} — click Grant access`,
-      has ? 'ok' : 'bad');
+  /**
+   * Pause lives in Advanced, so on a collapsed page the mode picker would
+   * otherwise claim work is happening while nothing is. Say so where the claim
+   * is made.
+   */
+  function renderPaused() {
+    $('pausedNote').classList.toggle('hidden', !$('pauseBlocking').checked);
   }
 
-  $('listUrl').addEventListener('change', refreshPermStatus);
-
-  $('grant').addEventListener('click', async () => {
-    const origin = originOf($('listUrl').value.trim());
-    if (!origin) { setStatus($('permStatus'), 'Enter a valid URL first', 'bad'); return; }
-    // Must be called from inside a user gesture, which this click is.
-    let granted = false;
-    try { granted = await chrome.permissions.request({ origins: [origin] }); }
-    catch (e) { setStatus($('permStatus'), String(e && e.message), 'bad'); return; }
-    setStatus($('permStatus'),
-      granted ? `Access granted for ${origin}` : 'Permission denied',
-      granted ? 'ok' : 'bad');
-  });
-
-  // -- actions --------------------------------------------------------------
-  $('testFetch').addEventListener('click', async () => {
-    await save();
-    setStatus($('fetchStatus'), 'Fetching…');
-    const res = await sw(P.SW.REFRESH_NOW);
-    if (res.ok) {
-      const bl = res.blocklist || {};
-      setStatus($('fetchStatus'),
-        `OK — ${(bl.ids || []).length} ids, ${(bl.usernames || []).length} usernames` +
-        (res.unchanged ? ' (unchanged)' : ''), 'ok');
-    } else {
-      setStatus($('fetchStatus'), res.error || 'failed', 'bad');
+  // -- blocklist status ------------------------------------------------------
+  async function refreshList() {
+    const state = await sw(P.SW.GET_STATE);
+    const bl = state && state.ok && state.blocklist;
+    if (!bl) {
+      $('listSynced').textContent = 'never';
+      $('listCounts').textContent = 'not loaded yet';
+      return;
     }
+    $('listSynced').textContent = ago(bl.fetchedAt);
+    $('listSynced').title = bl.fetchedAt ? new Date(bl.fetchedAt).toLocaleString() : '';
+    $('listCounts').textContent =
+      `${plural(bl.ids.length, 'profile id')} · ${plural(bl.usernames.length, 'username')}`;
+  }
+
+  $('refreshList').addEventListener('click', async () => {
+    setStatus($('listStatus'), 'Checking…');
+    const res = await sw(P.SW.REFRESH_NOW);
+    setStatus($('listStatus'),
+      res.ok ? (res.unchanged ? 'Already up to date' : 'Updated') : (res.error || 'failed'),
+      res.ok ? 'ok' : 'bad');
+    await refreshList();
     refreshDiag();
   });
 
+  // -- actions --------------------------------------------------------------
   $('clearLearned').addEventListener('click', async () => {
     await chrome.storage.local.remove(['learnedTemplate_facebook', 'learnedTemplate_threads']);
     setStatus($('learnedStatus'), 'Cleared', 'ok');
@@ -182,6 +215,7 @@
     if (!state.ok) { $('diag').textContent = state.error || 'unavailable'; return; }
     const bl = state.blocklist;
     const view = {
+      mode: modeOf(state.settings || {}),
       blocklist: bl ? {
         ids: bl.ids.length,
         usernames: bl.usernames.length,

@@ -2,19 +2,20 @@
 
 *Last updated: 21 August 2026*
 
-Clone Blocker is a browser extension that hides and blocks accounts
-impersonating you on Facebook and Threads. This policy describes every piece of
-data it handles and where that data goes.
+Clone Blocker is a browser extension that blocks accounts impersonating you on
+Facebook and Threads, and can optionally hide their content as well. This
+policy describes every piece of data it handles and where that data goes.
 
-The short version: **there is no "us".** The extension talks to one backend —
-the one you set up and whose address you typed in — and to nowhere else. There
-is no analytics, no telemetry, no advertising and no crash reporting. The
-included backend is a Firebase project that **you** create and own, which means
-the data lives in your project on Google Cloud: Google is the hosting and
-infrastructure provider, in the same way a rented server's datacenter would be,
-and the project's security rules make reports readable by no account but
-yours. Nobody involved in writing this extension operates a server, sees a
-report, or can see one.
+The short version: the extension talks to **one backend and nowhere else** — a
+Firebase project whose address is compiled into the extension rather than
+configured by you. There is no analytics, no telemetry, no advertising and no
+crash reporting. Fetching the blocklist sends nothing about you at all, so the
+only thing that ever leaves your machine is a report you deliberately file.
+Those reports land in Firestore inside that project on Google Cloud: Google is
+the hosting and infrastructure provider, in the same way a rented server's
+datacenter would be, and the project's security rules make reports readable by
+exactly one admin account — the maintainer of whichever backend the copy you
+installed points at — and by nobody else at all.
 
 ---
 
@@ -22,26 +23,28 @@ report, or can see one.
 
 Held in Chrome's extension storage, and never transmitted:
 
-- **Your settings** — the blocklist address, refresh interval, whether hiding
-  is on, whether platform blocking is on, and every pacing and cap value.
+- **Your settings** — which mode you chose, whether blocking is paused,
+  whether you switched hiding on (it ships **off**), and every pacing and cap
+  value.
 - **The cached blocklist** — so it does not have to be re-fetched on every page.
 - **The block queue** — which accounts are pending, which have been done, and
   the timestamps used to keep within your own hourly and daily caps.
 - **Captured request templates**, if you enable that option — used only to
   reissue a block on the same site.
-- **Your time zone and language, as used for ranking.** The extension decides
-  which listed accounts are most active near you by comparing your browser's
-  own time zone and language against metadata published with the list — a
-  comparison that happens entirely on your machine.
+- **Your time zone and language, as used for ranking.** In active mode the
+  extension decides which listed accounts are most active near you by comparing
+  your browser's own time zone and language against metadata published with the
+  list — a comparison that happens entirely on your machine.
 
 Uninstalling the extension removes all of it.
 
 ## What leaves your device, and to where
 
-Everything below goes **only** to one backend: the Firebase project the
-extension is configured to use. By default that is the project's own backend
-(`clone-blocker2`), so out of the box your reports go there; if you point the
-extension at a backend you run, they go to yours instead and nowhere else.
+Everything below goes **only** to one backend: the Firebase project at the
+address built into the extension (`clone-blocker2`). It is not a setting, so
+there is nothing to check and nothing that can be changed underneath you — a
+build pointed somewhere else is a different copy of the extension, with that
+address visible in `src/common/protocol.js` and in `manifest.json`.
 
 ### Fetching the list
 
@@ -85,11 +88,12 @@ reversed to discover an unknown account ID.
 
 ### Performing a block
 
-When platform blocking is enabled (it is by default, and can be turned off in
-settings), the extension issues a block through
+Unless you pause blocking in settings, the extension issues blocks through
 Facebook's or Threads' own in-page mechanism, exactly as pressing their Block
 button does. That request goes to Facebook or Threads, contains only the target
-account, and carries no data from this extension.
+account, and carries no data from this extension. Which accounts it acts on is
+the mode you picked: passive blocks only profiles that appeared on the page in
+front of you, active additionally works through the published list.
 
 ## What is never collected
 
@@ -102,27 +106,27 @@ threads.net and threads.com.
 
 The data is not sold, rented, or shared. Two parties can technically see it:
 
-- **The owner of the configured backend.** With the default backend, that is
-  this project's maintainer, who can read the reports you file (the security
-  rules make them readable only by the project's one admin account, and the
-  reporter identity is only a truncated hash — see above). Point the extension
-  at your own Firebase project and that owner is you, alone; point it at a
-  backend someone else runs and it is them. This policy can only speak for the
-  code, not for what any backend operator does with what they receive.
+- **The owner of the backend this build points at.** For the published
+  extension that is this project's maintainer, who can read the reports you
+  file (the security rules make them readable only by the project's one admin
+  account, and the reporter identity is only a truncated hash — see above). A
+  build you compile against your own Firebase project sends them to you
+  instead. This policy can only speak for the code, not for what any backend
+  operator does with what they receive.
 - **Google**, as the infrastructure under a Firebase backend. The data sits in
-  Firestore inside your Google Cloud project, subject to Google Cloud's own
+  Firestore inside that Google Cloud project, subject to Google Cloud's own
   terms and privacy commitments, the same way any hosting provider holds the
   disks your data is on. Google is not sent anything by the extension itself;
-  it hosts what your project stores.
+  it hosts what the project stores.
 
 No analytics service, ad network, or other third party appears anywhere.
 
 ## Retention and deletion
 
 Retention is the backend owner's business, since the backend holds the data.
-In the included Firebase backend, reports persist until you delete them —
-from the moderation dashboard, or directly in the Firestore console, which as
-project owner you can always do regardless of what any tooling offers.
+In the Firebase backend included here, reports persist until an admin deletes
+them — from the moderation dashboard, or directly in the Firestore console,
+which the project owner can always do regardless of what any tooling offers.
 Account IDs exist in the store only as truncated hashes; the raw ID is never
 stored anywhere.
 
@@ -135,8 +139,12 @@ everything it holds.
 |---|---|
 | `storage` | Keep your settings and the cached blocklist. |
 | `alarms` | Refresh the list on schedule and pace blocks so they never go out in a burst. |
-| Access to facebook.com, threads.net, threads.com | The only two sites the extension works on: it reads the page to find listed accounts, and issues blocks when you have enabled that. |
-| Access to a backend you choose (optional) | Granted at runtime, for the single address you typed, only after you accept Chrome's prompt. Never requested at install. |
+| Access to facebook.com, threads.net, threads.com | The only two sites the extension works on: it reads the page to find listed accounts, and issues blocks unless you have paused that. |
+| Access to firestore.googleapis.com and clone-blocker2.web.app | The backend: the blocklist is read from it, and reports you file are written to it. |
+
+Every one of them is declared in the manifest and granted when you install. The
+extension asks for **no permissions at runtime** — there is no prompt to
+accept, because there is no address for you to supply.
 
 ## Children
 

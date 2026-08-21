@@ -66,12 +66,15 @@
     REPORTED: 'reportedCache'      // local: { key: {status,count,blocked,at} }
   };
 
+  // The blocklist lives at one address, baked in. It used to be a text field,
+  // which made the first thing a new user saw a question they had no way to
+  // answer. Overridable through storage (the harnesses do exactly that) but
+  // no UI writes it any more.
+  const LIST_URL =
+    'https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current';
+
   const DEFAULT_SETTINGS = {
-    // Where the blocklist comes from. Prewired to the project's own backend so
-    // a fresh install works with zero setup and zero permission prompts (the
-    // origin is a required host permission). Self-hosters change it in options;
-    // the report path derives itself from whatever URL is here.
-    listUrl: 'https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current',
+    listUrl: LIST_URL,
     listAuthHeader: '',      // optional "Authorization: ..." value
     refreshMinutes: 60,
 
@@ -83,16 +86,38 @@
     reporterId: '',          // set on first use; identifies repeat reports
     submitToken: '',         // only if the server was started with --submit-token
 
-    // Layer 1 -- DOM suppression. Always safe; on by default.
-    hideEnabled: true,
+    /**
+     * How hard the extension works.
+     *
+     *   passive -- block only profiles that turn up on the page while you use
+     *              the site. Every target was on screen, which is the pattern
+     *              the platform finds unremarkable, so these go fast (seconds
+     *              apart) and barely touch the rate limits.
+     *   active  -- the above, plus work through the ranked list itself. Those
+     *              targets were never on your screen, which is the pattern
+     *              that draws a checkpoint, so they are paced slowly and held
+     *              to a much tighter hourly ceiling.
+     *
+     * This replaced a pair of switches (acceptServerTargets and the old
+     * "Layer 1 / Layer 2" framing) that described the implementation rather
+     * than the choice being made.
+     */
+    mode: 'active',          // 'passive' | 'active'
+
+    // DOM suppression: hide a listed profile's content without touching your
+    // account. Off by default -- real blocks are the product; this is for
+    // people who also want the whole list gone from view immediately,
+    // including profiles they will never scroll past.
+    hideEnabled: false,
     hideMode: 'collapse',    // 'collapse' | 'placeholder' | 'blur'
     hideComments: true,
     hideFeedPosts: true,
 
-    // Layer 2 -- real platform blocks. ON by default: the warm/cold split,
-    // the hourly ceilings and the randomised pacing are the safety mechanism
-    // now, and they ship at cautious values. (Test harnesses still force this
-    // off -- a test run must never block anyone for real.)
+    // The master switch behind the modes. On by default: the pacing, the
+    // ceilings and the randomised delays are the safety mechanism now, and
+    // they ship at cautious values. Surfaced as "Pause blocking" rather than
+    // as a mode. (Test harnesses force this off -- a test run must never
+    // block anyone for real.)
     platformBlockEnabled: true,
     platformBlockDryRun: false,
 
@@ -114,9 +139,8 @@
     warmMinDelayMs: 4000,    // between blocks of profiles that were on screen
     warmMaxDelayMs: 11000,
 
-    // How many ranked targets to ask the server for, and whether to accept
-    // any at all. With this off the extension only ever blocks what you see.
-    acceptServerTargets: true,
+    // How many ranked targets to take at a time. Whether to take any at all
+    // is `mode`; this is only the batch size.
     targetBudget: 25,
     // Sent with the blocklist request so the server can rank by where a clone
     // is actually operating. Coarse by construction: a time zone and a language
@@ -126,6 +150,21 @@
     debug: false
   };
 
+  /**
+   * Which mode is in force, tolerating settings written before modes existed.
+   *
+   * `acceptServerTargets: false` was the old way to say "only block what I
+   * see", so an install carrying it lands in passive rather than silently
+   * gaining a behaviour its owner had turned off.
+   */
+  function modeOf(settings) {
+    const s = settings || {};
+    if (s.mode === 'passive' || s.mode === 'active') return s.mode;
+    return s.acceptServerTargets === false ? 'passive' : 'active';
+  }
+
+  globalThis.CB_LIST_URL = LIST_URL;
+  globalThis.CB_MODE_OF = modeOf;
   globalThis.CB_PROTOCOL = PROTOCOL;
   globalThis.CB_KEYS = KEYS;
   globalThis.CB_DEFAULT_SETTINGS = DEFAULT_SETTINGS;

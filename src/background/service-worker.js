@@ -22,6 +22,7 @@ import '../common/protocol.js';
 
 const P = globalThis.CB_PROTOCOL;
 const KEYS = globalThis.CB_KEYS;
+const modeOf = globalThis.CB_MODE_OF;
 const DEFAULTS = globalThis.CB_DEFAULT_SETTINGS;
 
 const ALARM_REFRESH = 'cb-refresh-blocklist';
@@ -34,7 +35,17 @@ const DRYRUN_COOLDOWN_MS = 30 * 60 * 1000;
 // ---------------------------------------------------------------------------
 async function getSettings() {
   const got = await chrome.storage.sync.get(KEYS.SETTINGS);
-  return Object.assign({}, DEFAULTS, got[KEYS.SETTINGS] || {});
+  const stored = got[KEYS.SETTINGS] || {};
+  const merged = Object.assign({}, DEFAULTS, stored);
+  // The mode has to be resolved from what was actually STORED. DEFAULTS
+  // carries mode:'active', so merging first would hand modeOf a mode on every
+  // call and its acceptServerTargets fallback could never fire -- an install
+  // that switched server targets off before modes existed would have quietly
+  // started working through the ranked list on upgrade, which is the one thing
+  // that fallback exists to prevent. Everything reads settings through here,
+  // so this is the only place that needs to know.
+  merged.mode = modeOf(stored);
+  return merged;
 }
 async function setSettings(patch) {
   const next = Object.assign(await getSettings(), patch || {});
@@ -45,6 +56,9 @@ async function setSettings(patch) {
     const stats = await getLocal(KEYS.STATS, {});
     if (stats.lastError) { clearError(stats); await setLocal(KEYS.STATS, stats); }
   }
+  // Switching to passive, or pausing, retires whatever the badge was warning
+  // about: those cold targets are no longer waiting on anything.
+  if (patch && ('mode' in patch || 'platformBlockEnabled' in patch)) await updateBadge();
   return next;
 }
 async function getLocal(key, fallback) {
@@ -268,7 +282,7 @@ function withClientContext(listUrl, settings, budget) {
   if (isFirestoreUrl(listUrl)) return listUrl;
   let u;
   try { u = new URL(listUrl); } catch (e) { return listUrl; }
-  if (settings.acceptServerTargets === false) return listUrl;
+  if (modeOf(settings) === 'passive') return listUrl;
   u.searchParams.set('budget', String(Math.max(1, Math.min(budget, 200))));
   if (settings.shareRegion !== false) {
     const ctx = clientContext();
@@ -302,7 +316,9 @@ async function remainingBudget(settings) {
  */
 async function seedServerTargets(record) {
   const settings = await getSettings();
-  if (settings.acceptServerTargets === false) return { ok: true, added: 0 };
+  // Passive mode blocks only what turns up on screen, so a ranked list of
+  // strangers is not something to queue.
+  if (modeOf(settings) === 'passive') return { ok: true, added: 0 };
   if (!settings.platformBlockEnabled) return { ok: true, added: 0 };
   const byPlatform = {};
   for (const t of record.targets || []) {
@@ -326,7 +342,7 @@ async function refreshBlocklist(force) {
     return {
       ok: false,
       needsPermission: true,
-      error: 'Permission for that host has not been granted. Open the options page and click Grant access.'
+      error: 'This browser has no permission for that address. The built-in list address is always permitted, so this only happens when listUrl has been pointed somewhere else.'
     };
   }
 
@@ -426,7 +442,7 @@ async function refreshBlocklist(force) {
   // METADATA (day buckets, region tallies) and the ranking happens right
   // here, with context that never leaves this machine.
   let targets = [], targetsAvailable = Number(payload.targetsAvailable) || 0;
-  if (settings.acceptServerTargets !== false && Array.isArray(payload.targets)) {
+  if (modeOf(settings) === 'active' && Array.isArray(payload.targets)) {
     const raw = payload.targets.filter(t => t && ID_RE.test(String(t.id)));
     if (raw.some(t => t.days || t.regions || t.langs)) {
       const budget = Math.max(1, Math.min(await remainingBudget(settings), 200));
@@ -456,6 +472,7 @@ async function refreshBlocklist(force) {
   if (norm.docIdOverrides) await setLocal('docIdOverrides', norm.docIdOverrides);
   await pruneQueueToList(record);
   await seedServerTargets(record);
+  await updateBadge();
 
   await broadcast(P.SW.BLOCKLIST_UPDATED, { count: record.count });
   return { ok: true, blocklist: record };
@@ -695,6 +712,49 @@ async function claim(platform) {
            retryInMs: Math.max(30000, Math.min(soonest, 15 * 60 * 1000)) };
 }
 
+/**
+ * Keep the toolbar badge honest about the one thing that silently stops work.
+ *
+ * Blocks are issued by the content script, through the site's own code -- so
+ * with no Facebook or Threads tab open there is nowhere for a queued block to
+ * run, and the queue simply sits there. Warm targets are unaffected in
+ * practice (they only ever arrive while a tab IS open), so this counts the
+ * cold ones: profiles nominated by the list that nothing on screen will ever
+ * trigger. A number means "this many are waiting on you to open a tab".
+ */
+async function updateBadge() {
+  try {
+    const settings = await getSettings();
+    let waiting = 0;
+    if (settings.platformBlockEnabled && modeOf(settings) === 'active') {
+      const q = await getLocal(KEYS.QUEUE, {});
+      for (const platform of Object.keys(q)) {
+        for (const e of (q[platform] || [])) {
+          const entry = asEntry(e);
+          if (!entry.warm) waiting++;
+        }
+      }
+    }
+    const tabs = waiting
+      ? await chrome.tabs.query({ url: ['*://*.facebook.com/*', '*://*.threads.net/*', '*://*.threads.com/*'] })
+      : [];
+    // A halted state already owns the badge and is the more urgent message.
+    const stats = await getLocal(KEYS.STATS, {});
+    if (stats.halted) return;
+    const show = waiting > 0 && tabs.length === 0;
+    await chrome.action.setBadgeText({ text: show ? String(Math.min(waiting, 999)) : '' });
+    if (show) await chrome.action.setBadgeBackgroundColor({ color: '#b7791f' });
+  } catch (e) { /* the badge is never worth breaking a caller over */ }
+}
+
+// The condition depends on tabs as much as on the queue, so watch both ends.
+try {
+  chrome.tabs.onRemoved.addListener(() => { updateBadge().catch(() => {}); });
+  chrome.tabs.onUpdated.addListener((id, ch) => {
+    if (ch && ch.url) updateBadge().catch(() => {});
+  });
+} catch (e) { /* not available in the test harness */ }
+
 async function reportResult(info) {
   const { platform, target, ok, dryRun, rateLimited, checkpoint, loggedOut, detail } = info || {};
   const q = await getLocal(KEYS.QUEUE, {});
@@ -800,6 +860,7 @@ async function reportResult(info) {
   await setLocal('leases', leases);
   await setLocal('cooldowns', cooldowns);
   await setLocal('failures', failures);
+  await updateBadge();
   return { ok: true };
 }
 
@@ -1012,7 +1073,8 @@ async function firestoreSubmitReport(settings, payload, reporter, baseOverride) 
   if (!base) return { ok: false, error: 'Could not derive the Firestore base from the list URL.' };
   if (!(await hasHostPermission(base + '/'))) {
     return { ok: false, needsPermission: true,
-             error: 'Host permission not granted. Open options and click Grant access.' };
+             error: 'No permission for that address. Reports go to whichever backend ' +
+                    'listUrl names, and this one is not a permitted origin.' };
   }
 
   const platform = payload.platform;
@@ -1105,7 +1167,8 @@ async function submitReport(payload) {
   if (!base) return { ok: false, error: 'No server configured. Set the blocklist URL in options.' };
   if (!(await hasHostPermission(base + '/'))) {
     return { ok: false, needsPermission: true,
-             error: 'Host permission not granted. Open options and click Grant access.' };
+             error: 'No permission for that address. Reports go to whichever backend ' +
+                    'listUrl names, and this one is not a permitted origin.' };
   }
 
   // Refused here as well as at the server. Sending it anyway would only earn a

@@ -1,6 +1,6 @@
 /**
  * Executes ONE real platform block through the extension's normal pipeline,
- * then immediately disables Layer 2 again.
+ * then immediately disables blocking again.
  *
  *   node tools/run-real-block.js 9100000001
  *
@@ -10,7 +10,7 @@
  *     worker cannot reach any other profile;
  *   - the queue, done-set, cooldowns and leases are cleared first, so nothing
  *     left over from an earlier run can be picked up;
- *   - Layer 2 is switched off again as soon as one result is reported, whether
+ *   - blocking is switched off again as soon as one result is reported, whether
  *     it succeeded or failed.
  *
  * It deliberately drives the real queue/claim/worker path rather than calling
@@ -92,7 +92,7 @@ async function evalIn(cdp, sessionId, expr) {
   await cdp.send('Runtime.enable', {}, sessionId);
   await sleep(1500);
 
-  // 2. Clear any prior queue state, reload the list, arm Layer 2.
+  // 2. Clear any prior queue state, reload the list, arm blocking.
   const armed = await evalIn(cdp, sessionId, `
     (async () => {
       await chrome.storage.local.remove(['platformQueue','platformDone','stats','leases','cooldowns','failures']);

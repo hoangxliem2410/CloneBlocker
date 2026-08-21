@@ -1,8 +1,9 @@
 # Clone Blocker
 
-A Chrome (Manifest V3) extension that fetches a profile-ID blocklist from a backend
-**you** own — a Firebase project on the free plan, or any URL serving plain JSON —
-and applies it on **Facebook** and **Threads**.
+A Chrome (Manifest V3) extension that blocks the accounts impersonating you on
+**Facebook** and **Threads**, working from a hand-reviewed blocklist it fetches
+from a Firebase project on the free plan. The address is compiled in, so there
+is nothing to set up and nothing to grant.
 
 No Facebook/Threads SDK. No Graph API. It works by using the sites' own internal
 JavaScript — the module registry, the Relay runtime, and the Relay store — from a
@@ -11,18 +12,35 @@ and why it was the right call.
 
 ---
 
-## Two layers, plus reporting
+## Two modes, plus hiding and reporting
 
-**Layer 1 — Hide (on by default, zero risk).** Suppresses posts and comments
-authored by listed profiles. Sends no requests and changes nothing on your
-account. Takes effect the moment the list loads.
+Real blocks are the product, and the only question worth putting to a user is
+how far the extension should go looking for them.
 
-**Layer 2 — Real platform block (on by default, paced).** Performs genuine blocks
-through the same internal request path the site's own Block button uses. Rate-limited,
-queued, resumable, and shipped with dry-run enabled.
+**Passive — block the clones you run into.** Only profiles that appear on the
+page while you browse. Every one of them was on your screen anyway, which is
+the pattern the platform finds entirely unremarkable, so they go through
+quickly (4–11 seconds apart) and barely touch the rate limits.
 
-Layer 1 already removes the content from your experience. Layer 2 only matters if you
-want the block to persist server-side and apply everywhere you're signed in.
+**Active — also work through the list.** The default. Everything passive does,
+plus the accounts the published list says are most active near you, whether or
+not you ever scroll past them. Those were never on your screen, which *is* the
+pattern that draws a checkpoint, so they are paced slowly (20–45 seconds) and
+held to a separate hourly ceiling of their own (`maxColdBlocksPerHour`,
+default 4). **Active work needs a Facebook or Threads tab open**: a block is
+issued by driving the site's own code from a content script, so with nothing
+open the queue just waits — the popup, the activity page and a toolbar badge
+all say so, with the count.
+
+**Pause blocking** (Advanced) stops both modes. Nothing is lost; queued
+profiles wait.
+
+**Hiding — a separate extra, off by default.** Suppresses a listed profile's
+posts and comments in your browser without touching your account: it sends
+nothing, changes nothing, has no ceiling, and covers the whole list the moment
+it loads. It ships **off** because a real block is what the extension is for;
+turn it on if you also want the list out of sight immediately, including the
+thousands of profiles you will never scroll past.
 
 **Reporting.** Users flag clone accounts from the page itself; an admin reviews
 them and decides what reaches the blocklist. Nothing a user reports is blocked
@@ -51,7 +69,8 @@ is already known: *Reported* if the account is already awaiting review,
 *Blocked* if it is already on the list — derived from the cached list, with no
 extra request.
 
-The popup has **Report this profile as a clone** for the profile you are viewing.
+The popup's first action is **Report as a clone**, for the profile the tab is
+showing.
 
 The whole widget lives in a Shadow DOM root. Facebook and Threads ship enormous
 global stylesheets and rotate class names constantly; without that boundary the
@@ -126,6 +145,13 @@ admin can read one back, edit one, or delete one.
 
 ## Firebase backend
 
+The extension ships pointed at this project's backend, and that address is a
+constant — `LIST_URL` in `src/common/protocol.js` — rather than a setting.
+Running the whole thing yourself means editing that one line, adding its origin
+to `host_permissions` in `manifest.json`, and reloading the extension. It is a
+developer action on purpose: a URL field was the first thing a new user used to
+meet, and it asked a question most of them had no way to answer.
+
 The backend is a Firebase project on the **Spark (free) plan**: Firestore
 holds the data, Hosting serves the dashboard, Auth holds the one admin
 account. No Cloud Functions, and **no server code running anywhere** — every
@@ -194,8 +220,8 @@ still has no path to the admin's session.
 {
   "v": 1,
   "updatedAt": "ISO",
-  "ids": ["63082166531", ...],          // hide + block layer (numeric ids)
-  "usernames": ["somename", ...],       // hide layer only
+  "ids": ["63082166531", ...],          // blockable and hideable (numeric ids)
+  "usernames": ["somename", ...],       // hiding only — nothing to block by
   "docIdOverrides": {},                 // persisted-query hot patches
   "pending": ["threads:9100000001"],    // report keys, status only — never blockable
   "targets": [                          // per-target ranking METADATA (not ranked)
@@ -244,8 +270,8 @@ An honest list, because each of these is a real trade the migration made:
 
 ## Polling without paying for it
 
-The list is written rarely and read constantly, so two layers keep the reads
-from costing anything:
+The list is written rarely and read constantly, so two mechanisms keep the
+reads from costing anything:
 
 - **The extension probes before it downloads.** Against a Firestore list URL
   it asks for a single masked field first (~300 bytes) and compares the
@@ -258,12 +284,16 @@ from costing anything:
   poll is a genuine `304` with zero bytes of body and **zero Firestore reads**,
   so read quota stops being a function of how many people run the extension.
 
-  Point the extension at the file and keep reports on the database:
+  Serving the list from that file while reports keep going to the database
+  moves only the first of the two addresses:
 
-  | Options field | Value |
+  | | Value |
   |---|---|
-  | Server endpoint | `https://<project>.web.app/blocklist.json` |
-  | API base | `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents` |
+  | `LIST_URL` in `src/common/protocol.js` | `https://<project>.web.app/blocklist.json` |
+  | **API base** — Settings → Advanced → Clone reporting | `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents` |
+
+  This project's own Hosting origin is already a declared permission, so the
+  snapshot it deploys needs no manifest change; another project's would.
 
   The trade is freshness: clients see a decision when the snapshot next
   deploys, not the moment it is made. For a blocklist that is exactly the
@@ -275,19 +305,21 @@ A blocklist of a few thousand cannot be worked through by one account. The
 platforms checkpoint an account that blocks at volume — which is the failure
 this whole thing exists to avoid, arriving by a different road.
 
-So the list is served as **two lists, because the two layers cost completely
-different things.**
+So the list is served as **two lists, because the two things you can do with a
+clone cost completely different amounts.**
 
 | | what it covers | cost | rationed? |
 |---|---|---|---|
-| **Layer 1** — hide in the DOM | everything on the list | nothing | no |
-| **Layer 2** — real platform block | a ranked, budgeted slice | your account | yes, tightly |
+| **Hiding** (off by default) | everything on the list | nothing | no |
+| **Blocking** | a ranked, budgeted slice | your account | yes, tightly |
 
-Hiding a clone is free and carries no risk, so there is no reason to ration it.
-A real block is what gets an account checkpointed, so it has to be spent on the
-few clones that are active *now* and operating *where you are*.
+Hiding a clone is free and carries no risk, so there is no reason to ration
+it — it is off by default because it is not what the extension is *for*, not
+because it is expensive. A real block is what gets an account checkpointed, so
+it has to be spent on the few clones that are active *now* and operating
+*where you are*.
 
-### Warm and cold
+### Warm and cold — what the two modes are underneath
 
 Not all blocks look the same to the platform. Blocking someone whose profile is
 on your screen is what an ordinary person does all day. Working through a list of
@@ -302,6 +334,15 @@ So the queue tracks how each target got there:
   seen in this browser. Paced slowly (20–45s) and held to a much tighter
   ceiling of its own (`maxColdBlocksPerHour`, default 4).
 
+**Passive mode is warm only; active mode is warm plus cold.** That is the
+entire difference between them, and it is why the choice is a mode rather than
+a checkbox labelled after some internal switch: the two halves of the queue
+carry genuinely different risk, so they get different pacing, different
+ceilings, and a user who can decline the expensive half without giving up the
+cheap one. Every block runs inside a Facebook or Threads tab, so warm work has
+one by definition; cold work is the half that can sit waiting for one, which is
+what the badge counts.
+
 Warm is claimed first — it is both the safer and the more relevant signal, so the
 two orderings agree far more often than they conflict. Reaching the cold ceiling
 never stops warm work: rationing the ordinary case to protect against a risk it
@@ -311,7 +352,7 @@ does not carry would just make the extension feel broken.
 unremarkable now and conspicuous later, so it is taken while it is cheap.
 
 Set `maxColdBlocksPerHour` to **0** to never block anyone who has not appeared on
-your screen.
+your screen — which is passive mode, said in one click.
 
 ### The trending matrix
 
@@ -410,21 +451,10 @@ account involved loses weight — including on reports they filed earlier.
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select this directory.
-3. That is the whole setup. The extension ships pointed at this project's
-   Firebase backend, whose two origins are declared as required permissions,
-   so it starts working with **no configuration and no permission prompts**:
-   the list loads on the first refresh, hiding is on, and Layer 2 runs at its
-   cautious paced defaults.
-
-**Pointing it at your own backend instead** (recommended if you run the
-project yourself — see [Firebase backend](#firebase-backend)):
-
-- Open **Settings** and set the endpoint to your own document URL,
-  `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/blocklist/current`
-  (any URL returning one of the plain-JSON shapes below works too).
-- If that origin is not one the manifest already declares — a self-hosted
-  server, a different Hosting domain — click **Grant access** next to the URL
-  so Chrome permits the fetch, then **Test & refresh now**.
+3. That is the whole setup. There is no address to enter and no permission
+   prompt to accept: the list's origins are required permissions, so the list
+   loads on the first refresh and active mode starts working at its cautious
+   paced defaults. Hiding waits in Settings for anyone who wants it.
 
 Requires Chrome 120+ (`"world": "MAIN"` needs 111; the 30-second `chrome.alarms` floor
 and MV3 behaviour here assume 120).
@@ -451,16 +481,17 @@ including the parts that cannot be engineered away.
 
 [PRIVACY.md](PRIVACY.md) is the privacy policy the store requires, and its
 claims are checkable against the source: the only outbound requests in the
-extension go to the two Meta origins and the endpoint you typed.
+extension go to the two Meta origins and the one baked-in list address.
 
 ---
 
 ## Self-hosted and static lists
 
-The extension does not require Firebase. Any endpoint returning JSON in one of
-the shapes below still works — a static file on any host you control is a
-complete backend for the hide layer, and this is also the escape hatch if you
-ever want off Google entirely. `GET <your endpoint>` returning JSON:
+The extension does not require Firebase. Point `LIST_URL` at anything returning
+JSON in one of the shapes below (see [Firebase backend](#firebase-backend) for
+how) and it works — a static file on any host you control is a complete backend
+for hiding, and this is also the escape hatch if you ever want off Google
+entirely. `GET <your endpoint>` returning JSON:
 
 ```jsonc
 // simplest
@@ -488,7 +519,9 @@ shipping a new extension build:
 **`ETag` / `If-None-Match` is honoured** — a server that returns `304` for an
 unchanged list makes refreshes cost almost nothing. (Firestore does not play
 this game; the trade is listed under "What changed vs the old server".) An
-optional `Authorization` header can be configured in settings.
+endpoint behind a token is still supported through the `listAuthHeader`
+setting, though — like the address itself — nothing in the UI writes it any
+more.
 
 Reporting is the one thing a static file cannot carry: against a plain-JSON
 endpoint the extension still hides and blocks, but the report button needs
@@ -583,7 +616,7 @@ it excludes the extension's own requests, so it cannot learn from its own failur
 
 ```bash
 node tools/check.js         # static: syntax, manifest refs, MV3 CSP
-node tools/queue-test.js    # Layer 2 queue + rate limiter (mocked chrome.*)
+node tools/queue-test.js    # block queue + rate limiter (mocked chrome.*)
 node tools/firebase-test.js # security-rules matrix + ported logic, emulator
 node tools/e2e-test.js      # hiding + Relay discovery, browser
 npm test                    # all of the above
@@ -602,7 +635,7 @@ day-quantised local ranking — including the regional flip in both directions,
 because a ranking that only flips one way is a ranking with a bug.
 
 `queue-test.js` drives the real service-worker message handler against a mocked
-`chrome.*`, covering the Layer 2 queue, leases and rate limiter — logic the
+`chrome.*`, covering the block queue, leases and rate limiter — logic the
 browser test deliberately never exercises, because it must never block anyone for
 real. It verifies that a failing target backs off instead of starving the queue,
 that failed *attempts* (not just successes) count toward the caps, that dry runs
@@ -644,7 +677,7 @@ in normal use is unaffected.
 
 ## Verified against a live signed-in account
 
-Layer 2 was tested end to end on a real Threads account:
+Real blocking was tested end to end on a real Threads account:
 
 - **Blocking works** via `RelayModern.commitMutation` driven with Threads' own
   operation node (`useTHUserBlockMutation`, `POST /api/graphql`). The block took
@@ -661,7 +694,7 @@ Layer 2 was tested end to end on a real Threads account:
 
 ## Limitations and honest caveats
 
-- **Facebook Layer 2 is verified too.** `ProfileCometActionBlockUserMutation` via
+- **Facebook blocking is verified too.** `ProfileCometActionBlockUserMutation` via
   `POST /api/graphql/`, driven through `commitMutation`. The block appeared in
   Facebook's own Settings -> Blocking list and was reversed from there. On
   Facebook the module loads only once the block **confirmation dialog** is
@@ -669,16 +702,20 @@ Layer 2 was tested end to end on a real Threads account:
 - **Blocking on Facebook has an irreversible side effect.** It consumes a
   pending friend request, and unfriends an existing friend. Unblocking restores
   neither.
-- **Layer 2 needs the block module primed.** Until the site has loaded it, the
+- **Blocking needs the block module primed.** Until the site has loaded it, the
   extension reports that plainly and does nothing rather than firing a request.
+- **Active mode only moves while a tab is open.** Blocks are issued from inside
+  facebook.com or threads.com, so with neither open the cold queue holds and
+  the toolbar badge counts what is waiting. A pinned background tab or an
+  offscreen document would lift the constraint; neither is built yet.
 - **Rate limits are guesses.** No public source documents Meta's block thresholds. The
   defaults are deliberately conservative. Bulk-mutating an account can trigger a
-  verification checkpoint — the extension detects that, halts, and disables Layer 2.
+  verification checkpoint — the extension detects that, halts, and stops blocking.
 - **Selectors will drift.** Comet and Barcelona generate obfuscated, rotating class names.
   This code keys only on semantic attributes (`role`, `aria-*`, `data-pagelet`,
   `data-pressable-container`), which are far more stable, but nothing here is guaranteed
   against a redesign.
-- **Layer 2 mutates your account.** Blocks are not silently reversible in bulk. Keep dry
+- **Blocking mutates your account.** Blocks are not silently reversible in bulk. Keep dry
   run on until you have watched it resolve a real strategy.
 - Automating interactions may be inconsistent with the platforms' terms of service. That
   judgement is yours to make.
@@ -689,7 +726,7 @@ Layer 2 was tested end to end on a real Threads account:
 
 ```
 manifest.json
-src/  main/ content/ background/ popup/ options/ common/ ui/
+src/  main/ content/ background/ popup/ options/ activity/ common/ ui/
 firestore.rules           the whole trust model, enforced server-side
 firebase.json             Firestore + Hosting + emulator configuration
 hosting/                  moderation dashboard, served by Firebase Hosting
@@ -702,6 +739,7 @@ tools/make-store-assets.js  listing tiles and screenshots, at exact sizes
 docs/RESEARCH.md          internals findings, with what is and isn't verified
 docs/FIREBASE-SPEC.md     the migration contract, formula by formula
 docs/CHROME-WEB-STORE.md  store requirements, listing copy, rejection risks
+docs/ROADMAP.md           what is built and what is planned, phase by phase
 store/                    generated listing assets
 PRIVACY.md                privacy policy (required by the store)
 ```

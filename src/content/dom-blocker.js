@@ -1,5 +1,5 @@
 /**
- * DOM suppression engine (ISOLATED world) -- "Layer 1".
+ * DOM suppression engine (ISOLATED world): hiding.
  *
  * Hides content authored by blocked profiles. This layer is always safe: it
  * sends no requests and changes nothing on the account, so it is on by default

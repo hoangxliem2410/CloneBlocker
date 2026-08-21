@@ -175,5 +175,59 @@ for (const page of ['popup', 'activity']) {
   }
 }
 
+// ---- 7. the retired "Layer 1 / Layer 2" framing --------------------------
+//
+// The product used to be described as Layer 1 (hide) and Layer 2 (real block).
+// That named the implementation rather than the choice anyone was making, and
+// the passive/active mode picker replaced it. It is the kind of vocabulary
+// that creeps back one label at a time, so this fails the build if it does.
+//
+// Only what a reader can actually see is scanned: every HTML page under src/,
+// plus the quoted strings in the scripts those pages run. Comments still
+// explaining where the old names went are exempt on purpose -- that history is
+// worth keeping, and a check that punished it would just get the explanations
+// deleted.
+{
+  const RETIRED = /\bLayer\s*[12]\b/i;
+  const offenders = [];
+
+  const htmlFiles = (dir, acc) => {
+    acc = acc || [];
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (!e.name.startsWith('.')) htmlFiles(p, acc); }
+      else if (e.name.endsWith('.html')) acc.push(p);
+    }
+    return acc;
+  };
+
+  for (const file of htmlFiles(path.join(ROOT, 'src'))) {
+    fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+      if (RETIRED.test(line)) offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
+    });
+  }
+
+  // The five scripts that put text on a screen: the three extension pages and
+  // the two content scripts that render into the site itself. Comments come
+  // out first, so what is tested is only what could reach a user.
+  const stripComments = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const STRINGS = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
+
+  for (const rel of ['src/popup/popup.js', 'src/options/options.js',
+                     'src/activity/activity.js', 'src/content/report-ui.js',
+                     'src/content/dom-blocker.js']) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) { report(false, 'exists ' + rel); continue; }
+    for (const s of stripComments(fs.readFileSync(file, 'utf8')).match(STRINGS) || []) {
+      if (RETIRED.test(s)) offenders.push(rel + ' -> ' + s.slice(0, 60));
+    }
+  }
+
+  report(offenders.length === 0, 'the "Layer 1 / Layer 2" framing is gone from the UI',
+    offenders.join('; '));
+}
+
 console.log('\n' + (failures ? `${failures} problem(s)` : 'all checks passed'));
 process.exitCode = failures ? 1 : 0;

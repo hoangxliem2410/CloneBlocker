@@ -5,7 +5,7 @@
  *   1. Start the bridge handshake immediately -- the MAIN world may already be
  *      waiting, and its module hook is only useful if we can reach it.
  *   2. Load settings + blocklist from the service worker and start hiding.
- *      Layer 1 must not wait on anything network-bound.
+ *      hiding must not wait on anything network-bound.
  *   3. Only once everything is settled, consider the opt-in platform-block
  *      worker.
  */
@@ -151,7 +151,7 @@
    * asks a question. If every visible post happens to match on username alone,
    * the DOM layer never needs a round-trip -- and we would never learn the
    * numeric ids behind those usernames. Those ids are exactly what a real
-   * platform block requires, so without this the Layer 2 queue would sit empty
+   * platform block requires, so without this the block queue would sit empty
    * even though the profiles are right there on screen.
    *
    * The sweep is a plain in-memory walk of records the page already fetched:
@@ -206,7 +206,7 @@
     });
   }
 
-  // -- platform block worker (Layer 2, opt-in) ------------------------------
+  // -- platform block worker --------------------------------------------------
   //
   // The service worker owns the queue and the rate limiter; this tab is only a
   // pair of hands. It claims one target at a time under a lease, so multiple
@@ -215,7 +215,7 @@
     if (workerRunning || !settings.platformBlockEnabled) return;
     // Seed before starting rather than waiting for a Relay store sweep to do
     // it. Ids that are already on the list need no discovery at all, and making
-    // the queue depend on a sweep meant Layer 2 could sit there reporting
+    // the queue depend on a sweep meant blocking could sit there reporting
     // nothing to do while the target was right there in the blocklist.
     maybeSeedQueue();
     workerRunning = true;

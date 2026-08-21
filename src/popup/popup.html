@@ -22,16 +22,18 @@
     <p class="note" id="actionNote"></p>
   </section>
 
-  <!-- What it actually did here. -->
+  <!-- What it did here, and what it still has to do. The hide toggle used to
+       live in this card; hiding is an off-by-default extra now, so Settings
+       owns it and the popup keeps to the work that is actually in flight. -->
   <section class="card">
     <div class="row">
       <span class="k">Hidden on this page</span>
       <span class="v" id="hiddenCount">—</span>
     </div>
-    <label class="toggle">
-      <input type="checkbox" id="hideEnabled">
-      <span>Hide clones on Facebook &amp; Threads</span>
-    </label>
+    <div class="row">
+      <span class="k">Waiting to be blocked</span>
+      <span class="v" id="queuedCount">—</span>
+    </div>
     <p class="note" id="blockingNote"></p>
     <div id="blockError" class="err hidden"></div>
   </section>

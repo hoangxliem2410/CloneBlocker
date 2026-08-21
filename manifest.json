@@ -15,11 +15,6 @@
     "https://firestore.googleapis.com/*",
     "https://clone-blocker2.web.app/*"
   ],
-  "optional_host_permissions": [
-    "https://*/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
-  ],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"

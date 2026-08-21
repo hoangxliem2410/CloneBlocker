@@ -265,21 +265,21 @@ function layersHtml() {
   <div class="field"></div>
   <div class="crowd">${crowd(12, 118, 700, 112, -8)}</div>
   <div class="page">
-    <h1>Two layers, because they cost <em>different things</em></h1>
+    <h1>Two modes, because they cost <em>different things</em></h1>
     <p class="sub">A list of thousands cannot be blocked by one account &mdash; that is exactly what
-       gets an account checkpointed. So the two halves are treated differently.</p>
+       gets an account checkpointed. So you choose how hard it works.</p>
     <div class="cards">
-      ${card('Layer 1 &middot; free', 'Hide them', [
-        'Covers the entire list',
-        'Profiles, comments and feed posts',
-        'Costs your account nothing',
-        'No limit, runs on every page load'
+      ${card('Passive &middot; cheap', 'As you run into them', [
+        'Only profiles that appear as you browse',
+        'They were on your screen anyway',
+        'Blocked within seconds of each other',
+        'Stays well clear of the rate limits'
       ], '#8ee6a8')}
-      ${card('Layer 2 &middot; costly', 'Block them', [
-        'Only a ranked, budgeted slice',
-        'Ordered by how active and how near',
-        'Separate hourly ceiling you set',
-        'Nothing blocked without your approval'
+      ${card('Active &middot; costly', 'Also works the list', [
+        'Adds the clones most active near you',
+        'Even ones you never scroll past',
+        'Paced slowly, capped every hour',
+        'Needs a tab open to do the work'
       ], '#ff8a86')}
     </div>
     <p class="foot">Blocking someone whose profile is on your screen is ordinary.
@@ -376,8 +376,8 @@ function heroHtml() {
 
     const shots = [
       { image: uiShots.options, frameWidth: 880,
-        title: 'Every limit is <em>yours</em> to set',
-        body: 'How fast blocks go out, how many unseen accounts may be blocked in an hour, whether to share a coarse region at all. The cautious defaults are the ones it ships with.' },
+        title: 'You choose how hard it <em>works</em>',
+        body: 'Passive blocks the clones you run into as you browse. Active also works through the list in the background, paced slowly and capped by the hour. Every delay and ceiling underneath is yours to change, and the cautious values are the ones it ships with.' },
       { image: path.join(ROOT, 'docs', 'shots', 'dashboard.png'), frameWidth: 980,
         title: 'You run the server. <em>You</em> decide the list.',
         body: 'Reports land in your own moderation dashboard, ranked by reporter reputation and by where the clone is active right now. Nothing reaches the blocklist until you approve it.' }
@@ -443,20 +443,25 @@ async function captureExtensionPages(dir) {
 
   const cdp = new CDP(version.webSocketDebuggerUrl);
   await cdp.ready;
-  // Two display-only changes, both reverted below: scroll to the section the
-  // listing caption is actually about, and stand in an example endpoint --
-  // a localhost URL in a store screenshot reads as a half-finished dev build.
-  const EXAMPLE_URL = 'https://blocklist.example.com/blocklist.json';
+  // The mode picker is the first thing on the options page now, so this
+  // captures from the top -- no scrolling, and nothing to stand in for. (It
+  // used to scroll past an endpoint field to reach the pacing controls; the
+  // field is gone and the pacing lives under Advanced, where a listing image
+  // has no business dragging the reader.)
+  //
+  // One display-only correction: this browser is a dev session, which forces
+  // blocking OFF for safety, and the page honestly says so. That paused note
+  // is the harness's state, not the product's -- a fresh install ships
+  // unpaused -- so it is cleared in the DOM for the capture. Nothing is
+  // written to settings; the session stays exactly as paused as it was.
   await shoot(cdp, `chrome-extension://${extId}/src/options/options.html`, 880, 1180, out.options, 1600,
     `(async () => {
-       const el = document.getElementById('listUrl');
-       if (el) el.value = ${JSON.stringify(EXAMPLE_URL)};
-       const h = [...document.querySelectorAll('h2')]
-         .find(n => n.textContent.indexOf('Layer 2') === 0);
-       await new Promise(r => setTimeout(r, 250));
-       if (!h) return 0;
-       const s = h.closest('section');
-       return Math.max(0, s.getBoundingClientRect().top + window.scrollY - 18);
+       const note = document.getElementById('pausedNote');
+       if (note) note.classList.add('hidden');
+       const pause = document.getElementById('pauseBlocking');
+       if (pause) pause.checked = false;
+       await new Promise(r => setTimeout(r, 150));
+       return 0;
      })()`);
   try {
     await capturePopup(cdp, extId, out.popup);

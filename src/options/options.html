@@ -10,7 +10,8 @@
     <div>
       <h1>Clone Blocker</h1>
       <p class="note">
-        Fetches a profile-ID blocklist from your backend and applies it on Facebook and Threads.
+        Blocks the accounts impersonating you on Facebook and Threads, at a pace
+        that keeps your own account out of trouble.
       </p>
     </div>
     <nav class="page-nav">
@@ -18,187 +19,212 @@
     </nav>
   </header>
 
+  <!-- The one decision anyone actually has to make. Everything else on this
+       page is a detail of how the chosen mode behaves, which is why the rest
+       of it sits behind Advanced. -->
   <section class="card">
-    <h2>Blocklist source</h2>
+    <h2>How much work it does</h2>
 
-    <div class="field">
-      <label for="listUrl">Server endpoint</label>
-      <div class="inline-row">
-        <input type="url" id="listUrl" placeholder="https://example.com/blocklist.json">
-        <button id="grant" class="btn inline">Grant access</button>
-      </div>
-      <p class="hint">
-        Cheapest: the static snapshot your dashboard owner publishes to Hosting
-        (<code>https://&lt;project&gt;.web.app/blocklist.json</code>) &mdash; served from a CDN,
-        unchanged polls cost nothing. Set the API base below to the Firestore
-        documents URL so reporting still works.
-        Or paste the live Firestore document URL:
-        <code>https://firestore.googleapis.com/v1/projects/&lt;project&gt;/databases/(default)/documents/blocklist/current</code>
-        &mdash; reporting and suggestions wire themselves up from it. Plain JSON
-        endpoints also work: <code>["100001234567890"]</code>,
-        <code>{"ids":[…],"usernames":[…]}</code>,
-        <code>{"blocked":[{"id":"…","username":"…"}]}</code>, or a
-        newline-delimited list.
-      </p>
-      <p id="permStatus" class="status"></p>
+    <div class="modes">
+      <label class="mode">
+        <span class="mode-hd">
+          <input type="radio" name="mode" id="modePassive" value="passive">
+          <span>Passive &mdash; blocks clones as you run into them</span>
+        </span>
+        <p>Only profiles that appear on the page while you browse.</p>
+        <p class="cost">
+          They were on your screen anyway, so these go through quickly and stay
+          well clear of the rate limits.
+        </p>
+      </label>
+
+      <label class="mode">
+        <span class="mode-hd">
+          <input type="radio" name="mode" id="modeActive" value="active">
+          <span>Active &mdash; also works through the list in the background</span>
+        </span>
+        <p>
+          Adds the clones the list says are most active near you, even if you
+          never scroll past them.
+        </p>
+        <p class="cost">
+          Paced slowly and capped per hour, because working through strangers is
+          the pattern that draws a checkpoint.
+          <strong>Needs a Facebook or Threads tab open to do this work</strong> &mdash;
+          blocks are issued through the site&rsquo;s own code, so with nothing open
+          they simply wait.
+        </p>
+      </label>
     </div>
 
-    <div class="field">
-      <label for="listAuthHeader">Authorization header <span class="hint">(optional)</span></label>
-      <input type="text" id="listAuthHeader" placeholder="Bearer …">
-      <p class="hint">Sent as <code>Authorization</code> on each request. Stored in synced extension storage.</p>
-    </div>
-
-    <div class="field">
-      <label for="refreshMinutes">Refresh every (minutes)</label>
-      <input type="number" id="refreshMinutes" min="1" max="1440" step="1">
-      <p class="hint">Uses <code>If-None-Match</code>, so an unchanged list costs almost nothing.</p>
-    </div>
-
-    <button id="testFetch" class="btn inline primary">Test &amp; refresh now</button>
-    <span id="fetchStatus" class="status"></span>
-  </section>
-
-  <section class="card">
-    <h2>Layer 1 — Hide content (safe, always available)</h2>
-    <p class="note">
-      Suppresses posts and comments authored by listed profiles.
-      Sends no requests and changes nothing on your account.
-    </p>
-
-    <label class="toggle"><input type="checkbox" id="hideEnabled"><span>Enable hiding</span></label>
-    <label class="toggle"><input type="checkbox" id="hideFeedPosts"><span>Hide feed posts</span></label>
-    <label class="toggle"><input type="checkbox" id="hideComments"><span>Hide comments</span></label>
-
-    <div class="field" style="margin-top:12px">
-      <label for="hideMode">When hiding</label>
-      <select id="hideMode">
-        <option value="collapse">Remove entirely</option>
-        <option value="placeholder">Show a collapsed bar with a “Show” button</option>
-        <option value="blur">Blur in place</option>
-      </select>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Layer 2 — Real platform blocks</h2>
-
-    <div class="callout">
-      <strong>On by default, paced on purpose.</strong> This performs genuine blocks on
-      your account using the site's own internal request path — the same one the Block
-      button uses. What keeps that safe is the pacing, not the switch: profiles you have
-      seen on screen go at a human rhythm, suggestions are held to a tight hourly ceiling,
-      and every cap below is yours. Turn the whole layer off here if you only want hiding —
-      <em>Layer 1 already hides everything</em> without touching your account.
-    </div>
-
-    <label class="toggle"><input type="checkbox" id="platformBlockEnabled"><span>Enable platform blocking</span></label>
-    <label class="toggle sub"><input type="checkbox" id="platformBlockDryRun"><span>Dry run — resolve the strategy but send nothing</span></label>
-    <label class="toggle sub"><input type="checkbox" id="allowRawNetworkFallback"><span>Allow raw request fallback <strong>(risky)</strong></span></label>
-    <p class="hint" style="margin-left:22px">
-      Normally the extension drives the site's own block code, which is safe and
-      always current. This fallback instead hand-builds the HTTP request. During
-      testing that was observed <strong>forcing the signed-in session to log out</strong>,
-      and on Threads the REST paths return 404 regardless. Leave this off unless
-      you are debugging.
-    </p>
-
-    <h3 style="margin-top:16px">Which accounts get blocked</h3>
-    <p class="hint">There are usually far more clones on the list than one account can
-      block without being checkpointed. Blocking someone whose profile is on your
-      screen is what people do all day; working through a list of strangers is not,
-      so the two are budgeted and paced separately.</p>
-    <label class="toggle sub"><input type="checkbox" id="acceptServerTargets"><span>Accept the server's suggestions &mdash; the newest, most active clones near you</span></label>
-    <label class="toggle sub"><input type="checkbox" id="shareRegion"><span>Send my time zone and language, so the suggestions are local to me</span></label>
-
-    <div class="field" style="margin-top:12px">
-      <label for="maxColdBlocksPerHour">Max suggested blocks per hour</label>
-      <input type="number" id="maxColdBlocksPerHour" min="0" max="60" step="1">
-      <p class="hint">Counts only accounts you have never seen. <strong>Zero</strong> means
-        never block anyone who has not appeared on your screen.</p>
-    </div>
-    <div class="field">
-      <label for="targetBudget">Suggestions to fetch at a time</label>
-      <input type="number" id="targetBudget" min="1" max="200" step="1">
-    </div>
-    <div class="field">
-      <label for="warmMinDelayMs">Delay after blocking someone on screen (ms)</label>
-      <div class="inline-row">
-        <input type="number" id="warmMinDelayMs" min="1000" step="500">
-        <span class="hint">to</span>
-        <input type="number" id="warmMaxDelayMs" min="2000" step="500">
-      </div>
-      <p class="hint">Shorter than the delay below: this is the ordinary case and does
-        not need to be slowed down.</p>
-    </div>
-
-    <div class="field" style="margin-top:12px">
-      <label for="maxBlocksPerHour">Max blocks per hour (all sources)</label>
-      <input type="number" id="maxBlocksPerHour" min="1" max="200" step="1">
-    </div>
-    <div class="field">
-      <label for="maxBlocksPerDay">Max blocks per day</label>
-      <input type="number" id="maxBlocksPerDay" min="1" max="1000" step="1">
-    </div>
-    <div class="field">
-      <label for="minDelayMs">Delay after blocking a suggested account (ms)</label>
-      <div class="inline-row">
-        <input type="number" id="minDelayMs" min="2000" step="1000">
-        <span class="hint">to</span>
-        <input type="number" id="maxDelayMs" min="3000" step="1000">
-      </div>
-      <p class="hint">A random value in this range is used each time; fixed intervals look automated.</p>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Teaching it the block request</h2>
-    <p class="note">
-      Meta rotates its GraphQL <code>doc_id</code>s and gates operations behind
-      generated provider variables, so nothing is hardcoded. The extension reads the
-      live values out of the page. If it reports no block mutation found, the module
-      simply has not been loaded yet — open any profile and block one person by hand.
-      The request is captured and its shape reused from then on.
-    </p>
-    <button id="clearLearned" class="btn inline">Forget captured templates</button>
-    <span id="learnedStatus" class="status"></span>
-  </section>
-
-  <section class="card">
-    <h2>Clone reporting</h2>
-    <p class="note">
-      Lets people flag clone accounts from the page itself. Reports go to your own
-      server for review; nothing reaches the blocklist until an admin approves it.
-    </p>
-    <label class="toggle"><input type="checkbox" id="reportUiEnabled"><span>Show the Report chip on profiles</span></label>
-
-    <div class="field" style="margin-top:12px">
-      <label for="apiBase">API base <span class="hint">(optional)</span></label>
-      <input type="url" id="apiBase" placeholder="derived from the blocklist URL">
-      <p class="hint">Leave blank to use the directory the blocklist URL lives in.</p>
-    </div>
-    <div class="field">
-      <label for="submitToken">Submit token <span class="hint">(only if the server requires one)</span></label>
-      <input type="text" id="submitToken" placeholder="--submit-token value">
-    </div>
-    <p class="hint">
-      Moderation lives on your server, not in the extension: open
-      <code>&lt;your server&gt;/admin</code> and sign in with the token the server
-      was started with. Nothing admin-related ships to the people using this.
+    <p id="pausedNote" class="note hidden">
+      Blocking is paused right now, so neither mode is doing anything. Unpause it
+      under Advanced.
     </p>
   </section>
 
+  <!-- Status, not configuration: the address is baked into the extension. -->
   <section class="card">
-    <h2>Diagnostics</h2>
-    <p class="help">Page capability moved here from the popup. It is read from the
-      first open Facebook or Threads tab &mdash; open one, then press Reload.</p>
-    <label class="toggle"><input type="checkbox" id="debug"><span>Verbose console logging</span></label>
+    <h2>Blocklist</h2>
+    <p class="note" style="margin-top:0">
+      Served by the Clone Blocker project. Every report is reviewed by hand before
+      a profile reaches the list, and there is nothing here to set up.
+    </p>
+    <div class="row">
+      <span class="k">Last sync</span>
+      <span class="v" id="listSynced">&mdash;</span>
+    </div>
+    <div class="row">
+      <span class="k">On the list</span>
+      <span class="v" id="listCounts">&mdash;</span>
+    </div>
     <div class="inline-row" style="margin-top:10px">
-      <button id="refreshDiag" class="btn inline">Reload</button>
-      <button id="resetQueue" class="btn inline">Reset queue &amp; stats</button>
+      <button id="refreshList" class="btn inline">Refresh now</button>
+      <span id="listStatus" class="status"></span>
     </div>
-    <pre id="diag" class="diag">—</pre>
   </section>
+
+  <!-- Everything an ordinary user should never have to meet. Collapsed on
+       purpose: each control below is either a safety valve, a pacing number
+       that already ships at a sensible value, or diagnostics. -->
+  <details class="adv">
+    <summary>Advanced</summary>
+
+    <section class="card">
+      <h2>Blocking</h2>
+      <label class="toggle"><input type="checkbox" id="pauseBlocking"><span>Pause blocking</span></label>
+      <p class="hint" style="margin-left:22px">
+        Stops every real block, in both modes, until you switch it back. Nothing is
+        lost &mdash; queued profiles wait. Hiding, below, is unaffected.
+      </p>
+      <label class="toggle sub"><input type="checkbox" id="platformBlockDryRun"><span>Dry run &mdash; resolve the strategy but send nothing</span></label>
+      <label class="toggle sub"><input type="checkbox" id="allowRawNetworkFallback"><span>Allow raw request fallback <strong>(risky)</strong></span></label>
+      <p class="hint" style="margin-left:22px">
+        Normally the extension drives the site&rsquo;s own block code, which is safe and
+        always current. This fallback instead hand-builds the HTTP request. During
+        testing that was observed <strong>forcing the signed-in session to log out</strong>,
+        and on Threads the REST paths return 404 regardless. Leave this off unless
+        you are debugging.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Hide their content</h2>
+      <p class="note" style="margin-top:0">
+        Hiding suppresses a listed profile&rsquo;s posts and comments in your browser
+        without touching your account. Off by default: real blocks are the product,
+        and this is for people who also want the whole list out of sight straight
+        away.
+      </p>
+      <label class="toggle"><input type="checkbox" id="hideEnabled"><span>Enable hiding</span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideFeedPosts"><span>Hide feed posts</span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideComments"><span>Hide comments</span></label>
+
+      <div class="field" style="margin-top:12px">
+        <label for="hideMode">When hiding</label>
+        <select id="hideMode">
+          <option value="collapse">Remove entirely</option>
+          <option value="placeholder">Show a collapsed bar with a “Show” button</option>
+          <option value="blur">Blur in place</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pace and ceilings</h2>
+      <p class="note" style="margin-top:0">
+        Blocking someone whose profile is on your screen is what people do all day;
+        working through a list of strangers is not. The two are budgeted and paced
+        separately, and what ships here is deliberately cautious.
+      </p>
+
+      <div class="field" style="margin-top:12px">
+        <label for="warmMinDelayMs">Delay after blocking someone on screen (ms)</label>
+        <div class="inline-row">
+          <input type="number" id="warmMinDelayMs" min="1000" step="500">
+          <span class="hint">to</span>
+          <input type="number" id="warmMaxDelayMs" min="2000" step="500">
+        </div>
+        <p class="hint">Shorter than the delay below: this is the ordinary case and does
+          not need to be slowed down.</p>
+      </div>
+
+      <div class="field">
+        <label for="minDelayMs">Delay after blocking someone taken off the list (ms)</label>
+        <div class="inline-row">
+          <input type="number" id="minDelayMs" min="2000" step="1000">
+          <span class="hint">to</span>
+          <input type="number" id="maxDelayMs" min="3000" step="1000">
+        </div>
+        <p class="hint">A random value in this range is used each time; fixed intervals look automated.</p>
+      </div>
+
+      <div class="field">
+        <label for="maxColdBlocksPerHour">Max list-driven blocks per hour</label>
+        <input type="number" id="maxColdBlocksPerHour" min="0" max="60" step="1">
+        <p class="hint">Active mode only, and counts only accounts you have never seen.
+          <strong>Zero</strong> means never block anyone who has not appeared on your screen.</p>
+      </div>
+      <div class="field">
+        <label for="targetBudget">Targets to take from the list at a time</label>
+        <input type="number" id="targetBudget" min="1" max="200" step="1">
+      </div>
+      <div class="field">
+        <label for="maxBlocksPerHour">Max blocks per hour (all sources)</label>
+        <input type="number" id="maxBlocksPerHour" min="1" max="200" step="1">
+      </div>
+      <div class="field">
+        <label for="maxBlocksPerDay">Max blocks per day</label>
+        <input type="number" id="maxBlocksPerDay" min="1" max="1000" step="1">
+      </div>
+
+      <label class="toggle"><input type="checkbox" id="shareRegion"><span>Send my time zone and language, so the list ranks clones operating near me first</span></label>
+    </section>
+
+    <section class="card">
+      <h2>Clone reporting</h2>
+      <p class="note" style="margin-top:0">
+        Lets people flag clone accounts from the page itself. Reports go in for
+        review; nothing reaches the blocklist until an admin approves it.
+      </p>
+      <label class="toggle"><input type="checkbox" id="reportUiEnabled"><span>Show the Report chip on profiles</span></label>
+
+      <div class="field" style="margin-top:12px">
+        <label for="apiBase">API base <span class="hint">(optional)</span></label>
+        <input type="url" id="apiBase" placeholder="derived from the blocklist address">
+        <p class="hint">Leave blank to use the directory the blocklist lives in.</p>
+      </div>
+      <div class="field">
+        <label for="submitToken">Submit token <span class="hint">(only if the server requires one)</span></label>
+        <input type="text" id="submitToken" placeholder="--submit-token value">
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Teaching it the block request</h2>
+      <p class="note" style="margin-top:0">
+        Meta rotates its GraphQL <code>doc_id</code>s and gates operations behind
+        generated provider variables, so nothing is hardcoded. The extension reads the
+        live values out of the page. If it reports no block mutation found, the module
+        simply has not been loaded yet &mdash; open any profile and block one person by
+        hand. The request is captured and its shape reused from then on.
+      </p>
+      <button id="clearLearned" class="btn inline">Forget captured templates</button>
+      <span id="learnedStatus" class="status"></span>
+    </section>
+
+    <section class="card">
+      <h2>Diagnostics</h2>
+      <p class="note" style="margin-top:0">Page capability is read from the first open
+        Facebook or Threads tab &mdash; open one, then press Reload.</p>
+      <label class="toggle"><input type="checkbox" id="debug"><span>Verbose console logging</span></label>
+      <div class="inline-row" style="margin-top:10px">
+        <button id="refreshDiag" class="btn inline">Reload</button>
+        <button id="resetQueue" class="btn inline">Reset queue &amp; stats</button>
+      </div>
+      <pre id="diag" class="diag">—</pre>
+    </section>
+  </details>
 
   <script src="../common/protocol.js"></script>
   <script src="options.js"></script>

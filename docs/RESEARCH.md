@@ -332,5 +332,6 @@ deliberately conservative (15/hour, 60/day, 20–45s randomised gaps) rather tha
 evidence-based. **UNVERIFIED.** The extension detects `429` and checkpoint/challenge
 responses, backs off, and disables platform blocking outright on a checkpoint.
 
-Layer 1 hides everything with zero account risk, which is why it is the default and why
-Layer 2 is opt-in with a dry-run mode.
+Hiding carries zero account risk but does nothing about the clone itself, so it is an
+opt-in extra; real blocking is the default, rationed by the passive/active modes and
+with a dry-run mode for verifying the strategy before anything is sent.

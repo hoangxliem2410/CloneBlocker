@@ -210,6 +210,50 @@ footer a:hover { text-decoration: underline; }
 
 .inline-row { display: flex; gap: 8px; align-items: center; }
 
+/* options: the mode picker.
+   This is the page's one primary decision, so the two choices are cards you
+   click anywhere on rather than a pair of radios in a list -- and the whole
+   card carries the selection, because the cost line under each title is the
+   part people need to read before choosing. */
+.modes { display: grid; gap: 10px; }
+.mode {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.mode:hover { border-color: var(--accent); }
+.mode:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.mode-hd {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-weight: 650; font-size: 13.5px; letter-spacing: -0.01em;
+}
+.mode-hd input { margin: 2px 0 0; flex: 0 0 auto; }
+.mode p { margin: 6px 0 0 23px; font-size: 12.5px; }
+.mode p.cost { color: var(--muted); font-size: 12px; }
+.mode p.cost strong { color: var(--fg); }
+
+/* options: everything an ordinary user should not have to meet */
+details.adv { margin-top: 18px; }
+details.adv > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 650;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::before { content: "\25B8"; color: var(--muted); margin-right: 8px; }
+details.adv[open] > summary::before { content: "\25BE"; }
+details.adv[open] > summary { margin-bottom: 10px; }
+
 .callout {
   border-left: 3px solid var(--warn);
   background: var(--card);

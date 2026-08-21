@@ -1,5 +1,5 @@
 /**
- * Activity: the ledger of Layer 2.
+ * Activity: the ledger of what blocking has actually done.
  *
  * The popup answers "what can I do about the profile in front of me"; the
  * options page answers "how should this behave". This page answers the third
@@ -34,6 +34,43 @@
     if (text != null) n.textContent = text;
     return n;
   };
+
+  // Blocks are issued by the content script, through the site's own code, so a
+  // queued block has nowhere to run unless a Facebook or Threads tab is open.
+  // These are the same patterns the service worker's badge counts against.
+  const SITE_TAB_URLS = [
+    'https://*.facebook.com/*', 'https://*.threads.net/*', 'https://*.threads.com/*'
+  ];
+
+  /** Is there anywhere for a queued block to run right now? */
+  async function siteTabOpen() {
+    try {
+      const tabs = await chrome.tabs.query({ url: SITE_TAB_URLS });
+      return (tabs || []).length > 0;
+    } catch (e) {
+      // A warning that might be wrong is worse than no warning: if the lookup
+      // fails, assume there is a tab and say nothing.
+      return true;
+    }
+  }
+
+  /**
+   * Queued targets that nothing on screen will ever trigger.
+   *
+   * Warm entries were on screen when they were queued, so a tab existed and
+   * they drain at once; only the cold ones -- the ranked list's own
+   * nominations -- can sit there indefinitely with nowhere to run. A bare
+   * string predates the warm flag and the queue treats it as cold.
+   */
+  function coldQueued(s) {
+    let n = 0;
+    for (const platform of Object.keys((s && s.queue) || {})) {
+      for (const e of s.queue[platform] || []) {
+        if (!(e && typeof e === 'object' && e.warm)) n++;
+      }
+    }
+    return n;
+  }
 
   function ago(ts) {
     if (!ts) return 'never';
@@ -94,7 +131,15 @@
     return r;
   }
 
-  function renderBanner(stats) {
+  /**
+   * One banner, in order of urgency.
+   *
+   * A pause or a checkpoint has stopped blocking for a reason the reader can
+   * do nothing about from here, so those win. The missing tab comes last: it
+   * is a real stall, but only of the cold queue, and only while everything
+   * else is healthy.
+   */
+  function renderBanner(stats, needsTab, cold) {
     const b = $('banner');
     const pausedFor = stats.pausedUntil && stats.pausedUntil > Date.now()
       ? stats.pausedUntil - Date.now() : 0;
@@ -108,9 +153,13 @@
     } else if (err && !oldErr) {
       b.textContent = err + (stats.lastErrorAt ? '  (' + ago(stats.lastErrorAt) + ')' : '');
       b.className = 'banner err';
+    } else if (needsTab) {
+      b.textContent = (cold === 1 ? '1 profile from the list is' : cold + ' profiles from the list are') +
+        ' waiting to be blocked. Active blocking runs inside a Facebook or Threads tab — ' +
+        'open one and leave it open.';
+      b.className = 'banner warn';
     } else {
       b.className = 'banner hidden';
-      return;
     }
   }
 
@@ -161,7 +210,7 @@
     $('tHidden').textContent = s.blocklist ? String(s.blocklist.count || 0) : '—';
   }
 
-  function renderQueue(s) {
+  function renderQueue(s, ctx) {
     const host = $('queueRows');
     host.textContent = '';
     const cooldowns = s.cooldowns || {}, failures = s.failures || {};
@@ -177,9 +226,23 @@
     entries.sort((a, b) => (b.warm ? 1 : 0) - (a.warm ? 1 : 0) || (b.rank || 0) - (a.rank || 0));
 
     $('queueEmpty').classList.toggle('hidden', entries.length > 0);
-    $('queueNote').textContent = s.settings.platformBlockEnabled
-      ? (s.settings.platformBlockDryRun ? 'dry run — simulating, sending nothing' : '')
-      : 'platform blocking is off — these wait until it is enabled';
+
+    // Why nothing is moving, when nothing is moving. Passive mode and a
+    // missing tab look identical from the outside -- a queue that sits there
+    // -- and only one of them is fixed by opening a tab.
+    const cold = (ctx && ctx.cold) || 0;
+    const bits = [];
+    if (!s.settings.platformBlockEnabled) {
+      bits.push('blocking is paused — these wait until it is switched back on');
+    } else {
+      if (s.settings.platformBlockDryRun) bits.push('dry run — simulating, sending nothing');
+      if (cold && globalThis.CB_MODE_OF(s.settings) === 'passive') {
+        bits.push(cold + ' from the list — paused by passive mode');
+      } else if (ctx && ctx.needsTab) {
+        bits.push(cold + ' from the list need a Facebook or Threads tab open');
+      }
+    }
+    $('queueNote').textContent = bits.join(' · ');
 
     for (const e of entries.slice(0, 100)) {
       const key = e.platform + ':' + e.id;
@@ -227,10 +290,16 @@
     const s = await sw(P.SW.GET_STATE);
     if (!s.ok) { $('banner').textContent = s.error; $('banner').className = 'banner err'; return; }
     state = s;
-    renderBanner(s.stats || {});
+    // The one condition both the banner and the queue note turn on: work that
+    // only an open Facebook or Threads tab can carry out, and no such tab.
+    const cold = coldQueued(s);
+    const needsTab = !!s.settings.platformBlockEnabled &&
+      globalThis.CB_MODE_OF(s.settings) === 'active' &&
+      cold > 0 && !(await siteTabOpen());
+    renderBanner(s.stats || {}, needsTab, cold);
     renderTiles(s);
     renderSync(s);
-    renderQueue(s);
+    renderQueue(s, { cold, needsTab });
     renderLog(s);
   }
 
@@ -260,4 +329,14 @@
   render();
   // The queue drains on its own timers; keep the page honest while it is open.
   setInterval(render, 15000);
+  // Opening or closing a Facebook tab changes what this page should say
+  // without changing anything in the queue, so watch that end too rather than
+  // leaving a stale banner up for another quarter of a minute. Coalesced:
+  // restoring a window fires this once per tab.
+  try {
+    let pending = null;
+    const soon = () => { clearTimeout(pending); pending = setTimeout(render, 400); };
+    chrome.tabs.onRemoved.addListener(soon);
+    chrome.tabs.onUpdated.addListener((id, ch) => { if (ch && ch.url) soon(); });
+  } catch (e) { /* the page is still correct without it, just slower */ }
 })();

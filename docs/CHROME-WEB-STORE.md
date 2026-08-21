@@ -46,9 +46,20 @@ mark, a wordmark, and one line, rather than a shrunken UI.
 **The four screenshots**
 
 1. **Hero** — the claim, no UI.
-2. **Two layers** — the hide/block split, drawn rather than captured (see below).
-3. **Options page** — a real capture, clipped to the Layer 2 budget controls.
+2. **The two modes** — the passive/active split, drawn rather than captured
+   (see below).
+3. **Options page** — a real capture of the mode picker, which is now the first
+   thing on the page.
 4. **Moderation dashboard** — a real capture, entirely synthetic fixture data.
+
+Screenshot 2 is drawn rather than captured, and it and the options capture were
+both brought forward with the modes: the explainer is "Two modes, because they
+cost different things" (passive/active), and the options shot no longer hunts
+for a heading or fills in an endpoint field, because neither exists. One
+display-only correction survives in the generator: a dev session forces
+blocking off for safety and the page honestly says so, which is the harness's
+state rather than the product's, so the paused note is cleared in the DOM for
+the capture without writing any setting.
 
 Screenshot 2 is drawn instead of captured on purpose. The obvious second image
 is the popup, but on a page where the site has not yet loaded its own block
@@ -84,6 +95,11 @@ Also the `description` field in `manifest.json`; the store reads it from there.
 Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.
 ```
 
+It leads with hiding, which now ships switched off — worth revisiting, but not
+on its own: this string is `description` in `manifest.json`, so any rewrite has
+to change both in the same commit and land under 132 characters again. Left
+alone here deliberately rather than by oversight.
+
 ### Category
 
 **Social & Communication.** (Not *Productivity* — the store dislikes category
@@ -92,45 +108,49 @@ mismatches, and this is not a productivity tool.)
 ### Detailed description
 
 ```
-Someone is running accounts that pretend to be you. Clone Blocker deals with
-them in two ways, because the two cost very different things.
+Someone is running accounts that pretend to be you. Clone Blocker blocks them
+for real — through Facebook's and Threads' own block mechanism, at a pace that
+keeps your own account out of trouble.
 
-HIDE THEM — free, and covers everything
-Every profile on your list disappears as the page loads: their posts, their
-comments, their profile pages. Hiding happens entirely in your browser, sends
-nothing, changes nothing on your account, and has no limit. It runs on the
-whole list.
+The one thing you choose is how far it goes looking.
 
-BLOCK THEM — rationed, on purpose
-A real platform block is the thing that gets an account checkpointed if you do
-too many of them, which is the exact failure this extension exists to avoid.
-So blocking is paced, hard:
+PASSIVE — block the clones you run into
+Only profiles that turn up on the page while you browse. They were on your
+screen anyway, so blocking them is the most ordinary thing an account can do:
+these go through quickly and stay well clear of the rate limits.
 
-  • Profiles you actually see on screen are blocked at a normal pace. Blocking
-    someone whose profile is in front of you is what ordinary people do.
-  • Accounts nominated by the list's own trending data, which you have never
-    seen, are held to a separate, much tighter hourly ceiling — which you
-    set, and which you can set to zero to never block anyone you have not
-    seen.
-  • Every delay, cap and ceiling is yours to change. The cautious values are
-    the ones it ships with.
+ACTIVE — also work through the list
+Adds the clones the list says are most active near you, whether or not you ever
+scroll past them. Grinding through strangers is what gets an account
+checkpointed, so this half is paced slowly and held to an hourly ceiling you
+set — set it to zero and nobody you have not seen is ever blocked. It also
+needs a Facebook or Threads tab open, because a block is issued through the
+site's own code, in the page.
+
+Every delay, cap and ceiling is yours to change, and the cautious values are
+the ones it ships with. A pause switch stops all of it at once, and a dry run
+resolves everything and sends nothing.
+
+HIDE THEM AS WELL, IF YOU WANT
+An extra, switched off by default: hiding makes every listed profile's posts
+and comments disappear as the page loads. It happens entirely in your browser,
+sends nothing, changes nothing on your account, has no limit, and covers the
+whole list rather than a budgeted slice.
 
 REPORT A CLONE IN TWO CLICKS
 Hover a name in the feed, or open the profile, and file a report with the
-posts that prove it.
+posts that prove it. Reports go to a human reviewer, and nothing reaches the
+blocklist until it is approved.
 
-YOU RUN THE LIST
-Clone Blocker ships pointed at the developer's own Firebase project (read-only
-public list) so it works on install, and can be repointed at any backend you
-run. It does not bundle a list of accounts. It fetches from
-a backend you own — your own Firebase project (the included setup provisions
-it in one command, on the free plan, with no server code) or any URL serving
-plain JSON. Reports arrive in your own moderation dashboard, ranked by
-reporter reputation and by where the clone is currently active, and nothing
-reaches the blocklist until you approve it.
+NOTHING TO SET UP
+The blocklist address is built into the extension and the list itself is
+public and read-only. There is no account to create, no key to paste, no
+permission prompt to accept: install it and it starts working. The whole
+thing — extension, backend, moderation dashboard, one-command setup — is open
+source if you would rather run your own copy of it.
 
 WHAT IT SENDS, AND WHERE
-Only to the backend you configure, and nowhere else:
+Only to that one backend, and nowhere else:
   • the blocklist request itself — which carries nothing about you: deciding
     which clones are active near you happens locally, in your browser;
   • when you file a report: the reported profile's ID or username, the reason
@@ -141,15 +161,13 @@ Only to the backend you configure, and nowhere else:
     can see where a clone is active. This is a single switch and you can turn
     it off.
 Your account ID never leaves the browser in the clear — only a truncated
-hash of it does — and the report store is readable only by the project owner.
-There is no analytics, no tracking, no ad network, and no third-party service
-beyond the Firebase project you yourself own.
+hash of it does — and the report store is readable only by the one admin
+account that reviews reports. There is no analytics, no tracking, no ad
+network, and no third-party service anywhere.
 
 REQUIREMENTS
-Your own Firebase project — the free plan is enough, and there is no server
-of yours to run or keep alive. Setup is `node tools/firebase-setup.js
---deploy`. A plain static JSON file on any host also works for hiding and
-blocking. Source, backend and documentation:
+Chrome 120 or newer, and a Facebook or Threads account to block from. Source,
+backend and documentation:
 https://github.com/hoangxliem2410/CloneBlocker
 
 Not affiliated with, endorsed by, or connected to Meta, Facebook or Threads.
@@ -174,12 +192,13 @@ removed. These are written to match the code.
 ### Single purpose
 
 ```
-Suppress and block accounts that impersonate the user on Facebook and Threads,
-using a blocklist the user supplies from a backend they own.
+Block, and optionally hide, accounts that impersonate the user on Facebook and
+Threads, working from a reviewed blocklist the extension fetches from one
+fixed address.
 ```
 
 Hiding, blocking and reporting are one purpose, not three: reporting is how an
-account gets onto the list, hiding and blocking are how the list is applied.
+account gets onto the list, blocking and hiding are how the list is applied.
 Nothing in the extension serves any other end.
 
 ### Permission justifications
@@ -188,10 +207,8 @@ Nothing in the extension serves any other end.
 |---|---|
 | `storage` | Stores the user's settings and the cached blocklist so the list does not have to be re-fetched on every page load. Nothing is stored anywhere else. |
 | `alarms` | Refreshes the blocklist on the user's chosen interval, and paces platform blocks so they are never issued in a burst. |
-| `host_permissions` — facebook.com, threads.net, threads.com | The extension's entire function is to hide and block impersonator accounts on these two sites. It reads the page to find profiles from the user's list and, when the user has enabled it, issues a block through the site's own interface. |
-| `host_permissions` — firestore.googleapis.com | The default backend is the user's own Firebase project: the published blocklist document is read from, and reports are written to, Firestore's public REST endpoint. Required rather than optional so the default setup works without a runtime permission prompt; access is still entirely governed by the user-typed project URL. |
-| `optional_host_permissions` — `https://*/*` | The blocklist lives in a backend the **user** owns — their own Firebase project, or any URL they choose — and its address is typed into the options page, so the origin cannot be known in advance. This is optional, never granted at install, and requested at runtime for **only** the single origin the user entered, via a Chrome permission prompt they must accept. |
-| `optional_host_permissions` — `http://localhost/*` | During development and testing the list is served locally — a static file or the Firestore emulator — over plain HTTP on localhost. Same optional, per-origin, user-accepted flow. |
+| `host_permissions` — facebook.com, threads.net, threads.com | The extension's entire function is to block, and optionally hide, impersonator accounts on these two sites. It reads the page to find profiles from the list and issues a block through the site's own interface. |
+| `host_permissions` — firestore.googleapis.com, clone-blocker2.web.app | The backend. The published blocklist document is read from Firestore's public REST endpoint and the reports a user files are written back to it; the Hosting origin serves the same list as a CDN-cached static snapshot. Both addresses are fixed in the extension, which is why they are required rather than optional: there is nothing for the user to type and no runtime permission request anywhere in the product. |
 
 ### Data collection disclosures
 
@@ -209,10 +226,11 @@ Tick these, and be prepared to explain each:
 ### Limited Use certification
 
 You must certify that the data is used only for the disclosed single purpose.
-That is true here — it goes to the user's own Firebase project (or whatever
-endpoint they typed) and nowhere else, and there is no analytics, telemetry,
-ad network or third-party endpoint anywhere in the code. Grep it: the only
-network destinations are the two Meta origins and the endpoint the user typed.
+That is true here — it goes to the one backend the extension is built against
+and nowhere else, and there is no analytics, telemetry, ad network or
+third-party endpoint anywhere in the code. Grep it: the only network
+destinations are the two Meta origins and the `LIST_URL` constant in
+`src/common/protocol.js`.
 
 ### Notes for the reviewer
 
@@ -221,23 +239,31 @@ and Threads. Suggested text:
 
 ```
 The extension works on install with no configuration: it ships pointed at
-our Firebase project's public, read-only blocklist, and the two backend
-origins it needs are declared as required permissions, so there is no setup
-step and no permission prompt.
+our Firebase project's public, read-only blocklist, and the backend origins
+it needs are declared as required permissions, so there is no setup step and
+no permission prompt anywhere in the product.
+
+Please note that content hiding ships DISABLED. A fresh install blocks but
+does not hide, so nothing visibly changes on the page until you turn hiding
+on — Settings > Advanced > "Hide their content" > Enable hiding. With that
+on, content from any listed account disappears on the next page load.
 
 To exercise it end to end:
-  1. Install it, then load Threads (threads.com) or Facebook. Content from
-     any account on the list is hidden immediately — no configuration needed.
-  2. The list is served read-only from Firestore's public REST endpoint at
+  1. Install it, then load Threads (threads.com) or Facebook.
+  2. Switch hiding on as above to see the list applied to the page. Hiding
+     runs entirely in the browser and sends nothing.
+  3. The list is served read-only from Firestore's public REST endpoint at
      https://firestore.googleapis.com/v1/projects/clone-blocker2/databases/(default)/documents/blocklist/current
      — open it in a browser to see the exact bytes the extension fetches.
-  3. To point it at your own backend, set a different URL in options; any URL
-     serving {"ids":[...],"usernames":[...]} works.
+  4. Settings > "Dry run" resolves a real block and sends nothing, if you
+     want to watch the blocking path without changing an account.
 
-Layer 1 (hiding) works immediately and sends nothing.
-Layer 2 (platform blocking) is on by default but tightly paced: profiles the
-user has seen on screen go at a human rhythm, list suggestions are capped at
-4/hour, and a dry-run switch in settings simulates without sending.
+Real blocking is on by default but tightly paced, and the user picks how far
+it goes. Passive mode blocks only profiles that appeared on the page in front
+of them, at a human rhythm. Active mode (the default) additionally works
+through the published list, capped at 4 per hour and paced 20-45s apart, and
+only while a Facebook or Threads tab is open — the block is issued by the
+site's own code, from a content script.
 ```
 
 ---
@@ -261,11 +287,14 @@ pretending they are not there would waste a review cycle.
 
 ### a. A reviewer installs it and nothing happens — *most likely*
 
-There is no default blocklist, so a fresh install does nothing visible. This is
-a common rejection reason and it is not really a policy problem, just an
-unlucky first impression. The reviewer-notes text in §4 exists for this. If it
-gets rejected once on these grounds, consider shipping a tiny default list of
-known-impersonator accounts so the extension demonstrates itself.
+A fresh install now fetches a real list, but hiding ships **off** and blocking
+is silent and paced, so there is still nothing on screen for a reviewer to
+point at in the first minute. This is a common rejection reason and it is not
+really a policy problem, just an unlucky first impression. The reviewer-notes
+text in §4 exists for exactly this, and its first paragraph is the one that
+matters: tell them where the hide switch is. If it gets rejected on these
+grounds anyway, the cheapest answer is a listing screenshot of a real feed with
+hiding on, not a change to the defaults.
 
 ### b. List-nominated blocks and "related user action"
 
@@ -276,23 +305,23 @@ action taken on a third-party site on the user's behalf, and blocks that the
 user never saw coming are the closest thing here to that pattern.
 
 What argues for it: the cold ceiling defaults to 4/hour; the user sets every
-cap; `acceptServerTargets` can be turned off entirely. Note that blocking is
-now ON by default (an owner decision, 2026-08-21) — that removes the
-"off until deliberately enabled" argument this section previously leaned on,
-and makes the per-account pacing the entire defence in a review dispute.
+cap; the mode picker is the first thing on the options page and passive mode
+turns list-nominated blocks off in one click. Blocking itself is ON by default
+(an owner decision, 2026-08-21), so the per-account pacing and that visible
+choice are the whole defence in a review dispute.
 
-What argues against it: with blocking enabled, `acceptServerTargets` defaults
-to **true**, so the trending metadata published with the list can put an
-account the user has never seen into the queue, and it will be blocked without
-a per-account confirmation. (The ranking itself now runs locally in the
-extension, but the effect a reviewer would care about is the same: the list's
-publisher chooses candidates the user never looked at.)
+What argues against it: the default mode is **active**, so the trending
+metadata published with the list can put an account the user has never seen
+into the queue, and it will be blocked without a per-account confirmation.
+(The ranking itself runs locally in the extension, but the effect a reviewer
+would care about is the same: the list's publisher chooses candidates the user
+never looked at.)
 
-**Worth considering before submitting:** default `acceptServerTargets` to
-`false`. Then every block in a default install traces to a profile the user
-looked at, and the suggestion feature becomes something they switch on
-knowingly. It costs little — a user who wants suggestions is exactly the user
-who will find the setting.
+**Worth considering before submitting:** ship the default as **passive**. Then
+every block in a default install traces to a profile the user looked at, and
+working through the list becomes something they opt into knowingly. It costs
+little — a user who wants the list worked through is exactly the user who will
+find the mode picker, since it is the first control on the page.
 
 ### c. Meta's terms of service — *the risk that is not ours to fix*
 
@@ -308,14 +337,7 @@ the listing goes. That risk cannot be engineered away while the extension
 blocks anything, and it is worth going in with eyes open rather than being
 surprised by it.
 
-### d. `https://*/*` in optional_host_permissions
-
-Broad patterns draw scrutiny even when optional. The justification is genuine —
-a user-supplied backend address cannot be enumerated ahead of time — and the
-runtime request is scoped to the single origin the user typed. Keep the
-justification text in §4 verbatim; it is the whole answer.
-
-### e. List-supplied `docIdOverrides`
+### d. List-supplied `docIdOverrides`
 
 The blocklist response may carry `docIdOverrides`, which changes which
 persisted GraphQL operation the extension calls. This is configuration data,
@@ -345,7 +367,8 @@ exposes, and the override only selects among them — say so if asked.
 - [ ] Single purpose, permission justifications, data disclosures filled in
 - [ ] Limited Use certification ticked
 - [ ] Reviewer notes pasted
-- [ ] Decide on `acceptServerTargets` default (§6b)
+- [ ] Confirm the default mode: it currently ships **active** (§6b)
+- [x] Store assets regenerated against the passive/active modes (§2)
 - [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
 
 The upload zip only needs what the extension actually loads: `manifest.json`,

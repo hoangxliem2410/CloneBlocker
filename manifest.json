@@ -11,7 +11,8 @@
   "host_permissions": [
     "https://*.facebook.com/*",
     "https://*.threads.net/*",
-    "https://*.threads.com/*"
+    "https://*.threads.com/*",
+    "https://firestore.googleapis.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

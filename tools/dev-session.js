@@ -24,33 +24,21 @@ const CDP_PORT = parseInt(argOf('port', '9333'), 10);
 const FRESH = args.includes('--fresh');
 
 const ROOT = path.join(__dirname, '..');
-// The slug mirrors the workspace folder (C:\srcqueblocker), not the brand --
+// The slug mirrors the workspace folder (C:/src/3queblocker), not the brand --
 // the long-lived Chrome profile with its signed-in sessions lives under it.
 const SESSION_DIR = path.join(os.tmpdir(), 'claude', 'C--src-3queblocker', 'dev-session');
 const PROFILE = path.join(SESSION_DIR, 'chrome-profile');
-const DATA_DIR = path.join(SESSION_DIR, 'firestore-data');
 
-// The Firestore emulator port is fixed by firebase.json at the repo root; the
-// demo- prefixed project id keeps the emulator fully offline.
-const EMULATOR_PORT = 8080;
-const PROJECT = 'demo-clone';
-const LIST_URL = `http://127.0.0.1:${EMULATOR_PORT}/v1/projects/${PROJECT}` +
+// The hands-on session runs against PRODUCTION Firebase -- there is nothing
+// local left to run. The automated tests still use the emulator, because a
+// test must never write junk into the real project; this session only READS
+// the published list (and files reports if you use the sheet), which is
+// exactly what a real install does.
+const PROJECT = 'clone-blocker2';
+const LIST_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT}` +
   '/databases/(default)/documents/blocklist/current';
 
-// The standalone Firebase CLI installs itself under ~/.cache/firebase and is
-// never on PATH; run it through the Node that is already executing us.
-const FIREBASE_BIN = path.join(os.homedir(), '.cache', 'firebase', 'tools', 'bin', 'firebase');
-
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-/**
- * The Firebase CLI shells out to `java` and refuses to start the Firestore
- * emulator on anything below 21. A dev machine often pins an older JDK first
- * on PATH for other work, so look for a modern one in the usual install roots
- * and put it in front -- for the emulator process only; nothing else sees the
- * changed PATH.
- */
-const { javaEnv } = require('./java-env.js');
 
 function findChrome() {
   for (const c of [
@@ -103,63 +91,13 @@ async function evalIn(cdp, sessionId, expression) {
   if (FRESH) { try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch (e) {} }
   fs.mkdirSync(PROFILE, { recursive: true });
 
-  // -- Firestore emulator (detached so it outlives this script) ------------
-  //
-  // The old detached server needed a build fingerprint because it served CODE
-  // that this script had just overwritten on disk. The emulator serves only
-  // DATA, so "is it answering?" is the whole staleness question and an
-  // already-running emulator is simply reused. Seeded documents survive
-  // restarts through --import/--export-on-exit in the session directory, the
-  // way the stable server directory used to carry blocklist.json.
-  let up = false;
-  try { await fetch(`http://127.0.0.1:${EMULATOR_PORT}/`); up = true; } catch (e) {}
-
-  if (up) {
-    console.log('reusing the Firestore emulator already on port ' + EMULATOR_PORT);
-  } else {
-    const cliArgs = [FIREBASE_BIN, 'emulators:start', '--only', 'firestore',
-                     '--project', PROJECT, '--export-on-exit', DATA_DIR];
-    // --import refuses a directory that does not exist yet; the first session
-    // starts empty and the export creates it for the next one.
-    if (fs.existsSync(DATA_DIR)) cliArgs.push('--import', DATA_DIR);
-    const emu = spawn(process.execPath, cliArgs,
-      { cwd: ROOT, detached: true, stdio: 'ignore', env: javaEnv() });
-    emu.unref();
-
-    // Generous window: a first run downloads the emulator jar before anything
-    // can listen.
-    for (let i = 0; i < 240 && !up; i++) {
-      try { await fetch(`http://127.0.0.1:${EMULATOR_PORT}/`); up = true; }
-      catch (e) { await sleep(500); }
-    }
-    if (!up) { console.error('Firestore emulator never answered on port ' + EMULATOR_PORT); process.exit(1); }
-  }
-
-  // Seed the published list once; an existing doc -- imported session data, or
-  // something published by hand mid-session -- is left alone. `Bearer owner`
-  // is the emulator's rules bypass, fine for fixtures.
-  const have = await fetch(LIST_URL, { headers: { authorization: 'Bearer owner' } });
-  if (have.status === 404) {
-    const payload = {
-      v: 1,
-      updatedAt: new Date().toISOString(),
-      // Seeded with the official @threads account: safe to hide locally, and a
-      // known-good target for verifying suppression on a signed-in feed.
-      ids: ['63082166531'],
-      usernames: ['threads'],
-      docIdOverrides: {},
-      pending: [],
-      targets: []
-    };
-    const r = await fetch(LIST_URL, {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: {
-        json: { stringValue: JSON.stringify(payload) },
-        updatedAt: { timestampValue: new Date().toISOString() }
-      } })
-    });
-    if (!r.ok) { console.error('seeding blocklist/current failed: HTTP ' + r.status); process.exit(1); }
+  // Nothing to start: the list is the production document, published by the
+  // dashboard. Just confirm it answers before wiring the extension to it.
+  try {
+    const r = await fetch(LIST_URL);
+    if (!r.ok) console.warn('production list answered HTTP ' + r.status + ' -- continuing anyway');
+  } catch (e) {
+    console.warn('production list unreachable (' + e.message + ') -- continuing anyway');
   }
 
   // -- is a browser already listening on this port? ------------------------
@@ -206,7 +144,7 @@ async function evalIn(cdp, sessionId, expression) {
   }
 
   fs.writeFileSync(path.join(SESSION_DIR, 'session.json'),
-    JSON.stringify({ extId, cdpPort: CDP_PORT, emulatorPort: EMULATOR_PORT, listUrl: LIST_URL }, null, 2));
+    JSON.stringify({ extId, cdpPort: CDP_PORT, listUrl: LIST_URL }, null, 2));
 
   // -- configure it through its own options page ---------------------------
   const optionsUrl = `chrome-extension://${extId}/src/options/options.html`;
@@ -227,7 +165,7 @@ async function evalIn(cdp, sessionId, expression) {
   // page rather than letting it decide whether the session gets configured.
   const perm = await evalIn(cdp, sessionId, `
     (async () => {
-      const origins = ['http://127.0.0.1/*'];
+      const origins = ['https://firestore.googleapis.com/*'];
       if (await chrome.permissions.contains({ origins })) {
         return JSON.stringify({ granted: true, has: true, asked: false });
       }

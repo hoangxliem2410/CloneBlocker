@@ -242,6 +242,33 @@ An honest list, because each of these is a real trade the migration made:
   counters. The publish step's 2,000-target cap bounds the public document
   instead.
 
+## Polling without paying for it
+
+The list is written rarely and read constantly, so two layers keep the reads
+from costing anything:
+
+- **The extension probes before it downloads.** Against a Firestore list URL
+  it asks for a single masked field first (~300 bytes) and compares the
+  document's `updateTime` to its cache; the full blob is only fetched when the
+  list actually changed. An unchanged day costs kilobytes, not megabytes.
+- **The list can be served as a static file.** `node tools/publish-static.js`
+  snapshots `blocklist/current` to `hosting/blocklist.json` and deploys it;
+  `--interval 30` keeps watching and redeploys only when the document changes.
+  Firebase Hosting then serves it CDN-cached with a real ETag -- an unchanged
+  poll is a genuine `304` with zero bytes of body and **zero Firestore reads**,
+  so read quota stops being a function of how many people run the extension.
+
+  Point the extension at the file and keep reports on the database:
+
+  | Options field | Value |
+  |---|---|
+  | Server endpoint | `https://<project>.web.app/blocklist.json` |
+  | API base | `https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents` |
+
+  The trade is freshness: clients see a decision when the snapshot next
+  deploys, not the moment it is made. For a blocklist that is exactly the
+  right trade.
+
 ## Too many clones for one account
 
 A blocklist of a few thousand cannot be worked through by one account. The

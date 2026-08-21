@@ -21,7 +21,11 @@
         <button id="grant" class="btn inline">Grant access</button>
       </div>
       <p class="hint">
-        For a Firebase backend, paste the published document URL:
+        Cheapest: the static snapshot your dashboard owner publishes to Hosting
+        (<code>https://&lt;project&gt;.web.app/blocklist.json</code>) &mdash; served from a CDN,
+        unchanged polls cost nothing. Set the API base below to the Firestore
+        documents URL so reporting still works.
+        Or paste the live Firestore document URL:
         <code>https://firestore.googleapis.com/v1/projects/&lt;project&gt;/databases/(default)/documents/blocklist/current</code>
         &mdash; reporting and suggestions wire themselves up from it. Plain JSON
         endpoints also work: <code>["100001234567890"]</code>,

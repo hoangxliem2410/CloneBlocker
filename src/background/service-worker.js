@@ -341,6 +341,30 @@ async function refreshBlocklist(force) {
   // rate limiter has left, so the slice it returns is one we can actually spend.
   const listUrl = withClientContext(settings.listUrl, settings, await remainingBudget(settings));
 
+  // Firestore ignores If-None-Match, which made every poll download the whole
+  // published blob even when nothing had changed -- the one economy the old
+  // server's ETag gave us that the migration lost. Firestore DOES support
+  // masked reads, so ask for a single field first: a few hundred bytes whose
+  // updateTime says whether the cached copy is still current. Only a changed
+  // document costs the full download. (The probe is still one billed read --
+  // Firestore meters by document, not by bytes -- but an unchanged day drops
+  // from ~2MB of transfer to ~10KB.)
+  if (isFirestoreUrl(listUrl) && !force && prev && prev.etag && prev.source === settings.listUrl) {
+    try {
+      const pu = new URL(listUrl);
+      pu.searchParams.set('mask.fieldPaths', 'rev');
+      const probe = await fetch(pu.toString(), { method: 'GET', headers, cache: 'no-cache' });
+      if (probe.ok) {
+        const meta = await probe.json();
+        if (meta && meta.updateTime && meta.updateTime === prev.etag) {
+          const touched = Object.assign({}, prev, { fetchedAt: Date.now() });
+          await setLocal(KEYS.BLOCKLIST, touched);
+          return { ok: true, unchanged: true, blocklist: touched };
+        }
+      }
+    } catch (e) { /* a failed probe must never break the refresh -- fall through */ }
+  }
+
   let res;
   try {
     res = await fetch(listUrl, { method: 'GET', headers, cache: 'no-cache' });
@@ -961,8 +985,8 @@ function reportKeyFor(platform, profileId, username) {
  * hash is defence in depth rather than the primary barrier; PRIVACY.md says
  * so in as many words.
  */
-async function firestoreSubmitReport(settings, payload, reporter) {
-  const base = firestoreDocsBase(settings.listUrl);
+async function firestoreSubmitReport(settings, payload, reporter, baseOverride) {
+  const base = baseOverride || firestoreDocsBase(settings.listUrl);
   if (!base) return { ok: false, error: 'Could not derive the Firestore base from the list URL.' };
   if (!(await hasHostPermission(base + '/'))) {
     return { ok: false, needsPermission: true,
@@ -1071,8 +1095,12 @@ async function submitReport(payload) {
                     ' before reporting.' };
   }
 
-  if (isFirestoreUrl(settings.listUrl) && !settings.apiBase) {
-    return firestoreSubmitReport(settings, payload, reporter);
+  // Reports go to Firestore whenever a Firestore documents base is in play --
+  // directly as the list URL, or via apiBase when the list itself is served
+  // as a static file from hosting and only the writes still need the database.
+  const fsReportBase = firestoreDocsBase(settings.apiBase + '/') || firestoreDocsBase(settings.listUrl);
+  if (fsReportBase && (!settings.apiBase || firestoreDocsBase(settings.apiBase + '/'))) {
+    return firestoreSubmitReport(settings, payload, reporter, fsReportBase);
   }
 
   const ctx = settings.shareRegion === false ? {} : clientContext();
@@ -1137,7 +1165,9 @@ async function reportStatus(q, force) {
   // already carries what the chip needs. Blocked is list membership; pending
   // is the published pending-keys array; anything else is simply unreported.
   const fsSettings = await getSettings();
-  if (isFirestoreUrl(fsSettings.listUrl) && !fsSettings.apiBase) {
+  const fsStatusMode = firestoreDocsBase(fsSettings.apiBase + '/') ||
+    (!fsSettings.apiBase && firestoreDocsBase(fsSettings.listUrl));
+  if (fsStatusMode) {
     const rec = await getLocal(KEYS.BLOCKLIST, null);
     const pid = String(q.profileId || '');
     const uname = normUsername(q.username);

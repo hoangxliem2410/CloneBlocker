@@ -34,12 +34,13 @@ function area(name) {
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
 let messageHandler = null;
+let alarmHandler = null;
 const alarms = new Map();
 
 global.chrome = {
   storage: { local: area('local'), sync: area('sync'), onChanged: { addListener() {} } },
   alarms: {
-    onAlarm: { addListener() {} },
+    onAlarm: { addListener(fn) { alarmHandler = fn; } },
     async get(n) { return alarms.get(n) || null; },
     async clear(n) { alarms.delete(n); },
     async create(n, o) { alarms.set(n, Object.assign({ name: n }, o)); }
@@ -491,6 +492,108 @@ async function reset(settings) {
     });
     check('a create conflict is reported as a duplicate, not an error',
       dup.ok && dup.duplicate === true, JSON.stringify(dup));
+
+    // -- the static-hosting split: list from the CDN, reports to Firestore.
+    // publish-static.js serves the blob as a plain file; reports then need
+    // apiBase to carry the Firestore documents base.
+    await setSettings({
+      listUrl: 'https://demo.web.app/blocklist.json',
+      apiBase: 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents'
+    });
+    const splitCalls = [];
+    global.fetch = async (url, opts) => {
+      splitCalls.push(String(url));
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => '{}', json: async () => ({}) };
+    };
+    const splitSub = await send('sw:submit-report', {
+      platform: 'threads', profileId: '9990005555', viewerId: '2904880000'
+    });
+    check('with a static list URL, reports still go to Firestore via apiBase',
+      splitSub.ok && splitCalls.length === 1 &&
+      splitCalls[0].includes('/documents/reports?documentId=threads~9990005555~acct_'),
+      splitCalls[0] && splitCalls[0].slice(30, 130));
+
+    delete global.fetch;
+  }
+
+  // -- 15. the change probe -------------------------------------------------
+  //
+  // Firestore ignores If-None-Match, so every scheduled poll used to download
+  // the whole published blob even when nothing had changed. The worker now
+  // probes with a masked read first and only fetches the body when the
+  // document's updateTime moved. The probe lives on the NON-forced path, which
+  // only the alarm reaches -- so these fire the captured alarm listener and
+  // observe the result through the fetch log and stored state.
+  {
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const ALARM = { name: 'cb-refresh-blocklist' };
+    const tick = () => new Promise(r => setTimeout(r, 120));
+    const mkEnvelope = (updateTime, ids) => ({
+      name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+      fields: { json: { stringValue: JSON.stringify({
+        v: 1, ids, usernames: [], docIdOverrides: {}, pending: [], targets: [] }) } },
+      createTime: '2026-08-21T00:00:00Z', updateTime
+    });
+
+    const calls = [];
+    let envelope = mkEnvelope('2026-08-21T10:00:00Z', ['5550001111']);
+    global.fetch = async (url) => {
+      calls.push(String(url));
+      const masked = String(url).includes('mask.fieldPaths=rev');
+      const body = masked
+        ? { name: envelope.name, fields: {}, createTime: envelope.createTime,
+            updateTime: envelope.updateTime }
+        : envelope;
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => JSON.stringify(body), json: async () => body };
+    };
+
+    await reset({});
+    await setSettings({ listUrl: FS_URL });
+
+    // Forced refresh = first load: no probe, straight to the body.
+    const r1 = await send('sw:refresh-now');
+    check('a forced refresh skips the probe and fetches the body',
+      r1.ok && calls.length === 1 && !calls[0].includes('mask.fieldPaths'),
+      calls.join(' | ').slice(0, 100));
+
+    // Unchanged document via the alarm: one masked probe, no blob.
+    calls.length = 0;
+    alarmHandler(ALARM); await tick();
+    const cached1 = store.local.blocklist;
+    check('an unchanged document costs one masked probe, not the blob',
+      calls.length === 1 && calls[0].includes('mask.fieldPaths=rev') &&
+      cached1.etag === '2026-08-21T10:00:00Z',
+      JSON.stringify({ calls: calls.length }));
+    check('the cached list is stamped fresh even without a download',
+      Date.now() - cached1.fetchedAt < 5000, String(Date.now() - cached1.fetchedAt) + 'ms');
+
+    // Changed document: the probe notices and the full body follows.
+    envelope = mkEnvelope('2026-08-21T11:22:33Z', ['5550001111', '5550002222']);
+    calls.length = 0;
+    alarmHandler(ALARM); await tick();
+    const cached2 = store.local.blocklist;
+    check('a changed document is detected by the probe and fetched in full',
+      calls.length === 2 && calls[0].includes('mask.fieldPaths=rev') &&
+      !calls[1].includes('mask.fieldPaths') && cached2.ids.length === 2,
+      JSON.stringify({ calls: calls.length, ids: cached2.ids }));
+    check('the new etag is the new updateTime',
+      cached2.etag === '2026-08-21T11:22:33Z', String(cached2.etag));
+
+    // A dead probe must never break the refresh.
+    envelope = mkEnvelope('2026-08-21T12:00:00Z', ['5550003333']);
+    global.fetch = async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('mask.fieldPaths')) throw new Error('probe down');
+      return { ok: true, status: 200, headers: { get: () => null },
+               text: async () => JSON.stringify(envelope), json: async () => envelope };
+    };
+    calls.length = 0;
+    alarmHandler(ALARM); await tick();
+    check('a failing probe falls through to the full fetch',
+      store.local.blocklist.ids[0] === '5550003333' && calls.length === 2,
+      JSON.stringify(store.local.blocklist.ids));
 
     delete global.fetch;
   }

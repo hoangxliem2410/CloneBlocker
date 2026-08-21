@@ -2,20 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Clone Blocker — Settings</title>
+  <title data-i18n="options_pageTitle">Clone Blocker</title>
   <link rel="stylesheet" href="../ui/ui.css">
 </head>
 <body class="options">
   <header class="page-hd">
     <div>
-      <h1>Clone Blocker</h1>
-      <p class="note">
-        Blocks the accounts impersonating you on Facebook and Threads, at a pace
-        that keeps your own account out of trouble.
-      </p>
+      <h1 data-i18n="appName"></h1>
+      <p class="note" data-i18n="options_tagline"></p>
     </div>
     <nav class="page-nav">
-      <a href="#" id="openActivity">Activity</a>
+      <a href="#" id="openActivity" data-i18n="options_activityLink"></a>
     </nav>
   </header>
 
@@ -23,63 +20,50 @@
        page is a detail of how the chosen mode behaves, which is why the rest
        of it sits behind Advanced. -->
   <section class="card">
-    <h2>How much work it does</h2>
+    <h2 data-i18n="options_workHeading"></h2>
 
     <div class="modes">
       <label class="mode">
         <span class="mode-hd">
           <input type="radio" name="mode" id="modePassive" value="passive">
-          <span>Passive &mdash; blocks clones as you run into them</span>
+          <span data-i18n="options_modePassiveTitle"></span>
         </span>
-        <p>Only profiles that appear on the page while you browse.</p>
-        <p class="cost">
-          They were on your screen anyway, so these go through quickly and stay
-          well clear of the rate limits.
-        </p>
+        <p data-i18n="options_modePassiveWhat"></p>
+        <p class="cost" data-i18n="options_modePassiveCost"></p>
       </label>
 
       <label class="mode">
         <span class="mode-hd">
           <input type="radio" name="mode" id="modeActive" value="active">
-          <span>Active &mdash; also works through the list in the background</span>
+          <span data-i18n="options_modeActiveTitle"></span>
         </span>
-        <p>
-          Adds the clones the list says are most active near you, even if you
-          never scroll past them.
-        </p>
-        <p class="cost">
-          Paced slowly and capped per hour, because working through strangers is
-          the pattern that draws a checkpoint.
-          <strong>Needs a Facebook or Threads tab open to do this work</strong> &mdash;
-          blocks are issued through the site&rsquo;s own code, so with nothing open
-          they simply wait.
-        </p>
+        <p data-i18n="options_modeActiveWhat"></p>
+        <p class="cost" data-i18n="options_modeActiveCost"></p>
+        <!-- Its own paragraph, not a bolded clause spliced into the one above:
+             a sentence assembled around a translated fragment is a sentence no
+             other language may reorder. The emphasis travels inside the
+             message instead. -->
+        <p class="cost" data-i18n="options_modeActiveNeedsTab"></p>
       </label>
     </div>
 
-    <p id="pausedNote" class="note hidden">
-      Blocking is paused right now, so neither mode is doing anything. Unpause it
-      under Advanced.
-    </p>
+    <p id="pausedNote" class="note hidden" data-i18n="options_pausedNote"></p>
   </section>
 
   <!-- Status, not configuration: the address is baked into the extension. -->
   <section class="card">
-    <h2>Blocklist</h2>
-    <p class="note" style="margin-top:0">
-      Served by the Clone Blocker project. Every report is reviewed by hand before
-      a profile reaches the list, and there is nothing here to set up.
-    </p>
+    <h2 data-i18n="options_blocklistHeading"></h2>
+    <p class="note" style="margin-top:0" data-i18n="options_blocklistNote"></p>
     <div class="row">
-      <span class="k">Last sync</span>
+      <span class="k" data-i18n="options_lastSync"></span>
       <span class="v" id="listSynced">&mdash;</span>
     </div>
     <div class="row">
-      <span class="k">On the list</span>
+      <span class="k" data-i18n="options_onTheList"></span>
       <span class="v" id="listCounts">&mdash;</span>
     </div>
     <div class="inline-row" style="margin-top:10px">
-      <button id="refreshList" class="btn inline">Refresh now</button>
+      <button id="refreshList" class="btn inline" data-i18n="options_refreshNow"></button>
       <span id="listStatus" class="status"></span>
     </div>
   </section>
@@ -88,161 +72,125 @@
        purpose: each control below is either a safety valve, a pacing number
        that already ships at a sensible value, or diagnostics. -->
   <details class="adv">
-    <summary>Advanced</summary>
+    <summary data-i18n="options_advanced"></summary>
 
     <section class="card">
-      <h2>Blocking</h2>
-      <label class="toggle"><input type="checkbox" id="pauseBlocking"><span>Pause blocking</span></label>
-      <p class="hint" style="margin-left:22px">
-        Stops every real block, in both modes, until you switch it back. Nothing is
-        lost &mdash; queued profiles wait. Hiding, below, is unaffected.
-      </p>
-      <label class="toggle sub"><input type="checkbox" id="platformBlockDryRun"><span>Dry run &mdash; resolve the strategy but send nothing</span></label>
-      <label class="toggle sub"><input type="checkbox" id="allowRawNetworkFallback"><span>Allow raw request fallback <strong>(risky)</strong></span></label>
-      <p class="hint" style="margin-left:22px">
-        Normally the extension drives the site&rsquo;s own block code, which is safe and
-        always current. This fallback instead hand-builds the HTTP request. During
-        testing that was observed <strong>forcing the signed-in session to log out</strong>,
-        and on Threads the REST paths return 404 regardless. Leave this off unless
-        you are debugging.
-      </p>
+      <h2 data-i18n="options_blockingHeading"></h2>
+      <label class="toggle"><input type="checkbox" id="pauseBlocking"><span data-i18n="options_pauseBlocking"></span></label>
+      <p class="hint" style="margin-left:22px" data-i18n="options_pauseHint"></p>
+      <label class="toggle sub"><input type="checkbox" id="platformBlockDryRun"><span data-i18n="options_dryRun"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="allowRawNetworkFallback"><span data-i18n="options_rawFallback"></span></label>
+      <p class="hint" style="margin-left:22px" data-i18n="options_rawFallbackHint"></p>
     </section>
 
     <!-- Blocks are rationed; hiding is not. That asymmetry is the whole reason
          this group exists, and the note below has to say so plainly or an
          unticked box reads as "leave this account alone entirely". -->
     <section class="card">
-      <h2>Which kinds get blocked</h2>
-      <p class="note" style="margin-top:0">
-        Every reviewed profile stays on the list whatever you tick here &mdash; and
-        stays hidden too, if hiding is on. Unticking a kind only means the
-        extension will not spend one of your rationed blocks on it.
-      </p>
+      <h2 data-i18n="options_tagsHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_tagsNote"></p>
       <div id="blockTags" class="taglist"></div>
-      <p class="note warn hidden" id="blockTagsNote">
-        Nothing is ticked, so the extension will not block anyone on its own.
-        Block now in the popup still works.
-      </p>
+      <p class="note warn hidden" id="blockTagsNote" data-i18n="options_tagsNoneNote"></p>
     </section>
 
     <section class="card">
-      <h2>Hide their content</h2>
-      <p class="note" style="margin-top:0">
-        Hiding suppresses a listed profile&rsquo;s posts and comments in your browser
-        without touching your account. Off by default: real blocks are the product,
-        and this is for people who also want the whole list out of sight straight
-        away.
-      </p>
-      <label class="toggle"><input type="checkbox" id="hideEnabled"><span>Enable hiding</span></label>
-      <label class="toggle sub"><input type="checkbox" id="hideFeedPosts"><span>Hide feed posts</span></label>
-      <label class="toggle sub"><input type="checkbox" id="hideComments"><span>Hide comments</span></label>
+      <h2 data-i18n="options_hideHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_hideNote"></p>
+      <label class="toggle"><input type="checkbox" id="hideEnabled"><span data-i18n="options_hideEnabled"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideFeedPosts"><span data-i18n="options_hideFeedPosts"></span></label>
+      <label class="toggle sub"><input type="checkbox" id="hideComments"><span data-i18n="options_hideComments"></span></label>
 
       <div class="field" style="margin-top:12px">
-        <label for="hideMode">When hiding</label>
+        <label for="hideMode" data-i18n="options_hideModeLabel"></label>
         <select id="hideMode">
-          <option value="collapse">Remove entirely</option>
-          <option value="placeholder">Show a collapsed bar with a “Show” button</option>
-          <option value="blur">Blur in place</option>
+          <option value="collapse" data-i18n="options_hideModeCollapse"></option>
+          <option value="placeholder" data-i18n="options_hideModePlaceholder"></option>
+          <option value="blur" data-i18n="options_hideModeBlur"></option>
         </select>
       </div>
     </section>
 
     <section class="card">
-      <h2>Pace and ceilings</h2>
-      <p class="note" style="margin-top:0">
-        Blocking someone whose profile is on your screen is what people do all day;
-        working through a list of strangers is not. The two are budgeted and paced
-        separately, and what ships here is deliberately cautious.
-      </p>
+      <h2 data-i18n="options_paceHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_paceNote"></p>
 
       <div class="field" style="margin-top:12px">
-        <label for="warmMinDelayMs">Delay after blocking someone on screen (ms)</label>
+        <label for="warmMinDelayMs" data-i18n="options_warmDelayLabel"></label>
         <div class="inline-row">
           <input type="number" id="warmMinDelayMs" min="1000" step="500">
-          <span class="hint">to</span>
+          <span class="hint" data-i18n="options_delayTo"></span>
           <input type="number" id="warmMaxDelayMs" min="2000" step="500">
         </div>
-        <p class="hint">Shorter than the delay below: this is the ordinary case and does
-          not need to be slowed down.</p>
+        <p class="hint" data-i18n="options_warmDelayHint"></p>
       </div>
 
       <div class="field">
-        <label for="minDelayMs">Delay after blocking someone taken off the list (ms)</label>
+        <label for="minDelayMs" data-i18n="options_coldDelayLabel"></label>
         <div class="inline-row">
           <input type="number" id="minDelayMs" min="2000" step="1000">
-          <span class="hint">to</span>
+          <span class="hint" data-i18n="options_delayTo"></span>
           <input type="number" id="maxDelayMs" min="3000" step="1000">
         </div>
-        <p class="hint">A random value in this range is used each time; fixed intervals look automated.</p>
+        <p class="hint" data-i18n="options_coldDelayHint"></p>
       </div>
 
       <div class="field">
-        <label for="maxColdBlocksPerHour">Max list-driven blocks per hour</label>
+        <label for="maxColdBlocksPerHour" data-i18n="options_maxColdLabel"></label>
         <input type="number" id="maxColdBlocksPerHour" min="0" max="60" step="1">
-        <p class="hint">Active mode only, and counts only accounts you have never seen.
-          <strong>Zero</strong> means never block anyone who has not appeared on your screen.</p>
+        <p class="hint" data-i18n="options_maxColdHint"></p>
       </div>
       <div class="field">
-        <label for="targetBudget">Targets to take from the list at a time</label>
+        <label for="targetBudget" data-i18n="options_targetBudgetLabel"></label>
         <input type="number" id="targetBudget" min="1" max="200" step="1">
       </div>
       <div class="field">
-        <label for="maxBlocksPerHour">Max blocks per hour (all sources)</label>
+        <label for="maxBlocksPerHour" data-i18n="options_maxPerHourLabel"></label>
         <input type="number" id="maxBlocksPerHour" min="1" max="200" step="1">
       </div>
       <div class="field">
-        <label for="maxBlocksPerDay">Max blocks per day</label>
+        <label for="maxBlocksPerDay" data-i18n="options_maxPerDayLabel"></label>
         <input type="number" id="maxBlocksPerDay" min="1" max="1000" step="1">
       </div>
 
-      <label class="toggle"><input type="checkbox" id="shareRegion"><span>Send my time zone and language, so the list ranks clones operating near me first</span></label>
+      <label class="toggle"><input type="checkbox" id="shareRegion"><span data-i18n="options_shareRegion"></span></label>
     </section>
 
     <section class="card">
-      <h2>Clone reporting</h2>
-      <p class="note" style="margin-top:0">
-        Lets people flag clone accounts from the page itself. Reports go in for
-        review; nothing reaches the blocklist until an admin approves it.
-      </p>
-      <label class="toggle"><input type="checkbox" id="reportUiEnabled"><span>Show the Report chip on profiles</span></label>
+      <h2 data-i18n="options_reportingHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_reportingNote"></p>
+      <label class="toggle"><input type="checkbox" id="reportUiEnabled"><span data-i18n="options_reportUiEnabled"></span></label>
 
       <div class="field" style="margin-top:12px">
-        <label for="apiBase">API base <span class="hint">(optional)</span></label>
-        <input type="url" id="apiBase" placeholder="derived from the blocklist address">
-        <p class="hint">Leave blank to use the directory the blocklist lives in.</p>
+        <label for="apiBase"><span data-i18n="options_apiBaseLabel"></span> <span class="hint" data-i18n="options_optional"></span></label>
+        <input type="url" id="apiBase" data-i18n-placeholder="options_apiBasePlaceholder">
+        <p class="hint" data-i18n="options_apiBaseHint"></p>
       </div>
       <div class="field">
-        <label for="submitToken">Submit token <span class="hint">(only if the server requires one)</span></label>
-        <input type="text" id="submitToken" placeholder="--submit-token value">
+        <label for="submitToken"><span data-i18n="options_submitTokenLabel"></span> <span class="hint" data-i18n="options_submitTokenOnlyIf"></span></label>
+        <input type="text" id="submitToken" data-i18n-placeholder="options_submitTokenPlaceholder">
       </div>
     </section>
 
     <section class="card">
-      <h2>Teaching it the block request</h2>
-      <p class="note" style="margin-top:0">
-        Meta rotates its GraphQL <code>doc_id</code>s and gates operations behind
-        generated provider variables, so nothing is hardcoded. The extension reads the
-        live values out of the page. If it reports no block mutation found, the module
-        simply has not been loaded yet &mdash; open any profile and block one person by
-        hand. The request is captured and its shape reused from then on.
-      </p>
-      <button id="clearLearned" class="btn inline">Forget captured templates</button>
+      <h2 data-i18n="options_learnHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_learnNote"></p>
+      <button id="clearLearned" class="btn inline" data-i18n="options_clearLearned"></button>
       <span id="learnedStatus" class="status"></span>
     </section>
 
     <section class="card">
-      <h2>Diagnostics</h2>
-      <p class="note" style="margin-top:0">Page capability is read from the first open
-        Facebook or Threads tab &mdash; open one, then press Reload.</p>
-      <label class="toggle"><input type="checkbox" id="debug"><span>Verbose console logging</span></label>
+      <h2 data-i18n="options_diagHeading"></h2>
+      <p class="note" style="margin-top:0" data-i18n="options_diagNote"></p>
+      <label class="toggle"><input type="checkbox" id="debug"><span data-i18n="options_debug"></span></label>
       <div class="inline-row" style="margin-top:10px">
-        <button id="refreshDiag" class="btn inline">Reload</button>
-        <button id="resetQueue" class="btn inline">Reset queue &amp; stats</button>
+        <button id="refreshDiag" class="btn inline" data-i18n="options_reload"></button>
+        <button id="resetQueue" class="btn inline" data-i18n="options_resetQueue"></button>
       </div>
       <pre id="diag" class="diag">—</pre>
     </section>
   </details>
 
+  <script src="../common/i18n.js"></script>
   <script src="../common/protocol.js"></script>
   <script src="options.js"></script>
 </body>

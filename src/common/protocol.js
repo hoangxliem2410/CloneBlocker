@@ -68,14 +68,14 @@
   const TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other'];
 
   /**
-   * English for each tag. One dictionary rather than one per page, because
+   * The label for each tag. One dictionary rather than one per page, because
    * three copies of "Scam or fraud" is three chances for the report sheet, the
    * options page and the activity chips to end up naming the same thing
    * differently -- and a user who ticks a box has to be able to recognise it
-   * in the sheet they filled in. (Vietnamese arrives with every other string
-   * in the i18n phase; nothing here is translated yet.)
+   * in the sheet they filled in. Now that there are two languages, it is also
+   * three chances to translate one of them and forget the others.
    */
-  const TAG_LABELS = {
+  const TAG_LABELS_EN = {
     clone: 'Clone / fake account',
     impersonation: 'Impersonating someone',
     scam: 'Scam or fraud',
@@ -84,6 +84,26 @@
     redbull: 'Red bull (state-aligned troll)',
     other: 'Something else'
   };
+
+  /**
+   * Resolved through CB_T, so one vocabulary serves both languages -- with the
+   * English above as the fallback rather than the key.
+   *
+   * CB_T answers with the key when a message is missing, which is what you want
+   * for a control that would otherwise render blank. It is not what you want
+   * here: this file is also loaded by the Node harnesses and by anything that
+   * imports the protocol without an extension around it, and a report sheet
+   * offering "tag_redbull" as a reason would be worse than one offering plain
+   * English. So a key echoed straight back is read as "no translation
+   * available" and the English wins.
+   */
+  const TAG_LABELS = {};
+  for (const tag of TAGS) {
+    const key = 'tag_' + tag;
+    const t = globalThis.CB_T;
+    const label = t ? t(key) : key;
+    TAG_LABELS[tag] = label === key ? TAG_LABELS_EN[tag] : label;
+  }
 
   // Storage keys (chrome.storage.local unless noted).
   const KEYS = {

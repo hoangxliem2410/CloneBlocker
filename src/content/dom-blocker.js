@@ -173,11 +173,11 @@
     bar.className = 'cb-placeholder';
     const label = document.createElement('span');
     label.className = 'cb-placeholder-text';
-    label.textContent = 'Hidden — ' + who;
+    label.textContent = globalThis.CB_T('hide_hiddenLabel', who);
     const btn = document.createElement('button');
     btn.className = 'cb-placeholder-btn';
     btn.type = 'button';
-    btn.textContent = 'Show';
+    btn.textContent = globalThis.CB_T('hide_showButton');
     btn.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
       node.setAttribute('data-cb-hidden', 'revealed');

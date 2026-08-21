@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Clone Blocker",
+  "name": "__MSG_appName__",
+  "default_locale": "en",
   "version": "1.0.0",
-  "description": "Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.",
+  "description": "__MSG_appDesc__",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -40,6 +41,7 @@
         "https://*.threads.com/*"
       ],
       "js": [
+        "src/common/i18n.js",
         "src/common/protocol.js",
         "src/content/bridge.js",
         "src/content/identity.js",
@@ -57,7 +59,7 @@
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "Clone Blocker",
+    "default_title": "__MSG_appName__",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

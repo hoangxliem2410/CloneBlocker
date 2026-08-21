@@ -89,16 +89,26 @@ Clone Blocker
 
 ### Short description (132 max) — 120 used
 
-Also the `description` field in `manifest.json`; the store reads it from there.
+Also the extension's own description; the store reads it from there. Since the
+i18n phase that is `appDesc` in `_locales/en/messages.json` (and its Vietnamese
+counterpart), reached from `manifest.json` as `__MSG_appDesc__` — the store
+serves whichever one matches the shopper's language.
 
 ```
 Hide clone accounts impersonating you on Facebook and Threads — and block the most active ones at a safe, rationed pace.
 ```
 
+The Vietnamese the store serves to a Vietnamese shopper, from
+`_locales/vi/messages.json`, at 118 characters:
+
+```
+Ẩn các tài khoản giả mạo bạn trên Facebook và Threads, rồi chặn những tài khoản hoạt động mạnh nhất theo nhịp an toàn.
+```
+
 It leads with hiding, which now ships switched off — worth revisiting, but not
-on its own: this string is `description` in `manifest.json`, so any rewrite has
-to change both in the same commit and land under 132 characters again. Left
-alone here deliberately rather than by oversight.
+on its own: this string is `appDesc` in both locale files, so any rewrite has to
+change all three in the same commit and land under 132 characters in every
+language. Left alone here deliberately rather than by oversight.
 
 ### Category
 
@@ -140,7 +150,9 @@ whole list rather than a budgeted slice.
 REPORT A CLONE IN TWO CLICKS
 Hover a name in the feed, or open the profile, and file a report with the
 posts that prove it. Reports go to a human reviewer, and nothing reaches the
-blocklist until it is approved.
+blocklist until it is approved. Some reviewed accounts are additionally named
+on a public page we publish — that is a separate decision a person makes about
+each one, and nothing about you as the reporter is ever published.
 
 NOTHING TO SET UP
 The blocklist address is built into the extension and the list itself is
@@ -161,9 +173,14 @@ Only to that one backend, and nowhere else:
     can see where a clone is active. This is a single switch and you can turn
     it off.
 Your account ID never leaves the browser in the clear — only a truncated
-hash of it does — and the report store is readable only by the one admin
-account that reviews reports. There is no analytics, no tracking, no ad
-network, and no third-party service anywhere.
+hash of it does — and the report store is readable only by the moderator who
+reviews reports. There is no analytics, no tracking, no ad network, and no
+third-party service anywhere.
+
+IN ENGLISH AND VIETNAMESE
+Tiếng Việt và tiếng Anh. Every screen — the popup, the settings, the activity
+log, and the report form you fill in on the page itself — is fully translated,
+and it follows the language your browser is already in. Nothing to choose.
 
 REQUIREMENTS
 Chrome 120 or newer, and a Facebook or Threads account to block from. Source,
@@ -172,6 +189,25 @@ https://github.com/hoangxliem2410/CloneBlocker
 
 Not affiliated with, endorsed by, or connected to Meta, Facebook or Threads.
 ```
+
+**Say the Vietnamese in Vietnamese.** The audience this was built for reads
+Vietnamese, and a listing that only claims translation in English is claiming it
+to the wrong people — hence the one line above that is in the language it is
+talking about. The store lets the whole listing be localised per language in the
+dashboard; that is worth doing before launch, and the strings already exist in
+`_locales/vi/messages.json` for everything inside the extension. The short
+description translates itself: the store serves `appDesc` from whichever locale
+matches the shopper.
+
+**Still undecided: whether the `redbull` tag is named here.** The extension
+ships it either way — *Bò đỏ* / "Red bull (state-aligned troll)" is one of the
+seven tags a reporter can pick and one of the tick boxes in Settings. The copy
+above does not name it, which is the absence of a decision rather than a
+decision. Naming a politically-charged category in a public listing invites a
+kind of review attention, and a kind of coordinated user reporting, that "scam"
+does not; leaving it out costs nothing in the listing and hides nothing from
+anyone who installs it. The owner's call, recorded as open in
+[`ROADMAP.md`](ROADMAP.md).
 
 ### URLs
 
@@ -201,6 +237,27 @@ Hiding, blocking and reporting are one purpose, not three: reporting is how an
 account gets onto the list, blocking and hiding are how the list is applied.
 Nothing in the extension serves any other end.
 
+**One thing the backend does with reports has to be disclosed here even though
+no extension code touches it.** Some of the *reported* accounts are named on a
+public web page the same project serves —
+`https://clone-blocker2.web.app/` — and a reviewer who reads the privacy policy
+will find it, so it should not first appear as a surprise. The wording to add if
+the field allows more than the sentence above:
+
+```
+Reports are reviewed by a person. Some reported accounts are additionally
+named on a public page run by the same project, but only when a moderator
+opts that specific account in — approval alone never publishes anyone.
+Nothing about the person who filed a report is ever published: the page
+carries a headcount and no reporter identity of any kind.
+```
+
+The distinction that matters in a review dispute is that publication is about
+the **reported** account, never the **user of the extension**. A user who
+installs it and files reports has nothing published about them under any
+circumstances, and a user who installs it and files nothing sends nothing at
+all.
+
 ### Permission justifications
 
 | Permission | Justification to paste |
@@ -210,6 +267,16 @@ Nothing in the extension serves any other end.
 | `host_permissions` — facebook.com, threads.net, threads.com | The extension's entire function is to block, and optionally hide, impersonator accounts on these two sites. It reads the page to find profiles from the list and issues a block through the site's own interface. |
 | `host_permissions` — firestore.googleapis.com, clone-blocker2.web.app | The backend. The published blocklist document is read from Firestore's public REST endpoint and the reports a user files are written back to it; the Hosting origin serves the same list as a CDN-cached static snapshot. Both addresses are fixed in the extension, which is why they are required rather than optional: there is nothing for the user to type and no runtime permission request anywhere in the product. |
 
+That is the whole of it, and the table is meant to be checked against
+`manifest.json` rather than trusted: **two** API permissions, `storage` and
+`alarms`; **five** host patterns, `*.facebook.com`, `*.threads.net`,
+`*.threads.com`, `firestore.googleapis.com` and `clone-blocker2.web.app`; and no
+`optional_host_permissions` block at all, which is why there is no prompt
+anywhere in the product. There is deliberately no `tabs` permission: the popup
+and the activity page ask `chrome.tabs.query` whether a Facebook or Threads tab
+is open, and the host permissions the extension already holds for those two
+sites are what makes that answerable without a broader one.
+
 ### Data collection disclosures
 
 Tick these, and be prepared to explain each:
@@ -217,11 +284,19 @@ Tick these, and be prepared to explain each:
 | Category | Collected? | What, and why |
 |---|---|---|
 | Personally identifiable information | **Yes** | A pseudonym of the user's own Facebook/Threads numeric account ID, sent with a report only. Necessary so that reports can be weighted by the reporter's track record and so a single account cannot flood the queue. The ID is hashed in the browser (truncated SHA-256) before sending; the raw ID never leaves the machine, and the report store is readable only by the backend owner under Firestore security rules. |
-| User activity | **Yes** | The reports the user chooses to file: the reported account, the reason, an optional note, optional links to posts. |
-| Website content | **Yes** | Only what the user attaches to a report — public post URLs and an optional short quote of the content they are reporting. |
+| User activity | **Yes** | The reports the user chooses to file: the reported account, the reason (one of seven tags), an optional note, optional links to posts. |
+| Website content | **Yes** | Only what the user attaches to a report — public post URLs and an optional short quote of the content they are reporting. If a moderator later opts the *reported* account in to the project's public page, those links and quotes can appear there; the user's note never does, and nothing identifying the reporter ever does. |
 | Location | **Yes, coarse, optional** | IANA time zone and BCP-47 language, from the browser, attached to reports only — never to list fetches — and only when **Send my time zone and language** is on. No IP lookup, no geolocation API, no geo database. Shows the reviewer where a reported clone is active; the ranking of which clones to block is computed locally in the user's browser and sends nothing. |
 | Authentication information | No | |
 | Financial / health / personal communications | No | |
+
+None of it is sold, rented, or used for anything but review. The one route by
+which any of it becomes public is the transparency page described under Single
+purpose, and that route is closed to everything in the first and last rows of
+this table: the reporter pseudonym, the time zone and the language are
+admin-only by construction and are never published, not even in aggregate — the
+page carries how many different people reported an account and nothing else
+about them.
 
 ### Limited Use certification
 
@@ -263,8 +338,24 @@ it goes. Passive mode blocks only profiles that appeared on the page in front
 of them, at a human rhythm. Active mode (the default) additionally works
 through the published list, capped at 4 per hour and paced 20-45s apart, and
 only while a Facebook or Threads tab is open — the block is issued by the
-site's own code, from a content script.
+site's own code, from a content script. Settings also carries a tick box per
+kind of account (clone, impersonation, scam, harassment, spam, other), so a
+user can narrow what a block is ever spent on.
+
+The extension is in English and Vietnamese and follows the browser's own UI
+language; launching Chrome with --lang=vi shows the Vietnamese build of every
+screen.
+
+Our privacy policy mentions a public page that names some REPORTED accounts.
+That page is served by our Firebase project, not by the extension: no code in
+this upload reads it, links to it, or sends anything to it, and nothing about
+a person who uses the extension is ever published on it.
 ```
+
+That list of tags stops at "other" and does not name `redbull`, for the same
+undecided reason §3 does not — and the reviewer-notes field is read by exactly
+the audience the concern is about. If the owner decides the tag belongs in the
+listing, it belongs here too, and both change together.
 
 ---
 
@@ -337,7 +428,23 @@ the listing goes. That risk cannot be engineered away while the extension
 blocks anything, and it is worth going in with eyes open rather than being
 surprised by it.
 
-### d. List-supplied `docIdOverrides`
+### d. The public page, read as part of the product
+
+The privacy policy discloses that the same backend names some reported accounts
+on a public page. No code in the upload touches it — but a reviewer reads the
+policy, and "this developer publishes a list of named people" is a sentence that
+can attract questions the extension itself would never raise.
+
+What answers them: publication requires a person to opt each account in
+individually, and approving a report never publishes anyone; the page carries no
+reporter identity of any kind; every published claim is backed by an `https`
+link to the post it rests on, or it is not published at all; the page says in its
+own words that it is one person's judgement rather than a ruling by Facebook or
+Threads; and it prints a removal address. The disclosure is deliberately in the
+policy rather than left to be discovered — a reviewer finding it themselves
+after it was omitted is a much worse conversation.
+
+### e. List-supplied `docIdOverrides`
 
 The blocklist response may carry `docIdOverrides`, which changes which
 persisted GraphQL operation the extension calls. This is configuration data,
@@ -368,12 +475,19 @@ exposes, and the override only selects among them — say so if asked.
 - [ ] Limited Use certification ticked
 - [ ] Reviewer notes pasted
 - [ ] Confirm the default mode: it currently ships **active** (§6b)
+- [ ] Decide whether the `redbull` tag is named in the listing copy and the
+      reviewer notes (§3) — open, and the last product decision outstanding
+- [ ] Localise the listing itself into Vietnamese in the dashboard (§3); the
+      in-extension strings are already there
+- [x] `_locales/en` and `_locales/vi` at key parity, checked by `check.js`
 - [x] Store assets regenerated against the passive/active modes (§2)
 - [ ] `npm test` green, then zip: everything except `tools/`, `docs/`, `store/`, `hosting/`, the Firebase config files (`firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc`) and `.env`
 
 The upload zip only needs what the extension actually loads: `manifest.json`,
-`src/`, `icons/`. The backend and the tooling are for you, not for Chrome, and
-shipping them only widens what a reviewer has to read.
+`src/`, `icons/`, `_locales/`. The backend and the tooling are for you, not for
+Chrome, and shipping them only widens what a reviewer has to read. `_locales/`
+is not optional: a manifest declaring `default_locale` without it is refused at
+load, so an upload that leaves it out fails before anyone reads a line of it.
 
 ---
 

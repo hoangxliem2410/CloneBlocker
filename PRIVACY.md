@@ -14,8 +14,15 @@ only thing that ever leaves your machine is a report you deliberately file.
 Those reports land in Firestore inside that project on Google Cloud: Google is
 the hosting and infrastructure provider, in the same way a rented server's
 datacenter would be, and the project's security rules make reports readable by
-exactly one admin account — the maintainer of whichever backend the copy you
+the project's admin accounts — the maintainer of whichever backend the copy you
 installed points at — and by nobody else at all.
+
+One thing that backend does with reports is public, and it is described in full
+below: some of the **reported** accounts are named on a public web page. Nothing
+about the **reporter** ever appears there, in any form. If you file reports,
+nothing you send is published. If you are the account someone reported, read
+[The public list](#the-public-list) — it says exactly what can be published
+about a profile, what never is, and how to ask to be taken down.
 
 ---
 
@@ -23,14 +30,17 @@ installed points at — and by nobody else at all.
 
 Held in Chrome's extension storage, and never transmitted:
 
-- **Your settings** — which mode you chose, whether blocking is paused,
-  whether you switched hiding on (it ships **off**), and every pacing and cap
-  value.
+- **Your settings** — which mode you chose, which kinds of account you allow
+  blocks for, whether blocking is paused, whether you switched hiding on (it
+  ships **off**), and every pacing and cap value.
 - **The cached blocklist** — so it does not have to be re-fetched on every page.
 - **The block queue** — which accounts are pending, which have been done, and
   the timestamps used to keep within your own hourly and daily caps.
 - **Captured request templates**, if you enable that option — used only to
   reissue a block on the same site.
+- **The interface language.** The extension is available in English and
+  Vietnamese and simply follows the language Chrome is already running in. It
+  asks nothing, stores nothing extra, and sends nothing about it.
 - **Your time zone and language, as used for ranking.** In active mode the
   extension decides which listed accounts are most active near you by comparing
   your browser's own time zone and language against metadata published with the
@@ -77,6 +87,13 @@ itself is never sent: the extension hashes it in your browser (SHA-256,
 truncated) and only the pseudonym leaves your machine. A report cannot be
 filed while signed out.
 
+Two of those items can end up in public, if a moderator later opts that reported
+account in to the public list: the post links you attached and their short
+summaries. Your note is not published, and nothing that identifies you as the
+reporter is published — not the pseudonym, not a count of your own reports, not
+your time zone or language. The full rules are in [The
+public list](#the-public-list).
+
 Be clear about what that hash does and does not do. The hash is not keyed with
 a secret — an earlier version used a server-held secret salt, and a pure
 client-side design has nowhere to keep one — so **someone who already has a
@@ -95,6 +112,54 @@ account, and carries no data from this extension. Which accounts it acts on is
 the mode you picked: passive blocks only profiles that appeared on the page in
 front of you, active additionally works through the published list.
 
+## The public list
+
+The backend that receives reports also runs a **public web page** that names
+some of the reported accounts: <https://clone-blocker2.web.app/>. This is the
+one place where data handled by this project is visible to anyone at all, so it
+is worth reading carefully — particularly if you have found this policy because
+you believe you are on that page.
+
+**Nothing is published automatically.** Two separate decisions have to be made
+by a person, in this order: a moderator approves a report, which puts the
+account on the blocklist the extension applies; and the moderator then opts that
+specific account in to publication. Approving alone never names anyone. Most
+blocked accounts are never published, and the page shows both counts side by
+side so that is visible rather than claimed.
+
+**What can be published about an opted-in profile:** its display name, its
+username, its numeric profile ID, its tag (clone, impersonation, scam,
+harassment, spam, red bull, other), how many different people reported it, the
+date it was first reported and the date it was last reported active, up to three
+coarse regions (IANA time-zone names such as `Asia/Ho_Chi_Minh`), and links to
+the posts submitted as evidence, each with the short summary that accompanied
+it.
+
+**What is never published, by construction:**
+
+- **The identity of anyone who reported it, in any form.** Not the truncated
+  `acct_` pseudonyms, not per-reporter counts, not reputation weights — only a
+  headcount of how many different people reported. The pseudonyms are stable
+  across accounts, so publishing even one would let a reader start
+  reconstructing who reported whom.
+- **Reporters' free-text notes**, and any moderator note. Only evidence
+  summaries attached to a post link are published.
+- **Evidence with no link behind it.** An entry without an `https` post URL is
+  dropped rather than published: a quotation with nothing to check it against is
+  an unverifiable claim about a named person.
+- **Per-region counts.** The region *names* are published; the number of reports
+  from each is not, because "two reports from `Asia/Ho_Chi_Minh`" narrows down a
+  reporter in a way the bare name does not.
+
+**If you believe you are listed there wrongly**, write to the issue tracker —
+<https://github.com/hoangxliem2410/CloneBlocker/issues> — which is the address
+printed on the page itself. Being listed is one person's judgement, not a ruling
+by Facebook or Threads; that judgement can be wrong, and a profile whose case
+does not hold up is taken down. Removal takes effect the next time the list is
+published, and a copy may persist briefly in a CDN cache and indefinitely in
+third-party archives and search-engine caches that this project does not
+control.
+
 ## What is never collected
 
 Browsing history, page content beyond what you attach to a report, passwords,
@@ -104,15 +169,19 @@ threads.net and threads.com.
 
 ## Who else sees it
 
-The data is not sold, rented, or shared. Two parties can technically see it:
+The data is not sold, rented, or shared. Three parties can see some of it:
 
 - **The owner of the backend this build points at.** For the published
   extension that is this project's maintainer, who can read the reports you
-  file (the security rules make them readable only by the project's one admin
-  account, and the reporter identity is only a truncated hash — see above). A
+  file (the security rules make them readable only by the uid allowlist that
+  holds the project's admin accounts — today one person, who can sign in two
+  ways — and the reporter identity is only a truncated hash, see above). A
   build you compile against your own Firebase project sends them to you
   instead. This policy can only speak for the code, not for what any backend
   operator does with what they receive.
+- **Anyone at all**, for the narrow slice the operator has opted in to the
+  public list: the reported profile's own details and the evidence links, never
+  anything about who reported it. See [The public list](#the-public-list).
 - **Google**, as the infrastructure under a Firebase backend. The data sits in
   Firestore inside that Google Cloud project, subject to Google Cloud's own
   terms and privacy commitments, the same way any hosting provider holds the
@@ -129,6 +198,13 @@ them — from the moderation dashboard, or directly in the Firestore console,
 which the project owner can always do regardless of what any tooling offers.
 Account IDs exist in the store only as truncated hashes; the raw ID is never
 stored anywhere.
+
+A profile removed from the public list, or taken off the blocklist entirely,
+disappears from the page when the list is next published — the published
+documents are recomputed from scratch each time rather than edited, so nothing
+lingers in them. What this project cannot undo is a copy someone else already
+took: CDN caches expire on their own, but search engines and archive sites keep
+what they have crawled.
 
 On your device, clearing the extension's storage or uninstalling it removes
 everything it holds.

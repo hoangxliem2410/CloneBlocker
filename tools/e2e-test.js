@@ -130,6 +130,10 @@ function buildTestExtension() {
   };
   walk('src');
   walk('icons');
+  // Not optional: a manifest declaring default_locale that ships without the
+  // matching _locales directory is refused outright by Chrome, so leaving this
+  // out would fail every test in the file with one unrelated error.
+  walk('_locales');
 
   // The only divergence from the shipped build: the local emulator is added
   // to host_permissions. The shipped manifest has no optional_host_permissions

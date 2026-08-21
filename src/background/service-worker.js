@@ -16,11 +16,18 @@
  * state round-trips through chrome.storage.
  */
 
-// Executing this module publishes CB_PROTOCOL / CB_KEYS / CB_DEFAULT_SETTINGS
-// onto globalThis, so the wire format has exactly one definition.
+// Executing these publishes CB_T and then CB_PROTOCOL / CB_KEYS /
+// CB_DEFAULT_SETTINGS onto globalThis, so the wire format has exactly one
+// definition. i18n first, because protocol.js resolves the tag labels through
+// it and a missing CB_T would leave them in English here alone.
+import '../common/i18n.js';
 import '../common/protocol.js';
 
 const P = globalThis.CB_PROTOCOL;
+// Only the errors that surface in the popup or on the Activity page go through
+// this. Log lines behind settings.debug stay in English: nobody reads them but
+// whoever is debugging, and a translated log is a log that cannot be searched.
+const T = globalThis.CB_T;
 const KEYS = globalThis.CB_KEYS;
 const modeOf = globalThis.CB_MODE_OF;
 const DEFAULTS = globalThis.CB_DEFAULT_SETTINGS;
@@ -77,13 +84,21 @@ async function setLocal(key, value) {
 // permanently -- through a successful block, through signing back in, through
 // turning platform blocking off entirely. Stamping the time makes a stale one
 // obvious; clearing on success makes it stop being stale.
-function noteError(stats, detail) {
+//
+// The optional `code` is the machine-readable half. Now that the message is
+// translated, no reader of it may test what it says -- the popup used to match
+// /Signed out of the site/ to decide whether a complaint had gone stale, and
+// that test is false in every locale but one.
+function noteError(stats, detail, code) {
   stats.lastError = String(detail || '').slice(0, 300);
   stats.lastErrorAt = Date.now();
+  if (code) stats.lastErrorCode = code;
+  else delete stats.lastErrorCode;
 }
 function clearError(stats) {
   delete stats.lastError;
   delete stats.lastErrorAt;
+  delete stats.lastErrorCode;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,13 +453,13 @@ async function seedServerTargets(record) {
 async function refreshBlocklist(force) {
   const settings = await getSettings();
   if (!settings.listUrl) {
-    return { ok: false, error: 'No blocklist URL configured. Set one in the extension options.' };
+    return { ok: false, error: T('sw_noListUrl') };
   }
   if (!(await hasHostPermission(settings.listUrl))) {
     return {
       ok: false,
       needsPermission: true,
-      error: 'This browser has no permission for that address. The built-in list address is always permitted, so this only happens when listUrl has been pointed somewhere else.'
+      error: T('sw_noListPermission')
     };
   }
 
@@ -488,7 +503,7 @@ async function refreshBlocklist(force) {
     res = await fetch(listUrl, { method: 'GET', headers, cache: 'no-cache' });
   } catch (e) {
     await bumpStat('fetchErrors');
-    return { ok: false, error: 'Fetch failed: ' + (e && e.message) };
+    return { ok: false, error: T('sw_fetchFailed', (e && e.message) || e) };
   }
 
   if (res.status === 304 && prev) {
@@ -498,7 +513,7 @@ async function refreshBlocklist(force) {
   }
   if (!res.ok) {
     await bumpStat('fetchErrors');
-    return { ok: false, error: 'Server returned HTTP ' + res.status };
+    return { ok: false, error: T('sw_httpStatus', res.status) };
   }
 
   let payload;
@@ -507,7 +522,7 @@ async function refreshBlocklist(force) {
   catch (e) {
     // Also accept a plain newline-delimited list of ids.
     const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    if (!lines.length) return { ok: false, error: 'Response was neither JSON nor a line-delimited list' };
+    if (!lines.length) return { ok: false, error: T('sw_notAList') };
     payload = lines;
   }
 
@@ -535,7 +550,7 @@ async function refreshBlocklist(force) {
     (typeof payload === 'object' && ['ids', 'usernames', 'blocked', 'entries', 'list', 'users', 'data']
       .some(k => k in payload)));
   if (!looksLikeList) {
-    return { ok: false, error: 'Response did not look like a blocklist (wrong URL?)' };
+    return { ok: false, error: T('sw_notABlocklist') };
   }
 
   // Ranked cold targets, if the list carries any and the user allows them.
@@ -962,13 +977,13 @@ async function reportResult(info) {
     delete failures[key];
     cooldowns[key] = now + 10 * 60 * 1000;
     stats.pausedUntil = now + 15 * 60 * 1000;
-    noteError(stats, 'Signed out of the site -- platform blocking paused. Sign in again, then resume.');
+    noteError(stats, T('sw_signedOutPaused'), 'signed-out');
   }
   if (rateLimited) stats.pausedUntil = now + 20 * 60 * 1000;
   if (checkpoint) {
     stats.pausedUntil = now + 6 * 3600 * 1000;
     stats.halted = true;
-    noteError(stats, 'Account checkpoint detected. Platform blocking paused; resolve the challenge on the site.');
+    noteError(stats, T('sw_checkpoint'), 'checkpoint');
     await setSettings({ platformBlockEnabled: false });
     try {
       await chrome.action.setBadgeText({ text: '!' });
@@ -1050,7 +1065,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
       case P.SW.GET_BLOCKLIST: {
         const bl = await getLocal(KEYS.BLOCKLIST, null);
-        respond(bl ? { ok: true, blocklist: bl } : { ok: false, error: 'no blocklist cached yet' });
+        respond(bl ? { ok: true, blocklist: bl } : { ok: false, error: T('sw_noBlocklistCached') });
         break;
       }
 
@@ -1209,11 +1224,9 @@ function reportKeyFor(platform, profileId, username) {
  */
 async function firestoreSubmitReport(settings, payload, reporter, baseOverride) {
   const base = baseOverride || firestoreDocsBase(settings.listUrl);
-  if (!base) return { ok: false, error: 'Could not derive the Firestore base from the list URL.' };
+  if (!base) return { ok: false, error: T('sw_noFirestoreBase') };
   if (!(await hasHostPermission(base + '/'))) {
-    return { ok: false, needsPermission: true,
-             error: 'No permission for that address. Reports go to whichever backend ' +
-                    'listUrl names, and this one is not a permitted origin.' };
+    return { ok: false, needsPermission: true, error: T('sw_noReportPermission') };
   }
 
   const platform = payload.platform;
@@ -1231,7 +1244,7 @@ async function firestoreSubmitReport(settings, payload, reporter, baseOverride) 
   const profileId = ID_RE.test(String(payload.profileId || '')) ? String(payload.profileId) : null;
   const username = normUsername(payload.username) || null;
   if (!profileId && !username) {
-    return { ok: false, error: 'Need a numeric profile id or a username to report.' };
+    return { ok: false, error: T('sw_needTarget') };
   }
   const target = profileId || ('@' + username);
   const reporterHash = 'acct_' + (await sha256Hex(reporter)).slice(0, 24);
@@ -1275,7 +1288,7 @@ async function firestoreSubmitReport(settings, payload, reporter, baseOverride) 
       body: JSON.stringify(body)
     });
   } catch (e) {
-    return { ok: false, error: 'Could not reach Firestore: ' + (e && e.message) };
+    return { ok: false, error: T('sw_firestoreUnreachable', (e && e.message) || e) };
   }
 
   const list = await getLocal(KEYS.BLOCKLIST, null);
@@ -1289,8 +1302,8 @@ async function firestoreSubmitReport(settings, payload, reporter, baseOverride) 
   }
   if (!res.ok) {
     return { ok: false, error: res.status === 403
-      ? 'The server rules refused this report.'
-      : 'Firestore returned HTTP ' + res.status };
+      ? T('sw_rulesRefused')
+      : T('sw_firestoreHttp', res.status) };
   }
 
   const reported = await getLocal(KEYS.REPORTED, {});
@@ -1303,11 +1316,9 @@ async function firestoreSubmitReport(settings, payload, reporter, baseOverride) 
 async function submitReport(payload) {
   const settings = await getSettings();
   const base = await apiBase(settings);
-  if (!base) return { ok: false, error: 'No server configured. Set the blocklist URL in options.' };
+  if (!base) return { ok: false, error: T('sw_noServer') };
   if (!(await hasHostPermission(base + '/'))) {
-    return { ok: false, needsPermission: true,
-             error: 'No permission for that address. Reports go to whichever backend ' +
-                    'listUrl names, and this one is not a permitted origin.' };
+    return { ok: false, needsPermission: true, error: T('sw_noReportPermission') };
   }
 
   // Refused here as well as at the server. Sending it anyway would only earn a
@@ -1315,8 +1326,7 @@ async function submitReport(payload) {
   const reporter = reporterRef(payload.platform, payload.viewerId);
   if (!reporter) {
     return { ok: false, signedOut: true,
-             error: 'Sign in to ' + (payload.platform === 'facebook' ? 'Facebook' : 'Threads') +
-                    ' before reporting.' };
+             error: T('sw_signInBefore', payload.platform === 'facebook' ? 'Facebook' : 'Threads') };
   }
 
   // Reports go to Firestore whenever a Firestore documents base is in play --
@@ -1357,13 +1367,13 @@ async function submitReport(payload) {
     res = await fetch(base + '/reports', { method: 'POST', headers, body: JSON.stringify(body) });
     json = await res.json();
   } catch (e) {
-    return { ok: false, error: 'Could not reach the server: ' + (e && e.message) };
+    return { ok: false, error: T('sw_serverUnreachable', (e && e.message) || e) };
   }
   if (!res.ok || !json || !json.ok) {
     if (json && json.error === 'signed-out') {
-      return { ok: false, signedOut: true, error: json.message || 'Sign in before reporting.' };
+      return { ok: false, signedOut: true, error: json.message || T('sw_signInGeneric') };
     }
-    return { ok: false, error: (json && json.error) || ('server returned HTTP ' + res.status) };
+    return { ok: false, error: (json && json.error) || T('sw_serverHttp', res.status) };
   }
 
   const cache = await getLocal(KEYS.REPORTED, {});

@@ -184,9 +184,13 @@ h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing
 .state.clear  { color: var(--muted); }
 .state.you    { color: var(--accent); }
 
+/* Wraps rather than clipping. The note and the links fit side by side in
+   English and do not in Vietnamese, where "2 trong danh sách của bạn" lost its
+   sync time to an ellipsis -- the one thing that line exists to say. Given a
+   second row it fits in both; the ellipsis stays as the last resort. */
 footer {
   margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
-  gap: 10px;
+  gap: 4px 10px; flex-wrap: wrap;
 }
 .foot-note { color: var(--muted); font-size: 11px; overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }

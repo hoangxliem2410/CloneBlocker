@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Clone Blocker</title>
+  <title data-i18n="appName">Clone Blocker</title>
   <link rel="stylesheet" href="../ui/ui.css">
 </head>
 <body class="popup">
   <header class="hd">
-    <h1>Clone Blocker</h1>
+    <h1 data-i18n="appName"></h1>
     <span id="platform" class="pill">—</span>
   </header>
 
@@ -17,8 +17,8 @@
     <div id="who" class="who">—</div>
     <div id="whoState" class="state"></div>
 
-    <button id="reportProfile" class="btn primary">Report as a clone</button>
-    <button id="blockProfile" class="btn hidden">Block now</button>
+    <button id="reportProfile" class="btn primary" data-i18n="popup_reportButton"></button>
+    <button id="blockProfile" class="btn hidden" data-i18n="popup_blockButton"></button>
     <p class="note" id="actionNote"></p>
   </section>
 
@@ -27,11 +27,11 @@
        owns it and the popup keeps to the work that is actually in flight. -->
   <section class="card">
     <div class="row">
-      <span class="k">Hidden on this page</span>
+      <span class="k" data-i18n="popup_hiddenCountLabel"></span>
       <span class="v" id="hiddenCount">—</span>
     </div>
     <div class="row">
-      <span class="k">Waiting to be blocked</span>
+      <span class="k" data-i18n="popup_queuedCountLabel"></span>
       <span class="v" id="queuedCount">—</span>
     </div>
     <p class="note" id="blockingNote"></p>
@@ -41,12 +41,13 @@
   <footer>
     <span id="listLine" class="foot-note">—</span>
     <span class="foot-links">
-      <a href="#" id="refresh">Refresh</a>
-      <a href="#" id="openActivity">Activity</a>
-      <a href="#" id="openOptions">Settings</a>
+      <a href="#" id="refresh" data-i18n="popup_refreshLink"></a>
+      <a href="#" id="openActivity" data-i18n="popup_activityLink"></a>
+      <a href="#" id="openOptions" data-i18n="popup_settingsLink"></a>
     </span>
   </footer>
 
+  <script src="../common/i18n.js"></script>
   <script src="../common/protocol.js"></script>
   <script src="popup.js"></script>
 </body>

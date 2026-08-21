@@ -14,16 +14,17 @@
   'use strict';
 
   const P = globalThis.CB_PROTOCOL;
+  const T = globalThis.CB_T;
   const $ = (id) => document.getElementById(id);
 
   function sw(type, payload) {
     return new Promise((resolve) => {
       let settled = false;
       const done = (v) => { if (!settled) { settled = true; resolve(v); } };
-      setTimeout(() => done({ ok: false, error: 'service worker did not respond' }), 10000);
+      setTimeout(() => done({ ok: false, error: T('common_workerSilent') }), 10000);
       chrome.runtime.sendMessage({ type, payload }, (res) => {
         if (chrome.runtime.lastError) { done({ ok: false, error: chrome.runtime.lastError.message }); return; }
-        done(res || { ok: false, error: 'no response' });
+        done(res || { ok: false, error: T('common_noResponse') });
       });
     });
   }
@@ -73,14 +74,16 @@
   }
 
   function ago(ts) {
-    if (!ts) return 'never';
+    if (!ts) return T('time_never');
     const s = Math.floor((Date.now() - ts) / 1000);
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
+    if (s < 60) return T('time_secondsAgo', s);
+    if (s < 3600) return T('time_minutesAgo', Math.floor(s / 60));
+    if (s < 86400) return T('time_hoursAgo', Math.floor(s / 3600));
+    return T('time_daysAgo', Math.floor(s / 86400));
   }
-  const inMs = (ms) => ms < 60000 ? Math.ceil(ms / 1000) + 's' : Math.ceil(ms / 60000) + 'm';
+  const inMs = (ms) => ms < 60000
+    ? T('time_seconds', Math.ceil(ms / 1000))
+    : T('time_minutes', Math.ceil(ms / 60000));
 
   let filter = '';
   let state = null;
@@ -125,17 +128,17 @@
   function reasonFor(entry) {
     const bits = [];
     if (entry.warm) {
-      bits.push('on your blocklist · seen on screen');
+      bits.push(T('activity_reasonWarm'));
     } else {
-      bits.push('suggested from the list');
+      bits.push(T('activity_reasonSuggested'));
       const w = entry.why;
       if (w) {
-        if (w.velocity7d) bits.push(`active ${w.velocity7d}× in 7 days`);
-        if (w.recentDays === 0) bits.push('reported today');
-        else if (w.recentDays != null && w.recentDays <= 7) bits.push(`reported ${w.recentDays}d ago`);
-        if (w.region >= 0.5) bits.push('active near you');
+        if (w.velocity7d) bits.push(T('activity_reasonVelocity', w.velocity7d));
+        if (w.recentDays === 0) bits.push(T('activity_reasonToday'));
+        else if (w.recentDays != null && w.recentDays <= 7) bits.push(T('activity_reasonDaysAgo', w.recentDays));
+        if (w.region >= 0.5) bits.push(T('activity_reasonNearYou'));
       }
-      if (entry.rank != null) bits.push('rank ' + entry.rank);
+      if (entry.rank != null) bits.push(T('activity_reasonRank', entry.rank));
     }
     return bits.join(' · ');
   }
@@ -169,17 +172,21 @@
     const err = stats.lastError;
     const oldErr = stats.lastErrorAt && (Date.now() - stats.lastErrorAt) > 3600 * 1000;
     if (pausedFor) {
-      b.textContent = (stats.halted
-        ? 'Halted after an account checkpoint. Resolve it on the site, then use Reset queue & stats in Settings.'
-        : 'Paused by rate limiting') + ' — resumes in ' + inMs(pausedFor) + '.';
+      // Whole sentences, both of them, rather than one stem with the resume
+      // time bolted on: where "resumes in" belongs relative to the rest is a
+      // question only the translation can answer.
+      b.textContent = T(stats.halted ? 'activity_haltedResumes' : 'activity_pausedResumes',
+        inMs(pausedFor));
       b.className = 'banner warn';
     } else if (err && !oldErr) {
       b.textContent = err + (stats.lastErrorAt ? '  (' + ago(stats.lastErrorAt) + ')' : '');
       b.className = 'banner err';
     } else if (needsTab) {
-      b.textContent = (cold === 1 ? '1 profile from the list is' : cold + ' profiles from the list are') +
-        ' waiting to be blocked. Active blocking runs inside a Facebook or Threads tab — ' +
-        'open one and leave it open.';
+      // One message per case rather than a count spliced into a sentence: the
+      // singular and the plural of this differ by more than an 's' in English
+      // and by nothing at all in Vietnamese, and neither fits a fragment.
+      b.textContent = cold === 1
+        ? T('activity_needsTabOne') : T('activity_needsTabMany', cold);
       b.className = 'banner warn';
     } else {
       b.className = 'banner hidden';
@@ -194,25 +201,28 @@
       host.appendChild(el('div', 'vv' + (cls ? ' ' + cls : ''), v));
     };
     if (!bl) {
-      add('source', 'no list configured — open Settings');
+      add(T('activity_syncSource'), T('activity_noList'));
     } else {
       let src = bl.source || '';
       try { src = new URL(bl.source).host + new URL(bl.source).pathname; } catch (e) {}
-      add('source', src);
+      add(T('activity_syncSource'), src);
       // The etag is a Firestore updateTime (an ISO instant) or a CDN hash;
       // show the one as a time and the other as a short fingerprint.
       const tag = String(bl.etag || '').replace(/"/g, '');
       const ver = !tag ? '' : /^\d{4}-\d{2}-\d{2}T/.test(tag)
-        ? 'list updated ' + tag.slice(0, 16).replace('T', ' ') + ' UTC'
-        : 'version ' + tag.slice(0, 10);
-      add('last synced', ago(bl.fetchedAt) + (ver ? '  ·  ' + ver : ''));
-      add('hide list', `${bl.ids.length} ids + ${bl.usernames.length} usernames — hidden everywhere, costs nothing`);
-      add('block targets', bl.targetsAvailable
-        ? `${(bl.targets || []).length} taken of ${bl.targetsAvailable} suggested`
+        ? T('activity_listUpdated', tag.slice(0, 16).replace('T', ' '))
+        : T('activity_listVersion', tag.slice(0, 10));
+      add(T('activity_syncLastSynced'), ago(bl.fetchedAt) + (ver ? '  ·  ' + ver : ''));
+      add(T('activity_syncHideList'),
+        T('activity_hideListValue', bl.ids.length, bl.usernames.length));
+      add(T('activity_syncBlockTargets'), bl.targetsAvailable
+        ? T('activity_targetsTaken', (bl.targets || []).length, bl.targetsAvailable)
         : String((bl.targets || []).length));
-      if ((bl.pending || []).length) add('awaiting review', String(bl.pending.length) + ' reported, not yet decided');
+      if ((bl.pending || []).length) {
+        add(T('activity_syncAwaitingReview'), T('activity_awaitingReviewValue', bl.pending.length));
+      }
     }
-    add('refresh every', (s.settings.refreshMinutes || 60) + ' min');
+    add(T('activity_syncRefreshEvery'), T('activity_refreshEveryValue', s.settings.refreshMinutes || 60));
     const rows = $('syncRows');
     rows.textContent = '';
     rows.appendChild(host);
@@ -228,8 +238,9 @@
     $('tQueued').textContent = String(queued);
     $('tHour').textContent = blocksHour + '/' + (s.settings.maxBlocksPerHour || '—');
     $('tDay').textContent = blocksDay + '/' + (s.settings.maxBlocksPerDay || '—');
-    $('tFailed').textContent = String(stats.failed || 0) +
-      (stats.abandoned ? ' +' + stats.abandoned + ' gave up' : '');
+    $('tFailed').textContent = stats.abandoned
+      ? T('activity_failedGaveUp', stats.failed || 0, stats.abandoned)
+      : String(stats.failed || 0);
     $('tHidden').textContent = s.blocklist ? String(s.blocklist.count || 0) : '—';
   }
 
@@ -256,13 +267,13 @@
     const cold = (ctx && ctx.cold) || 0;
     const bits = [];
     if (!s.settings.platformBlockEnabled) {
-      bits.push('blocking is paused — these wait until it is switched back on');
+      bits.push(T('activity_queuePaused'));
     } else {
-      if (s.settings.platformBlockDryRun) bits.push('dry run — simulating, sending nothing');
+      if (s.settings.platformBlockDryRun) bits.push(T('activity_queueDryRun'));
       if (cold && globalThis.CB_MODE_OF(s.settings) === 'passive') {
-        bits.push(cold + ' from the list — paused by passive mode');
+        bits.push(T('activity_queuePassive', cold));
       } else if (ctx && ctx.needsTab) {
-        bits.push(cold + ' from the list need a Facebook or Threads tab open');
+        bits.push(T('activity_queueNeedsTab', cold));
       }
     }
     $('queueNote').textContent = bits.join(' · ');
@@ -272,18 +283,18 @@
       const cool = cooldowns[key] && cooldowns[key] > now ? cooldowns[key] - now : 0;
       const meta = (s.blocklist && (s.blocklist.targets || []).find(t => String(t.id) === String(e.id))) || {};
       host.appendChild(row(
-        nameFor(e.id, e.platform) || 'profile ' + e.id,
+        nameFor(e.id, e.platform) || T('common_profile', e.id),
         reasonFor({ warm: e.warm, rank: e.rank, why: meta.why }),
         [
           chip(e.platform, 'plat'),
           tagChip(e.id),
-          chip(e.warm ? 'seen on screen' : 'suggested', e.warm ? 'warm' : 'cold'),
-          cool ? chip('retry in ' + inMs(cool), 'warn') : null,
-          failures[key] ? chip(failures[key] + ' failed tries', 'bad') : null
+          chip(T(e.warm ? 'activity_chipSeen' : 'activity_chipSuggested'), e.warm ? 'warm' : 'cold'),
+          cool ? chip(T('activity_chipRetryIn', inMs(cool)), 'warn') : null,
+          failures[key] ? chip(T('activity_chipFailedTries', failures[key]), 'bad') : null
         ]));
     }
     if (entries.length > 100) {
-      host.appendChild(el('p', 'note', '… and ' + (entries.length - 100) + ' more'));
+      host.appendChild(el('p', 'note', T('activity_andMore', entries.length - 100)));
     }
   }
 
@@ -299,13 +310,13 @@
 
     for (const e of log.slice(0, 200)) {
       host.appendChild(row(
-        nameFor(e.id, e.platform) || 'profile ' + e.id,
+        nameFor(e.id, e.platform) || T('common_profile', e.id),
         reasonFor(e) + (e.detail ? ' — ' + e.detail : ''),
         [
           chip(e.platform, 'plat'),
           tagChip(e.id),
-          e.dryRun ? chip('dry run', 'dry')
-            : e.ok ? chip('blocked', 'ok') : chip('failed', 'bad'),
+          e.dryRun ? chip(T('activity_chipDryRun'), 'dry')
+            : e.ok ? chip(T('activity_chipBlocked'), 'ok') : chip(T('activity_chipFailed'), 'bad'),
           chip(ago(e.at), 'time')
         ]));
     }
@@ -339,10 +350,10 @@
 
   $('refresh').addEventListener('click', async () => {
     $('refresh').disabled = true;
-    $('refresh').textContent = 'Refreshing…';
+    $('refresh').textContent = T('activity_refreshing');
     await sw(P.SW.REFRESH_NOW);
     $('refresh').disabled = false;
-    $('refresh').textContent = 'Refresh now';
+    $('refresh').textContent = T('activity_refreshNow');
     render();
   });
 

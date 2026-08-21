@@ -22,6 +22,7 @@
   'use strict';
 
   const P = globalThis.CB_PROTOCOL;
+  const T = globalThis.CB_T;
   const bridge = globalThis.CB_BRIDGE;
   const identity = globalThis.CB_IDENTITY;
 
@@ -221,7 +222,7 @@
     chip.className = 'chip';
     chip.textContent = '';
     const label = document.createElement('span');
-    label.textContent = 'Report';
+    label.textContent = T('report_chip');
     chip.appendChild(label);
 
     const r = anchor.getBoundingClientRect();
@@ -239,10 +240,11 @@
       if (!chip || currentAnchor !== anchor) return;
       if (st && st.blocked) {
         chip.classList.add('blocked');
-        label.textContent = 'Blocked';
+        label.textContent = T('report_chipBlocked');
       } else if (st && st.status === 'pending') {
         chip.classList.add('reported');
-        label.textContent = 'Reported' + (st.count > 1 ? ' ×' + st.count : '');
+        label.textContent = st.count > 1
+          ? T('report_chipReportedCount', st.count) : T('report_chipReported');
       }
     }).catch(() => {});
   }
@@ -306,44 +308,48 @@
 
     const sheet = document.createElement('div');
     sheet.className = 'sheet';
+    // The skeleton carries data-i18n keys and no text of its own, so this
+    // dialog picks up a language the same way the extension's own pages do --
+    // and a string added here later cannot quietly skip translation.
     sheet.innerHTML = `
-      <div class="hd">Report a clone account</div>
+      <div class="hd" data-i18n="report_sheetTitle"></div>
       <div class="bd">
         <div class="who">
           <span class="n"></span>
           <span class="m"></span>
         </div>
         <div class="post" hidden>
-          <div class="plabel">Post being reported</div>
+          <div class="plabel" data-i18n="report_postLabel"></div>
           <div class="psummary"></div>
           <a class="purl" target="_blank" rel="noreferrer noopener"></a>
         </div>
-        <label for="reason">Why are you reporting this account?</label>
+        <label for="reason" data-i18n="report_reasonLabel"></label>
         <select id="reason"></select>
-        <label for="note">Anything that would help a reviewer? (optional)</label>
-        <textarea id="note" placeholder="e.g. copies the photos and bio of @realaccount"></textarea>
-        <div class="note">This is sent to your own review server, not to Facebook or Threads.
-          An admin decides whether it goes on the blocklist.</div>
+        <label for="note" data-i18n="report_noteLabel"></label>
+        <textarea id="note" data-i18n-placeholder="report_notePlaceholder"></textarea>
+        <div class="note" data-i18n="report_disclaimer"></div>
         <div class="err" hidden></div>
       </div>
       <div class="ft">
-        <button class="cancel">Cancel</button>
-        <button class="primary submit">Send report</button>
+        <button class="cancel" data-i18n="report_cancel"></button>
+        <button class="primary submit" data-i18n="report_submit"></button>
       </div>`;
+    globalThis.CB_APPLY_I18N(sheet);
     modal.appendChild(sheet);
     root.appendChild(modal);
 
     const $ = (s) => sheet.querySelector(s);
-    $('.who .n').textContent = name || (ident.username ? '@' + ident.username : 'Unknown profile');
+    $('.who .n').textContent = name ||
+      (ident.username ? '@' + ident.username : T('report_unknownProfile'));
     $('.who .m').textContent = [
       ident.username ? '@' + ident.username : null,
-      ident.profileId ? 'id ' + ident.profileId : 'no numeric id resolved yet',
+      ident.profileId ? T('report_idValue', ident.profileId) : T('report_noNumericId'),
       PLATFORM
     ].filter(Boolean).join('  ·  ');
 
     if (ctx.summary || ctx.postUrl) {
       $('.post').hidden = false;
-      $('.psummary').textContent = ctx.summary || '(no text in this post)';
+      $('.psummary').textContent = ctx.summary || T('report_noPostText');
       if (ctx.postUrl) {
         $('.purl').textContent = ctx.postUrl;
         $('.purl').href = ctx.postUrl;
@@ -364,8 +370,7 @@
     if (!bridge.state.viewerId) {
       const err = $('.err');
       err.hidden = false;
-      err.textContent = 'Sign in to ' + (PLATFORM === 'facebook' ? 'Facebook' : 'Threads') +
-                        ' before reporting. Reports have to carry the account that filed them.';
+      err.textContent = T('report_signIn', PLATFORM === 'facebook' ? 'Facebook' : 'Threads');
       $('.submit').disabled = true;
     }
 
@@ -373,7 +378,7 @@
     $('.submit').addEventListener('click', async () => {
       const btn = $('.submit');
       const err = $('.err');
-      btn.disabled = true; btn.textContent = 'Sending…';
+      btn.disabled = true; btn.textContent = T('report_sending');
       err.hidden = true;
 
       const res = await bridge.sw(P.SW.SUBMIT_REPORT, {
@@ -393,20 +398,41 @@
       });
 
       if (!res || !res.ok) {
-        btn.disabled = false; btn.textContent = 'Send report';
+        btn.disabled = false; btn.textContent = T('report_submit');
         err.hidden = false;
-        err.textContent = (res && res.error) || 'Could not send the report.';
+        err.textContent = (res && res.error) || T('report_sendFailed');
         return;
       }
-      sheet.querySelector('.bd').innerHTML =
-        '<div class="ok">' +
-        (res.duplicate ? 'You had already reported this account.' : 'Report sent. Thank you.') +
-        '</div><div class="note">Status: <b>' + res.status + '</b>' +
-        '<span class="badge">' + res.count + ' report' + (res.count === 1 ? '' : 's') + '</span>' +
-        '<br>An admin reviews it before anything is added to the blocklist.</div>';
-      sheet.querySelector('.ft').innerHTML = '';
+      // Built out of nodes rather than out of a string of HTML, which is what
+      // lets the status word and the count be separate translated messages
+      // instead of fragments concatenated around markup.
+      const bd = sheet.querySelector('.bd');
+      bd.textContent = '';
+      const ok = document.createElement('div');
+      ok.className = 'ok';
+      ok.textContent = T(res.duplicate ? 'report_duplicate' : 'report_sent');
+      const foot = document.createElement('div');
+      foot.className = 'note';
+      foot.appendChild(document.createTextNode(T('report_statusLabel') + ' '));
+      const status = document.createElement('b');
+      // Server vocabulary, translated where we know the word and shown raw
+      // where we do not -- a status nobody has a message for is still better
+      // read than swallowed.
+      status.textContent = res.status === 'pending' ? T('report_statusPending')
+        : res.status === 'approved' ? T('report_statusApproved') : String(res.status);
+      foot.appendChild(status);
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = res.count === 1
+        ? T('report_countOne') : T('report_countMany', res.count);
+      foot.appendChild(badge);
+      foot.appendChild(document.createElement('br'));
+      foot.appendChild(document.createTextNode(T('report_adminReviews')));
+      bd.appendChild(ok);
+      bd.appendChild(foot);
+      sheet.querySelector('.ft').textContent = '';
       const done = document.createElement('button');
-      done.className = 'primary'; done.textContent = 'Done';
+      done.className = 'primary'; done.textContent = T('report_done');
       done.addEventListener('click', closeModal);
       sheet.querySelector('.ft').appendChild(done);
     });
@@ -453,9 +479,9 @@
   function reportCurrentProfile() {
     let anchor = null;
     const ident = identityFromLocation();
-    if (!ident) return { ok: false, error: 'This page is not a profile.' };
+    if (!ident) return { ok: false, error: T('report_notAProfile') };
     const enriched = enrich(ident);
-    if (isViewer(enriched)) return { ok: false, error: 'That is your own profile.' };
+    if (isViewer(enriched)) return { ok: false, error: T('report_ownProfile') };
     // Prefer a real byline anchor so the display name comes out right.
     anchor = document.querySelector('a[href*="' + (ident.username || ident.profileId) + '"]');
     openModal(enriched, anchor);
@@ -523,7 +549,7 @@
     svg.setAttribute('stroke-width', '2');
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
-    svg.setAttribute('aria-label', 'Report clone');
+    svg.setAttribute('aria-label', T('report_iconLabel'));
     const flag = document.createElementNS(ns, 'path');
     flag.setAttribute('d', 'M4 21V4.5C4 4.5 6 3 9.5 3s5 1.5 8.5 1.5c1 0 2-.2 2-.2v9s-1 .5-2.5.5c-3.5 0-5-1.5-8.5-1.5S4 14 4 14');
     svg.appendChild(flag);
@@ -560,8 +586,8 @@
     btn.setAttribute(MARK_ATTR, '1');
     btn.setAttribute('role', 'button');
     btn.setAttribute('tabindex', '0');
-    btn.setAttribute('aria-label', 'Report clone account');
-    btn.title = 'Report clone account';
+    btn.setAttribute('aria-label', T('report_buttonLabel'));
+    btn.title = T('report_buttonLabel');
     btn.style.cssText = [
       'display:inline-flex', 'align-items:center', 'justify-content:center',
       'gap:4px', 'height:36px', 'min-width:36px', 'padding:0 8px',

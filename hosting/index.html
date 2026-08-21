@@ -47,8 +47,11 @@
        — This page needs JavaScript to read the list.</p>
   </noscript>
 
-  <!-- No module, no framework, no build step: one classic script, served from
-       this origin, which is all the CSP in firebase.json permits. -->
+  <!-- No module, no framework, no build step: two classic scripts, served from
+       this origin, which is all the CSP in firebase.json permits. The strings
+       load first because public.js has none of its own -- it reads every word
+       it says out of the shared dictionary through CB_T. -->
+  <script src="i18n.js"></script>
   <script src="public.js"></script>
 </body>
 </html>

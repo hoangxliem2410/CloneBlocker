@@ -17,6 +17,7 @@
   'use strict';
 
   const P = globalThis.CB_PROTOCOL;
+  const T = globalThis.CB_T;
   const $ = (id) => document.getElementById(id);
   const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
@@ -26,21 +27,26 @@
       const done = (v) => { if (!settled) { settled = true; resolve(v); } };
       // A service worker that keeps the port open but never responds would
       // otherwise hang the popup with no feedback at all.
-      setTimeout(() => done({ ok: false, error: 'service worker did not respond' }), 10000);
+      setTimeout(() => done({ ok: false, error: T('common_workerSilent') }), 10000);
       chrome.runtime.sendMessage({ type, payload }, (res) => {
         if (chrome.runtime.lastError) { done({ ok: false, error: chrome.runtime.lastError.message }); return; }
-        done(res || { ok: false, error: 'no response' });
+        done(res || { ok: false, error: T('common_noResponse') });
       });
     });
   }
 
   function ago(ts) {
-    if (!ts) return 'never';
+    if (!ts) return T('time_never');
     const s = Math.floor((Date.now() - ts) / 1000);
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
+    if (s < 60) return T('time_secondsAgo', s);
+    if (s < 3600) return T('time_minutesAgo', Math.floor(s / 60));
+    if (s < 86400) return T('time_hoursAgo', Math.floor(s / 3600));
+    return T('time_daysAgo', Math.floor(s / 86400));
+  }
+
+  /** A pause, said in whichever unit reads better at that length. */
+  function forMinutes(mins) {
+    return mins > 90 ? T('time_hours', Math.ceil(mins / 60)) : T('time_minutes', mins);
   }
 
   async function activeTab() {
@@ -103,7 +109,7 @@
   function nameOf(profile) {
     if (!profile) return null;
     if (profile.username) return '@' + profile.username;
-    if (profile.profileId) return 'profile ' + profile.profileId;
+    if (profile.profileId) return T('common_profile', profile.profileId);
     return null;
   }
 
@@ -116,35 +122,35 @@
     const bl = state && state.blocklist;
 
     $('listLine').textContent = bl
-      ? `${bl.ids.length + bl.usernames.length} on your list · ${ago(bl.fetchedAt)}`
-      : 'list not loaded';
+      ? T('popup_listLine', bl.ids.length + bl.usernames.length, ago(bl.fetchedAt))
+      : T('popup_listNotLoaded');
 
     const tab = await activeTab();
     current.tab = tab;
     let status = null;
 
     if (!tab) {
-      $('platform').textContent = 'not a supported site';
-      $('who').textContent = 'Not on Facebook or Threads';
+      $('platform').textContent = T('popup_platformUnsupported');
+      $('who').textContent = T('popup_notOnSite');
       $('whoState').textContent = '';
       $('whoState').className = 'state';
       show('reportProfile', false);
       show('blockProfile', false);
-      $('actionNote').textContent = 'Open a Facebook or Threads profile to report or block it.';
+      $('actionNote').textContent = T('popup_openProfileNote');
       $('hiddenCount').textContent = '—';
     } else {
       status = await tabStatus(tab);
       current.platform = (status && status.platform) || null;
-      $('platform').textContent = current.platform || 'loading…';
+      $('platform').textContent = current.platform || T('popup_platformLoading');
       $('hiddenCount').textContent = status && status.dom ? String(status.dom.hidden) : '—';
 
       if (!status) {
-        $('who').textContent = 'Page not ready';
+        $('who').textContent = T('popup_pageNotReady');
         $('whoState').textContent = '';
         $('whoState').className = 'state';
         show('reportProfile', false);
         show('blockProfile', false);
-        $('actionNote').textContent = 'Reload the page and open this again.';
+        $('actionNote').textContent = T('popup_reloadNote');
       } else {
         renderPage(status, settings);
       }
@@ -163,20 +169,19 @@
     const label = nameOf(profile);
 
     if (!label) {
-      $('who').textContent = 'No profile on this page';
+      $('who').textContent = T('popup_noProfile');
       $('whoState').textContent = '';
       $('whoState').className = 'state';
       show('reportProfile', false);
       show('blockProfile', false);
-      $('actionNote').textContent =
-        'Open someone’s profile, or hover any name in the feed and use the Report chip.';
+      $('actionNote').textContent = T('popup_noProfileNote');
       return;
     }
 
     $('who').textContent = label;
 
     if (profile.isViewer) {
-      $('whoState').textContent = 'This is you';
+      $('whoState').textContent = T('popup_thisIsYou');
       $('whoState').className = 'state you';
       show('reportProfile', false);
       show('blockProfile', false);
@@ -185,16 +190,16 @@
     }
 
     if (profile.listed) {
-      $('whoState').textContent = 'On your blocklist';
+      $('whoState').textContent = T('popup_listed');
       $('whoState').className = 'state listed';
     } else {
-      $('whoState').textContent = 'Not on your blocklist';
+      $('whoState').textContent = T('popup_notListed');
       $('whoState').className = 'state clear';
     }
 
     show('reportProfile', true);
-    $('reportProfile').textContent = profile.listed
-      ? 'Report again' : 'Report as a clone';
+    $('reportProfile').textContent = T(profile.listed
+      ? 'popup_reportAgainButton' : 'popup_reportButton');
 
     // Blocking needs a numeric target, and blocking someone whose profile is
     // open is the cheap case -- so this offer is only made when it can
@@ -202,7 +207,7 @@
     const canBlock = settings.platformBlockEnabled && !!profile.profileId;
     show('blockProfile', canBlock);
     if (canBlock) {
-      $('blockProfile').textContent = 'Block now';
+      $('blockProfile').textContent = T('popup_blockButton');
       $('blockProfile').disabled = false;
     }
 
@@ -210,12 +215,9 @@
     // it is only hidden" is misleading for someone who is not on the list at
     // all -- they are not being hidden either.
     if (settings.platformBlockEnabled && !profile.profileId) {
-      $('actionNote').textContent =
-        'Blocking needs this profile’s numeric ID, which the page has not revealed yet. ' +
-        'Scroll the profile once, or report it and let the server resolve it.';
+      $('actionNote').textContent = T('popup_needsProfileId');
     } else if (!settings.platformBlockEnabled && profile.listed) {
-      $('actionNote').textContent =
-        'Platform blocking is off, so this profile is hidden but not blocked.';
+      $('actionNote').textContent = T('popup_blockingOffHidden');
     } else {
       $('actionNote').textContent = '';
     }
@@ -240,21 +242,21 @@
     const note = $('blockingNote');
     note.className = 'note';
     if (pausedFor) {
-      note.textContent =
-        `Blocking paused for ${pausedFor > 90 ? Math.ceil(pausedFor / 60) + 'h' : pausedFor + 'm'}` +
-        (stats.halted ? ' after an account checkpoint. Resolve it on the site, then use ' +
-                        'Reset queue & stats in Settings.' : ' by rate limiting.');
+      // Two whole messages rather than one sentence with a swappable tail: a
+      // checkpoint and a rate limit ask different things of the reader, and a
+      // tail that has to graft onto a translated stem is the one shape no
+      // other language can be relied on to accept.
+      note.textContent = T(stats.halted ? 'popup_pausedCheckpoint' : 'popup_pausedRateLimit',
+        forMinutes(pausedFor));
     } else if (!on && counts.total) {
-      note.textContent = 'Blocking is paused, so these stay where they are.';
+      note.textContent = T('popup_queueParked');
     } else if (on && mode === 'passive' && cold) {
-      note.textContent = `${cold} of these came from the list — paused by passive mode, ` +
-        'which blocks only profiles you scroll past.';
+      note.textContent = T('popup_queuePassive', cold);
     } else if (needsTab) {
       note.className = 'note warn';
-      note.textContent = `${cold} of these came from the list — active blocking needs ` +
-        'a Facebook or Threads tab open.';
+      note.textContent = T('popup_queueNeedsTab', cold);
     } else if (on && counts.total) {
-      note.textContent = 'Paced in the background, a few at a time.';
+      note.textContent = T('popup_queuePacing');
     } else {
       note.textContent = '';
     }
@@ -263,7 +265,12 @@
     // signed-out complaint is plainly stale once the page reports a viewer,
     // and anything older than the last hour is history rather than status.
     const err = stats.lastError;
-    const staleSignedOut = err && /Signed out of the site/.test(err) && status && status.viewerId;
+    // The worker stamps a code now; the English test behind it is for stats
+    // written by a build that predates the code, whose message is in English
+    // whatever locale this popup is running in.
+    const signedOut = stats.lastErrorCode === 'signed-out' ||
+      /Signed out of the site/.test(err || '');
+    const staleSignedOut = err && signedOut && status && status.viewerId;
     const old = stats.lastErrorAt && (Date.now() - stats.lastErrorAt) > 3600 * 1000;
     if (err && !staleSignedOut && !old) {
       $('blockError').textContent = stats.lastErrorAt
@@ -283,11 +290,11 @@
     if (!current.tab) return;
     chrome.tabs.sendMessage(current.tab.id, { type: 'tab:report-current' }, (res) => {
       if (chrome.runtime.lastError) {
-        $('actionNote').textContent = 'Reload the page and try again.';
+        $('actionNote').textContent = T('popup_reloadAndRetry');
         return;
       }
       if (!res || !res.ok) {
-        $('actionNote').textContent = (res && res.error) || 'Could not identify a profile here.';
+        $('actionNote').textContent = (res && res.error) || T('popup_couldNotIdentify');
         return;
       }
       window.close();
@@ -298,7 +305,7 @@
     const p = current.profile;
     if (!p || !p.profileId || !current.platform) return;
     $('blockProfile').disabled = true;
-    $('blockProfile').textContent = 'Queueing…';
+    $('blockProfile').textContent = T('popup_blockQueueing');
     // warm: this profile is on screen right now, which is the pattern the
     // platform finds unremarkable, so it is paced normally rather than being
     // held to the cold ceiling.
@@ -311,20 +318,20 @@
       platform: current.platform, ids: [p.profileId], warm: true, userInitiated: true
     });
     if (res && res.ok !== false) {
-      $('blockProfile').textContent = 'Queued';
-      $('actionNote').textContent = 'Queued — it goes out in the next few seconds.';
+      $('blockProfile').textContent = T('popup_blockQueued');
+      $('actionNote').textContent = T('popup_queuedNote');
     } else {
       $('blockProfile').disabled = false;
-      $('blockProfile').textContent = 'Block now';
-      $('actionNote').textContent = (res && res.error) || 'Could not queue that block.';
+      $('blockProfile').textContent = T('popup_blockButton');
+      $('actionNote').textContent = (res && res.error) || T('popup_couldNotQueue');
     }
   });
 
   $('refresh').addEventListener('click', async (e) => {
     e.preventDefault();
-    $('listLine').textContent = 'refreshing…';
+    $('listLine').textContent = T('popup_refreshing');
     const res = await sw(P.SW.REFRESH_NOW);
-    if (!res.ok) $('listLine').textContent = res.error || 'refresh failed';
+    if (!res.ok) $('listLine').textContent = res.error || T('popup_refreshFailed');
     render();
   });
 

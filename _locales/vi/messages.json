@@ -1,0 +1,1011 @@
+{
+  "appName": {
+    "message": "Clone Blocker",
+    "description": "The product name. Shown in the Chrome Web Store listing, the extensions page, the toolbar tooltip and as the heading of the popup and the settings page. Never translated."
+  },
+  "appDesc": {
+    "message": "Ẩn các tài khoản giả mạo bạn trên Facebook và Threads, rồi chặn những tài khoản hoạt động mạnh nhất theo nhịp an toàn.",
+    "description": "The one-line store description, under the name in the Chrome Web Store listing and on chrome://extensions. Hard limit of 132 characters."
+  },
+
+  "tag_clone": {
+    "message": "Tài khoản giả mạo",
+    "description": "Kind of account. Offered as a reason in the in-page report sheet, as a tick box under 'Which kinds get blocked' in Settings, and as a chip on the Activity page."
+  },
+  "tag_impersonation": {
+    "message": "Mạo danh",
+    "description": "Kind of account: pretending to be a specific named person. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_scam": {
+    "message": "Lừa đảo",
+    "description": "Kind of account: after money or credentials. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_harassment": {
+    "message": "Quấy rối",
+    "description": "Kind of account: targeted abuse. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_spam": {
+    "message": "Spam",
+    "description": "Kind of account: bulk unwanted posting. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_redbull": {
+    "message": "Bò đỏ",
+    "description": "Kind of account: a state-aligned troll. 'Red bull' is a calque of the Vietnamese slang 'bò đỏ' and should be that phrase in Vietnamese. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+  "tag_other": {
+    "message": "Khác",
+    "description": "Kind of account: the bucket of last resort, for anything the other kinds do not cover. Offered as a report reason, a Settings tick box and an Activity chip."
+  },
+
+  "time_never": {
+    "message": "chưa bao giờ",
+    "description": "Stands in for a timestamp that has never happened, e.g. as the value of 'Last sync' in Settings before the first refresh."
+  },
+  "time_secondsAgo": {
+    "message": "$1 giây trước",
+    "description": "How long ago something happened, in seconds. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_minutesAgo": {
+    "message": "$1 phút trước",
+    "description": "How long ago something happened, in minutes. $1 is a whole number under 60. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_hoursAgo": {
+    "message": "$1 giờ trước",
+    "description": "How long ago something happened, in hours. $1 is a whole number under 24. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_daysAgo": {
+    "message": "$1 ngày trước",
+    "description": "How long ago something happened, in days. $1 is a whole number. Shown next to the blocklist sync time and on every row of the Activity log."
+  },
+  "time_seconds": {
+    "message": "$1 giây",
+    "description": "A duration in seconds, counting forward, e.g. how long until a queued profile is retried. $1 is a whole number under 60."
+  },
+  "time_minutes": {
+    "message": "$1 phút",
+    "description": "A duration in minutes, counting forward, e.g. how long blocking stays paused. $1 is a whole number."
+  },
+  "time_hours": {
+    "message": "$1 giờ",
+    "description": "A duration in hours, counting forward, e.g. how long blocking stays paused after a checkpoint. $1 is a whole number."
+  },
+
+  "common_profile": {
+    "message": "hồ sơ $1",
+    "description": "Names an account that only has a numeric id, because no display name or username is known for it yet. $1 is the numeric id. Used as the main line of Activity rows and in the popup."
+  },
+  "common_noResponse": {
+    "message": "không có phản hồi",
+    "description": "Error shown when the extension's background service worker answered with nothing at all."
+  },
+  "common_workerSilent": {
+    "message": "service worker không phản hồi",
+    "description": "Error shown in the popup and on the Activity page when the extension's background service worker never answered within ten seconds."
+  },
+
+  "popup_platformUnsupported": {
+    "message": "không phải trang được hỗ trợ",
+    "description": "Small pill at the top right of the popup when the current tab is neither Facebook nor Threads."
+  },
+  "popup_platformLoading": {
+    "message": "đang tải…",
+    "description": "Small pill at the top right of the popup while the page is still working out which site it is."
+  },
+  "popup_notOnSite": {
+    "message": "Không ở trên Facebook hay Threads",
+    "description": "Headline of the popup's action card when the current tab is some other site."
+  },
+  "popup_openProfileNote": {
+    "message": "Hãy mở một hồ sơ Facebook hoặc Threads để báo cáo hoặc chặn.",
+    "description": "Explains what to do, under the popup headline, when the current tab is not Facebook or Threads."
+  },
+  "popup_pageNotReady": {
+    "message": "Trang chưa sẵn sàng",
+    "description": "Headline of the popup's action card when the extension is on the right site but its content script has not answered."
+  },
+  "popup_reloadNote": {
+    "message": "Hãy tải lại trang rồi mở lại cửa sổ này.",
+    "description": "Explains what to do, under the popup headline, when the content script did not answer."
+  },
+  "popup_noProfile": {
+    "message": "Không có hồ sơ nào trên trang này",
+    "description": "Headline of the popup's action card when the tab is on Facebook or Threads but is not showing any one person's profile."
+  },
+  "popup_noProfileNote": {
+    "message": "Hãy mở hồ sơ của ai đó, hoặc rê chuột lên một cái tên bất kỳ trong bảng tin rồi dùng nút Báo cáo.",
+    "description": "Explains what to do, under the popup headline, when the page is not showing a profile. 'Report chip' is the small button that appears when you hover a name in the feed."
+  },
+  "popup_thisIsYou": {
+    "message": "Đây là bạn",
+    "description": "Status line under the profile name in the popup when the open profile is the signed-in user's own."
+  },
+  "popup_listed": {
+    "message": "Có trong danh sách chặn của bạn",
+    "description": "Status line under the profile name in the popup when this profile is on the downloaded blocklist."
+  },
+  "popup_notListed": {
+    "message": "Không có trong danh sách chặn của bạn",
+    "description": "Status line under the profile name in the popup when this profile is not on the downloaded blocklist."
+  },
+  "popup_reportButton": {
+    "message": "Báo cáo là tài khoản giả mạo",
+    "description": "The popup's main button: files a report about the profile the tab is showing."
+  },
+  "popup_reportAgainButton": {
+    "message": "Báo cáo lần nữa",
+    "description": "The popup's main button when this profile is already on the blocklist, so a report would be a repeat."
+  },
+  "popup_blockButton": {
+    "message": "Chặn ngay",
+    "description": "Popup button that queues a real platform block of the profile the tab is showing. Also named inside options_tagsNoneNote, so the two must match."
+  },
+  "popup_blockQueueing": {
+    "message": "Đang đưa vào hàng đợi…",
+    "description": "The Block now button while the request to queue the block is in flight."
+  },
+  "popup_blockQueued": {
+    "message": "Đã vào hàng đợi",
+    "description": "The Block now button once the block has been queued."
+  },
+  "popup_queuedNote": {
+    "message": "Đã vào hàng đợi — lệnh sẽ được gửi trong vài giây tới.",
+    "description": "Note under the popup's buttons confirming a block was queued."
+  },
+  "popup_couldNotQueue": {
+    "message": "Không thể đưa lượt chặn đó vào hàng đợi.",
+    "description": "Note under the popup's buttons when queueing a block failed for no reason the extension can name."
+  },
+  "popup_needsProfileId": {
+    "message": "Việc chặn cần mã số của hồ sơ này, mà trang vẫn chưa để lộ ra. Hãy cuộn hồ sơ một lượt, hoặc báo cáo nó và để máy chủ tự tìm ra.",
+    "description": "Note under the popup's buttons when this profile is only known by username, and a block needs its numeric id."
+  },
+  "popup_blockingOffHidden": {
+    "message": "Chức năng chặn trên nền tảng đang tắt, nên hồ sơ này chỉ bị ẩn chứ chưa bị chặn.",
+    "description": "Note under the popup's buttons when blocking is paused and the open profile is on the blocklist."
+  },
+  "popup_hiddenCountLabel": {
+    "message": "Đã ẩn trên trang này",
+    "description": "Row label in the popup's second card; its value is how many posts and comments are currently hidden in the open tab."
+  },
+  "popup_queuedCountLabel": {
+    "message": "Đang chờ bị chặn",
+    "description": "Row label in the popup's second card; its value is how many profiles are queued for a real block."
+  },
+  "popup_listLine": {
+    "message": "$1 trong danh sách của bạn · $2",
+    "description": "Footer of the popup. $1 is how many entries the downloaded blocklist has; $2 is how long ago it was last fetched, e.g. '12m ago'."
+  },
+  "popup_listNotLoaded": {
+    "message": "chưa tải được danh sách",
+    "description": "Footer of the popup before any blocklist has been downloaded."
+  },
+  "popup_refreshing": {
+    "message": "đang làm mới…",
+    "description": "Footer of the popup while a blocklist refresh is in flight."
+  },
+  "popup_refreshFailed": {
+    "message": "làm mới thất bại",
+    "description": "Footer of the popup when a blocklist refresh failed and the server gave no reason."
+  },
+  "popup_refreshLink": {
+    "message": "Làm mới",
+    "description": "Footer link in the popup: fetch the blocklist again now."
+  },
+  "popup_activityLink": {
+    "message": "Hoạt động",
+    "description": "Footer link in the popup: opens the Activity page. Must match the Activity page's own heading."
+  },
+  "popup_settingsLink": {
+    "message": "Cài đặt",
+    "description": "Footer link in the popup: opens the extension's settings page."
+  },
+  "popup_pausedCheckpoint": {
+    "message": "Việc chặn tạm dừng $1 sau khi tài khoản bị đưa vào diện kiểm tra. Hãy xử lý trên trang, rồi dùng “Đặt lại hàng đợi và thống kê” trong Cài đặt.",
+    "description": "Note in the popup's queue card. $1 is a duration such as '40m' or '6h'. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind. 'Reset queue & stats' names a button in Settings, so the two must match."
+  },
+  "popup_pausedRateLimit": {
+    "message": "Việc chặn tạm dừng $1 do giới hạn tần suất.",
+    "description": "Note in the popup's queue card when blocking is waiting out its own hourly ceiling. $1 is a duration such as '40m'."
+  },
+  "popup_queueParked": {
+    "message": "Việc chặn đang tạm dừng, nên những mục này cứ nằm nguyên đó.",
+    "description": "Note in the popup's queue card when the user has paused blocking and profiles are queued."
+  },
+  "popup_queuePassive": {
+    "message": "$1 trong số này đến từ danh sách — bị chế độ thụ động giữ lại, vì chế độ đó chỉ chặn những hồ sơ bạn lướt qua.",
+    "description": "Note in the popup's queue card. $1 is how many queued profiles came from the ranked list rather than from the screen."
+  },
+  "popup_queueNeedsTab": {
+    "message": "$1 trong số này đến từ danh sách — chế độ chủ động cần một thẻ Facebook hoặc Threads đang mở.",
+    "description": "Note in the popup's queue card when queued profiles cannot be blocked because no Facebook or Threads tab is open. $1 is how many."
+  },
+  "popup_queuePacing": {
+    "message": "Được xử lý dần ở chế độ nền, mỗi lần một ít.",
+    "description": "Note in the popup's queue card when the queue is draining normally."
+  },
+  "popup_reloadAndRetry": {
+    "message": "Hãy tải lại trang rồi thử lại.",
+    "description": "Note under the popup's buttons when the content script could not be reached to open the report sheet."
+  },
+  "popup_couldNotIdentify": {
+    "message": "Không xác định được hồ sơ nào ở đây.",
+    "description": "Note under the popup's buttons when the page turned out not to name any one profile."
+  },
+
+  "options_pageTitle": {
+    "message": "Clone Blocker — Cài đặt",
+    "description": "Browser tab title of the settings page. 'Clone Blocker' is the product name and is not translated."
+  },
+  "options_tagline": {
+    "message": "Chặn các tài khoản đang giả mạo bạn trên Facebook và Threads, với nhịp độ giữ cho tài khoản của chính bạn không gặp rắc rối.",
+    "description": "One-line summary under the heading at the top of the settings page."
+  },
+  "options_activityLink": {
+    "message": "Hoạt động",
+    "description": "Navigation link at the top right of the settings page; opens the Activity page."
+  },
+  "options_workHeading": {
+    "message": "Tiện ích làm việc đến mức nào",
+    "description": "Heading of the first card on the settings page, which holds the passive/active mode picker."
+  },
+  "options_modePassiveTitle": {
+    "message": "Thụ động — chặn tài khoản giả mạo khi bạn tình cờ gặp",
+    "description": "Label of the 'passive' radio button in the mode picker."
+  },
+  "options_modePassiveWhat": {
+    "message": "Chỉ những hồ sơ xuất hiện trên trang trong lúc bạn lướt.",
+    "description": "What passive mode does, under its radio button."
+  },
+  "options_modePassiveCost": {
+    "message": "Dù sao chúng cũng đã hiện trên màn hình của bạn, nên các lượt chặn này diễn ra nhanh và còn cách xa giới hạn tần suất.",
+    "description": "What passive mode costs in risk, under its description. 'Rate limits' are the platform's own limits on how often an account may block people."
+  },
+  "options_modeActiveTitle": {
+    "message": "Chủ động — còn xử lý dần cả danh sách ở chế độ nền",
+    "description": "Label of the 'active' radio button in the mode picker."
+  },
+  "options_modeActiveWhat": {
+    "message": "Thêm những tài khoản giả mạo mà danh sách cho là hoạt động mạnh nhất gần bạn, kể cả khi bạn chưa từng lướt qua chúng.",
+    "description": "What active mode does, under its radio button."
+  },
+  "options_modeActiveCost": {
+    "message": "Được giãn chậm và giới hạn theo giờ, vì chặn hàng loạt người lạ chính là kiểu hành vi khiến tài khoản bị đưa vào diện kiểm tra.",
+    "description": "What active mode costs in risk, under its description. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind."
+  },
+  "options_modeActiveNeedsTab": {
+    "message": "<b>Cần mở một thẻ Facebook hoặc Threads thì mới làm được việc này</b> — lệnh chặn được gửi bằng chính mã của trang, nên khi không mở thẻ nào thì chúng chỉ nằm chờ.",
+    "description": "The one condition active mode has, under its description. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated and nothing else may be marked up."
+  },
+  "options_pausedNote": {
+    "message": "Việc chặn đang tạm dừng, nên cả hai chế độ đều không làm gì. Hãy bỏ tạm dừng trong mục Nâng cao.",
+    "description": "Warning under the mode picker when blocking has been paused, since the pause control lives further down in the collapsed Advanced section."
+  },
+  "options_blocklistHeading": {
+    "message": "Danh sách chặn",
+    "description": "Heading of the settings card that reports where the downloaded blocklist stands."
+  },
+  "options_blocklistNote": {
+    "message": "Do dự án Clone Blocker cung cấp. Mọi báo cáo đều được xét duyệt thủ công trước khi một hồ sơ vào danh sách, và ở đây không có gì phải thiết lập.",
+    "description": "Explains the blocklist card. 'Clone Blocker' is the product name and is not translated."
+  },
+  "options_lastSync": {
+    "message": "Đồng bộ lần cuối",
+    "description": "Row label in the blocklist card; its value is how long ago the list was fetched."
+  },
+  "options_onTheList": {
+    "message": "Trong danh sách",
+    "description": "Row label in the blocklist card; its value is how many profile ids and usernames the list holds."
+  },
+  "options_refreshNow": {
+    "message": "Làm mới ngay",
+    "description": "Button in the blocklist card: fetch the list again immediately."
+  },
+  "options_listNotLoaded": {
+    "message": "chưa tải",
+    "description": "Value of the 'On the list' row before any blocklist has been downloaded."
+  },
+  "options_profileIdOne": {
+    "message": "1 mã hồ sơ",
+    "description": "Part of the 'On the list' value when the list holds exactly one numeric profile id."
+  },
+  "options_profileIdMany": {
+    "message": "$1 mã hồ sơ",
+    "description": "Part of the 'On the list' value. $1 is how many numeric profile ids the list holds; never 1."
+  },
+  "options_usernameOne": {
+    "message": "1 tên người dùng",
+    "description": "Part of the 'On the list' value when the list holds exactly one username."
+  },
+  "options_usernameMany": {
+    "message": "$1 tên người dùng",
+    "description": "Part of the 'On the list' value. $1 is how many usernames the list holds; never 1."
+  },
+  "options_checking": {
+    "message": "Đang kiểm tra…",
+    "description": "Status beside the Refresh now button while the request is in flight."
+  },
+  "options_upToDate": {
+    "message": "Đã là mới nhất",
+    "description": "Status beside the Refresh now button when the server said nothing had changed."
+  },
+  "options_updated": {
+    "message": "Đã cập nhật",
+    "description": "Status beside the Refresh now button when a new list was downloaded."
+  },
+  "options_failed": {
+    "message": "thất bại",
+    "description": "Status beside the Refresh now button when the refresh failed and the server gave no reason."
+  },
+  "options_advanced": {
+    "message": "Nâng cao",
+    "description": "The expander that hides everything below the blocklist card on the settings page."
+  },
+  "options_blockingHeading": {
+    "message": "Chặn",
+    "description": "Heading of the first card inside Advanced, which holds the pause switch and two debugging switches."
+  },
+  "options_pauseBlocking": {
+    "message": "Tạm dừng việc chặn",
+    "description": "Tick box that stops every real block until it is switched back."
+  },
+  "options_pauseHint": {
+    "message": "Dừng mọi lượt chặn thật, ở cả hai chế độ, cho đến khi bạn bật lại. Không mất gì cả — các hồ sơ trong hàng đợi vẫn nằm chờ. Việc ẩn ở bên dưới không bị ảnh hưởng.",
+    "description": "Explains the Pause blocking tick box. 'Hiding' is the separate feature further down that only suppresses content in your own browser."
+  },
+  "options_dryRun": {
+    "message": "Chạy thử — xác định phương án nhưng không gửi gì",
+    "description": "Debugging tick box: go through every step of a block except actually sending it."
+  },
+  "options_rawFallback": {
+    "message": "Cho phép dùng yêu cầu thô để dự phòng <b>(rủi ro)</b>",
+    "description": "Debugging tick box: let the extension hand-build the block request instead of driving the site's own code. The part inside <b>…</b> is shown in bold; <b> and </b> are not translated."
+  },
+  "options_rawFallbackHint": {
+    "message": "Bình thường tiện ích điều khiển chính mã chặn của trang, cách đó an toàn và luôn cập nhật. Phương án dự phòng này thì tự dựng yêu cầu HTTP bằng tay. Trong quá trình thử nghiệm, cách đó đã bị ghi nhận là <b>làm phiên đăng nhập bị đăng xuất</b>, còn trên Threads thì các đường dẫn REST đằng nào cũng trả về 404. Hãy để tắt trừ khi bạn đang gỡ lỗi.",
+    "description": "Explains why the raw request fallback is off by default. The part inside <b>…</b> is shown in bold and may be moved anywhere in the sentence; <b> and </b> are not translated."
+  },
+  "options_tagsHeading": {
+    "message": "Những loại nào sẽ bị chặn",
+    "description": "Heading of the card that offers one tick box per kind of account."
+  },
+  "options_tagsNote": {
+    "message": "Mọi hồ sơ đã xét duyệt vẫn nằm trong danh sách dù bạn đánh dấu gì ở đây — và vẫn bị ẩn, nếu bạn đang bật chế độ ẩn. Bỏ đánh dấu một loại chỉ có nghĩa là tiện ích sẽ không dùng một lượt chặn có định mức của bạn cho loại đó.",
+    "description": "Explains that the tick boxes ration real blocks and nothing else."
+  },
+  "options_tagsNoneNote": {
+    "message": "Chưa đánh dấu loại nào, nên tiện ích sẽ không tự chặn ai cả. Nút Chặn ngay trong cửa sổ bật lên thì vẫn dùng được.",
+    "description": "Warning shown when no kind is ticked. 'Block now' names the popup's button, so the two must match."
+  },
+  "options_hideHeading": {
+    "message": "Ẩn nội dung của họ",
+    "description": "Heading of the card that controls suppressing listed profiles' posts and comments in your own browser."
+  },
+  "options_hideNote": {
+    "message": "Chế độ ẩn che các bài viết và bình luận của hồ sơ trong danh sách ngay trên trình duyệt của bạn mà không đụng đến tài khoản. Mặc định tắt: chặn thật mới là chức năng chính, còn đây dành cho ai muốn cả danh sách khuất mắt ngay lập tức.",
+    "description": "Explains what hiding is and why it ships switched off."
+  },
+  "options_hideEnabled": {
+    "message": "Bật chế độ ẩn",
+    "description": "Tick box that switches hiding on."
+  },
+  "options_hideFeedPosts": {
+    "message": "Ẩn bài viết trong bảng tin",
+    "description": "Tick box: apply hiding to posts in the feed."
+  },
+  "options_hideComments": {
+    "message": "Ẩn bình luận",
+    "description": "Tick box: apply hiding to comments under posts."
+  },
+  "options_hideModeLabel": {
+    "message": "Khi ẩn",
+    "description": "Label of the drop-down that picks what a hidden post looks like."
+  },
+  "options_hideModeCollapse": {
+    "message": "Xóa hẳn khỏi trang",
+    "description": "Drop-down choice: a hidden post leaves no trace on the page."
+  },
+  "options_hideModePlaceholder": {
+    "message": "Hiện một thanh thu gọn kèm nút “Hiện”",
+    "description": "Drop-down choice: a hidden post is replaced by a thin bar that can be expanded. The quoted word names the button on that bar, so the two must match."
+  },
+  "options_hideModeBlur": {
+    "message": "Làm mờ tại chỗ",
+    "description": "Drop-down choice: a hidden post stays where it is but is blurred out."
+  },
+  "options_paceHeading": {
+    "message": "Nhịp độ và giới hạn",
+    "description": "Heading of the card holding the delay and per-hour limit numbers."
+  },
+  "options_paceNote": {
+    "message": "Chặn một người có hồ sơ đang hiện trên màn hình là việc ai cũng làm suốt ngày; còn xử lý dần một danh sách người lạ thì không. Hai việc này được cấp định mức và giãn nhịp riêng, và các giá trị mặc định ở đây được đặt thận trọng có chủ ý.",
+    "description": "Explains why there are two separate sets of pacing numbers."
+  },
+  "options_warmDelayLabel": {
+    "message": "Chờ sau khi chặn một người đang hiện trên màn hình (ms)",
+    "description": "Label of the pair of number fields holding the delay range for profiles that were visible on screen. 'ms' is milliseconds."
+  },
+  "options_delayTo": {
+    "message": "đến",
+    "description": "Sits between the two number fields of a range, as in 'from 4000 to 11000'."
+  },
+  "options_warmDelayHint": {
+    "message": "Ngắn hơn khoảng chờ bên dưới: đây là trường hợp thông thường và không cần làm chậm.",
+    "description": "Explains the on-screen delay range."
+  },
+  "options_coldDelayLabel": {
+    "message": "Chờ sau khi chặn một người lấy từ danh sách (ms)",
+    "description": "Label of the pair of number fields holding the delay range for profiles the ranked list nominated. 'ms' is milliseconds."
+  },
+  "options_coldDelayHint": {
+    "message": "Mỗi lần sẽ lấy một giá trị ngẫu nhiên trong khoảng này; khoảng cách đều tăm tắp trông rất giống máy làm.",
+    "description": "Explains why the list-driven delay is a range rather than one number."
+  },
+  "options_maxColdLabel": {
+    "message": "Số lượt chặn theo danh sách tối đa mỗi giờ",
+    "description": "Label of the number field capping how many profiles from the ranked list may be blocked in an hour."
+  },
+  "options_maxColdHint": {
+    "message": "Chỉ áp dụng cho chế độ chủ động, và chỉ tính những tài khoản bạn chưa từng thấy. <b>Số 0</b> nghĩa là không bao giờ chặn người chưa từng xuất hiện trên màn hình của bạn.",
+    "description": "Explains the list-driven hourly cap. The part inside <b>…</b> is shown in bold and refers to the value 0; <b> and </b> are not translated."
+  },
+  "options_targetBudgetLabel": {
+    "message": "Số mục tiêu lấy từ danh sách mỗi lần",
+    "description": "Label of the number field setting how many ranked profiles are taken from the list in one batch."
+  },
+  "options_maxPerHourLabel": {
+    "message": "Số lượt chặn tối đa mỗi giờ (mọi nguồn)",
+    "description": "Label of the number field capping every block in an hour, whatever it came from."
+  },
+  "options_maxPerDayLabel": {
+    "message": "Số lượt chặn tối đa mỗi ngày",
+    "description": "Label of the number field capping every block in a day."
+  },
+  "options_shareRegion": {
+    "message": "Gửi múi giờ và ngôn ngữ của tôi, để danh sách xếp những tài khoản giả mạo hoạt động gần tôi lên trước",
+    "description": "Tick box controlling whether the coarse location signal is sent with the blocklist request."
+  },
+  "options_reportingHeading": {
+    "message": "Báo cáo tài khoản giả mạo",
+    "description": "Heading of the card controlling the in-page reporting affordance and where reports are sent."
+  },
+  "options_reportingNote": {
+    "message": "Cho phép mọi người gắn cờ tài khoản giả mạo ngay trên trang. Báo cáo được đưa đi xét duyệt; không có gì vào danh sách chặn cho tới khi quản trị viên phê duyệt.",
+    "description": "Explains what in-page reporting does."
+  },
+  "options_reportUiEnabled": {
+    "message": "Hiện nút Báo cáo trên các hồ sơ",
+    "description": "Tick box that switches the in-page reporting affordance on. 'Report chip' is the small button that appears when you hover a name."
+  },
+  "options_apiBaseLabel": {
+    "message": "Địa chỉ API",
+    "description": "Label of the text field holding the address reports are sent to. A technical setting; leave 'API' as is."
+  },
+  "options_optional": {
+    "message": "(không bắt buộc)",
+    "description": "Marks a form field that may be left blank."
+  },
+  "options_apiBasePlaceholder": {
+    "message": "suy ra từ địa chỉ danh sách chặn",
+    "description": "Greyed-out text inside the empty API base field, saying what happens if it is left blank."
+  },
+  "options_apiBaseHint": {
+    "message": "Để trống để dùng thư mục chứa danh sách chặn.",
+    "description": "Explains the API base field."
+  },
+  "options_submitTokenLabel": {
+    "message": "Mã gửi báo cáo",
+    "description": "Label of the text field holding a shared secret some report servers require."
+  },
+  "options_submitTokenOnlyIf": {
+    "message": "(chỉ khi máy chủ yêu cầu)",
+    "description": "Marks the Submit token field as needed only in one uncommon configuration."
+  },
+  "options_submitTokenPlaceholder": {
+    "message": "giá trị --submit-token",
+    "description": "Greyed-out text inside the empty Submit token field. '--submit-token' is a command-line flag name and is not translated."
+  },
+  "options_learnHeading": {
+    "message": "Dạy tiện ích cách gửi lệnh chặn",
+    "description": "Heading of the card about how the extension learns the shape of the site's own block request."
+  },
+  "options_learnNote": {
+    "message": "Meta liên tục đổi các <c>doc_id</c> GraphQL của họ và khóa các thao tác sau những biến provider được sinh ra, nên không có gì bị ghi cứng. Tiện ích đọc các giá trị đang chạy ngay trên trang. Nếu nó báo không tìm thấy lệnh chặn, đơn giản là mô-đun chưa được tải — hãy mở một hồ sơ bất kỳ và chặn một người bằng tay. Yêu cầu đó sẽ được ghi lại và hình dạng của nó được dùng lại từ đó về sau.",
+    "description": "Explains why the extension sometimes has to watch a block happen before it can do one. The part inside <c>…</c> is shown as code and is a literal identifier that is not translated; <c> and </c> are not translated either. 'Meta', 'GraphQL' and 'doc_id' are names."
+  },
+  "options_clearLearned": {
+    "message": "Quên các mẫu đã ghi lại",
+    "description": "Button that discards whatever request shapes the extension has learned."
+  },
+  "options_noneCaptured": {
+    "message": "chưa ghi lại được mẫu nào",
+    "description": "Status beside the Forget captured templates button when nothing has been learned."
+  },
+  "options_cleared": {
+    "message": "Đã xóa",
+    "description": "Status beside the Forget captured templates button just after it was pressed."
+  },
+  "options_diagHeading": {
+    "message": "Chẩn đoán",
+    "description": "Heading of the last card on the settings page, which dumps internal state for debugging."
+  },
+  "options_diagNote": {
+    "message": "Khả năng của trang được đọc từ thẻ Facebook hoặc Threads đang mở đầu tiên — hãy mở một thẻ, rồi bấm Tải lại.",
+    "description": "Explains where the diagnostics dump gets its information. 'Reload' names the button just below, so the two must match."
+  },
+  "options_debug": {
+    "message": "Ghi nhật ký chi tiết ra console",
+    "description": "Tick box that makes the extension log its working to the browser console."
+  },
+  "options_reload": {
+    "message": "Tải lại",
+    "description": "Button that rebuilds the diagnostics dump."
+  },
+  "options_resetQueue": {
+    "message": "Đặt lại hàng đợi và thống kê",
+    "description": "Button that throws away the block queue and all counters. Named inside popup_pausedCheckpoint and activity_haltedResumes, so all three must match."
+  },
+  "options_diagNoTab": {
+    "message": "không có thẻ Facebook hoặc Threads nào đang mở",
+    "description": "Shown in place of the diagnostics dump's page section when there is no site tab to read it from."
+  },
+  "options_diagNoAnswer": {
+    "message": "thẻ đang mở nhưng content script không trả lời — hãy tải lại thẻ đó",
+    "description": "Shown in place of the diagnostics dump's page section when a site tab exists but the extension's script in it is not responding."
+  },
+  "options_diagUnavailable": {
+    "message": "không có dữ liệu",
+    "description": "Shown in place of the whole diagnostics dump when the background service worker could not be reached."
+  },
+
+  "activity_pageTitle": {
+    "message": "Clone Blocker — Hoạt động",
+    "description": "Browser tab title of the Activity page. 'Clone Blocker' is the product name and is not translated."
+  },
+  "activity_heading": {
+    "message": "Hoạt động",
+    "description": "Heading at the top of the Activity page. Must match the link that opens it from the popup and from Settings."
+  },
+  "activity_tagline": {
+    "message": "Những gì đã bị chặn, những gì đang chờ, và danh sách hiện ra sao.",
+    "description": "One-line summary under the Activity page heading."
+  },
+  "activity_settingsLink": {
+    "message": "Cài đặt",
+    "description": "Navigation link at the top right of the Activity page; opens the settings page."
+  },
+  "activity_tileBlocked": {
+    "message": "đã chặn",
+    "description": "Caption under the counter tile showing how many profiles have been blocked in total."
+  },
+  "activity_tileWaiting": {
+    "message": "đang chờ",
+    "description": "Caption under the counter tile showing how many profiles are queued for a block."
+  },
+  "activity_tileThisHour": {
+    "message": "giờ này",
+    "description": "Caption under the counter tile showing blocks used against the hourly ceiling, e.g. '3/15'."
+  },
+  "activity_tileToday": {
+    "message": "hôm nay",
+    "description": "Caption under the counter tile showing blocks used against the daily ceiling, e.g. '11/60'."
+  },
+  "activity_tileFailed": {
+    "message": "thất bại",
+    "description": "Caption under the counter tile showing how many block attempts failed."
+  },
+  "activity_tileHideList": {
+    "message": "trong danh sách ẩn",
+    "description": "Caption under the counter tile showing how many entries the downloaded blocklist holds."
+  },
+  "activity_failedGaveUp": {
+    "message": "$1 +$2 đã bỏ",
+    "description": "Value of the 'failed' tile when some targets were abandoned after repeated failures. $1 is how many attempts failed; $2 is how many targets were given up on entirely."
+  },
+  "activity_syncHeading": {
+    "message": "Đồng bộ danh sách",
+    "description": "Heading of the Activity card reporting where the downloaded blocklist came from and when."
+  },
+  "activity_refreshNow": {
+    "message": "Làm mới ngay",
+    "description": "Button in the List sync card: fetch the blocklist again immediately."
+  },
+  "activity_refreshing": {
+    "message": "Đang làm mới…",
+    "description": "The Refresh now button while the request is in flight."
+  },
+  "activity_queueHeading": {
+    "message": "Đang chờ bị chặn",
+    "description": "Heading of the Activity card listing queued profiles."
+  },
+  "activity_queueEmpty": {
+    "message": "Hàng đợi trống. Mục tiêu xuất hiện khi một hồ sơ trong danh sách hiện lên màn hình, hoặc từ gợi ý của danh sách.",
+    "description": "Shown in place of the queue when nothing is waiting."
+  },
+  "activity_historyHeading": {
+    "message": "Lịch sử chặn",
+    "description": "Heading of the Activity card listing past block attempts."
+  },
+  "activity_filterAll": {
+    "message": "tất cả",
+    "description": "Filter button above the block history: show every attempt."
+  },
+  "activity_filterBlocked": {
+    "message": "đã chặn",
+    "description": "Filter button above the block history: show only attempts that succeeded."
+  },
+  "activity_filterFailed": {
+    "message": "thất bại",
+    "description": "Filter button above the block history: show only attempts that failed."
+  },
+  "activity_filterDry": {
+    "message": "chạy thử",
+    "description": "Filter button above the block history: show only simulated attempts that sent nothing."
+  },
+  "activity_logEmpty": {
+    "message": "Chưa có lượt chặn nào.",
+    "description": "Shown in place of the block history when nothing has been attempted."
+  },
+  "activity_haltedResumes": {
+    "message": "Đã dừng sau khi tài khoản bị đưa vào diện kiểm tra. Hãy xử lý trên trang, rồi dùng “Đặt lại hàng đợi và thống kê” trong Cài đặt. Tiếp tục sau $1.",
+    "description": "Banner across the top of the Activity page. $1 is a duration such as '4h'. A 'checkpoint' is the security challenge Facebook or Threads puts an account behind. 'Reset queue & stats' names a button in Settings, so the two must match."
+  },
+  "activity_pausedResumes": {
+    "message": "Tạm dừng do giới hạn tần suất. Tiếp tục sau $1.",
+    "description": "Banner across the top of the Activity page when blocking is waiting out its own hourly ceiling. $1 is a duration such as '18m'."
+  },
+  "activity_needsTabOne": {
+    "message": "1 hồ sơ từ danh sách đang chờ bị chặn. Chế độ chủ động chạy bên trong một thẻ Facebook hoặc Threads — hãy mở một thẻ và để yên đó.",
+    "description": "Banner across the top of the Activity page when exactly one queued profile cannot be blocked for want of an open site tab."
+  },
+  "activity_needsTabMany": {
+    "message": "$1 hồ sơ từ danh sách đang chờ bị chặn. Chế độ chủ động chạy bên trong một thẻ Facebook hoặc Threads — hãy mở một thẻ và để yên đó.",
+    "description": "Banner across the top of the Activity page when queued profiles cannot be blocked for want of an open site tab. $1 is how many; never 1."
+  },
+  "activity_syncSource": {
+    "message": "nguồn",
+    "description": "Row label in the List sync card; its value is the address the blocklist was fetched from."
+  },
+  "activity_syncLastSynced": {
+    "message": "đồng bộ lần cuối",
+    "description": "Row label in the List sync card; its value is how long ago the list was fetched."
+  },
+  "activity_syncHideList": {
+    "message": "danh sách ẩn",
+    "description": "Row label in the List sync card; its value is how many entries are hidden on sight."
+  },
+  "activity_syncBlockTargets": {
+    "message": "mục tiêu chặn",
+    "description": "Row label in the List sync card; its value is how many ranked profiles were taken for real blocking."
+  },
+  "activity_syncAwaitingReview": {
+    "message": "đang chờ duyệt",
+    "description": "Row label in the List sync card; its value is how many reports an admin has not decided on yet."
+  },
+  "activity_syncRefreshEvery": {
+    "message": "làm mới mỗi",
+    "description": "Row label in the List sync card; its value is how often the list is fetched, e.g. '60 min'."
+  },
+  "activity_noList": {
+    "message": "chưa cấu hình danh sách — hãy mở Cài đặt",
+    "description": "Value of the 'source' row when no blocklist address is set at all."
+  },
+  "activity_listUpdated": {
+    "message": "danh sách cập nhật $1 UTC",
+    "description": "Part of the 'last synced' value, saying when the server last republished the list. $1 is a date and time like '2026-08-21 09:14'. 'UTC' is the time zone name and is not translated."
+  },
+  "activity_listVersion": {
+    "message": "phiên bản $1",
+    "description": "Part of the 'last synced' value when the server identifies its list by a short fingerprint rather than a time. $1 is that fingerprint."
+  },
+  "activity_hideListValue": {
+    "message": "$1 mã + $2 tên người dùng — ẩn ở mọi nơi, không tốn gì",
+    "description": "Value of the 'hide list' row. $1 is how many numeric profile ids the list holds, $2 how many usernames. 'Costs nothing' means hiding does not spend one of the rationed blocks."
+  },
+  "activity_targetsTaken": {
+    "message": "đã lấy $1 trong $2 gợi ý",
+    "description": "Value of the 'block targets' row. $1 is how many ranked profiles this browser took, $2 how many the server offered."
+  },
+  "activity_awaitingReviewValue": {
+    "message": "$1 đã báo cáo, chưa có quyết định",
+    "description": "Value of the 'awaiting review' row. $1 is how many reported profiles an admin has not ruled on."
+  },
+  "activity_refreshEveryValue": {
+    "message": "$1 phút",
+    "description": "Value of the 'refresh every' row. $1 is a whole number of minutes."
+  },
+  "activity_queuePaused": {
+    "message": "việc chặn đang tạm dừng — những mục này chờ đến khi bật lại",
+    "description": "Note beside the queue heading when the user has paused blocking."
+  },
+  "activity_queueDryRun": {
+    "message": "chạy thử — chỉ mô phỏng, không gửi gì",
+    "description": "Note beside the queue heading when the dry run switch is on."
+  },
+  "activity_queuePassive": {
+    "message": "$1 từ danh sách — bị chế độ thụ động giữ lại",
+    "description": "Note beside the queue heading. $1 is how many queued profiles came from the ranked list and are therefore going nowhere in passive mode."
+  },
+  "activity_queueNeedsTab": {
+    "message": "$1 từ danh sách cần một thẻ Facebook hoặc Threads đang mở",
+    "description": "Note beside the queue heading. $1 is how many queued profiles cannot be blocked for want of an open site tab."
+  },
+  "activity_reasonWarm": {
+    "message": "có trong danh sách chặn · đã thấy trên màn hình",
+    "description": "Why a queued or blocked profile was picked: it is on the list and it appeared on screen."
+  },
+  "activity_reasonSuggested": {
+    "message": "được gợi ý từ danh sách",
+    "description": "Why a queued or blocked profile was picked: the ranked list nominated it, unseen."
+  },
+  "activity_reasonVelocity": {
+    "message": "hoạt động $1 lần trong 7 ngày",
+    "description": "Part of the reason line: how many reports this profile drew in the last week. $1 is a whole number; '×' is the multiplication sign used here as 'times'."
+  },
+  "activity_reasonToday": {
+    "message": "báo cáo hôm nay",
+    "description": "Part of the reason line: the most recent report against this profile came in today."
+  },
+  "activity_reasonDaysAgo": {
+    "message": "báo cáo $1 ngày trước",
+    "description": "Part of the reason line: how long ago the most recent report against this profile came in. $1 is a whole number of days."
+  },
+  "activity_reasonNearYou": {
+    "message": "hoạt động gần bạn",
+    "description": "Part of the reason line: most reports against this profile came from your own time zone and language."
+  },
+  "activity_reasonRank": {
+    "message": "hạng $1",
+    "description": "Part of the reason line: this profile's position in the ranked list. $1 is a number."
+  },
+  "activity_chipSeen": {
+    "message": "đã thấy trên màn hình",
+    "description": "Chip on a queue or history row: this profile was visible on the page when it was queued."
+  },
+  "activity_chipSuggested": {
+    "message": "được gợi ý",
+    "description": "Chip on a queue or history row: this profile came from the ranked list, unseen."
+  },
+  "activity_chipRetryIn": {
+    "message": "thử lại sau $1",
+    "description": "Chip on a queue row: this target failed and is waiting before the next attempt. $1 is a duration such as '45s'."
+  },
+  "activity_chipFailedTries": {
+    "message": "$1 lần thử thất bại",
+    "description": "Chip on a queue row counting failed attempts against this target so far. $1 is a whole number."
+  },
+  "activity_chipDryRun": {
+    "message": "chạy thử",
+    "description": "Chip on a history row: this attempt was simulated and sent nothing."
+  },
+  "activity_chipBlocked": {
+    "message": "đã chặn",
+    "description": "Chip on a history row: this attempt succeeded."
+  },
+  "activity_chipFailed": {
+    "message": "thất bại",
+    "description": "Chip on a history row: this attempt failed."
+  },
+  "activity_andMore": {
+    "message": "… và $1 mục nữa",
+    "description": "Closes a truncated list. $1 is how many rows were not shown."
+  },
+
+  "report_chip": {
+    "message": "Báo cáo",
+    "description": "The small button that appears when you hover a name on Facebook or Threads. Keep it short; it has to fit beside a name."
+  },
+  "report_chipBlocked": {
+    "message": "Đã chặn",
+    "description": "The hover button when this account is already on the blocklist."
+  },
+  "report_chipReported": {
+    "message": "Đã báo cáo",
+    "description": "The hover button when this account has already been reported and is awaiting review."
+  },
+  "report_chipReportedCount": {
+    "message": "Đã báo cáo ×$1",
+    "description": "The hover button when this account has been reported more than once. $1 is how many times; '×' is the multiplication sign used here as 'times'."
+  },
+  "report_sheetTitle": {
+    "message": "Báo cáo tài khoản giả mạo",
+    "description": "Title bar of the report dialog that opens over the page."
+  },
+  "report_postLabel": {
+    "message": "Bài viết bị báo cáo",
+    "description": "Caption above the quoted post inside the report dialog, when the report was raised from a specific post."
+  },
+  "report_noPostText": {
+    "message": "(bài viết này không có chữ)",
+    "description": "Stands in for the quoted post inside the report dialog when the post is only an image or video."
+  },
+  "report_reasonLabel": {
+    "message": "Vì sao bạn báo cáo tài khoản này?",
+    "description": "Label of the drop-down of reasons in the report dialog. Its choices are the tag_* messages."
+  },
+  "report_noteLabel": {
+    "message": "Có điều gì giúp được người xét duyệt không? (không bắt buộc)",
+    "description": "Label of the free-text box in the report dialog."
+  },
+  "report_notePlaceholder": {
+    "message": "ví dụ: chép ảnh và tiểu sử của @taikhoanthat",
+    "description": "Greyed-out example inside the empty free-text box. '@realaccount' is a made-up handle standing in for the real person being impersonated."
+  },
+  "report_disclaimer": {
+    "message": "Nội dung này được gửi tới máy chủ xét duyệt của chính bạn, không gửi cho Facebook hay Threads. Quản trị viên sẽ quyết định có đưa vào danh sách chặn hay không.",
+    "description": "Note at the foot of the report dialog, saying where the report actually goes."
+  },
+  "report_cancel": {
+    "message": "Hủy",
+    "description": "Button that closes the report dialog without sending anything."
+  },
+  "report_submit": {
+    "message": "Gửi báo cáo",
+    "description": "Button that files the report."
+  },
+  "report_sending": {
+    "message": "Đang gửi…",
+    "description": "The Send report button while the report is in flight."
+  },
+  "report_unknownProfile": {
+    "message": "Hồ sơ không rõ",
+    "description": "Stands in for the reported account's name in the report dialog when neither a display name nor a username is known."
+  },
+  "report_noNumericId": {
+    "message": "chưa xác định được mã số",
+    "description": "Shown in the report dialog's identity line when only a username is known for the account."
+  },
+  "report_idValue": {
+    "message": "mã $1",
+    "description": "Shown in the report dialog's identity line. $1 is the account's numeric id."
+  },
+  "report_signIn": {
+    "message": "Hãy đăng nhập $1 trước khi báo cáo. Mỗi báo cáo phải kèm theo tài khoản đã gửi nó.",
+    "description": "Error in the report dialog when nobody is signed in. $1 is 'Facebook' or 'Threads' — a site name, never translated."
+  },
+  "report_sendFailed": {
+    "message": "Không gửi được báo cáo.",
+    "description": "Error in the report dialog when the report failed for no reason the server named."
+  },
+  "report_duplicate": {
+    "message": "Bạn đã báo cáo tài khoản này trước đó.",
+    "description": "Shown in place of the report form when this account had already been reported from the same account."
+  },
+  "report_sent": {
+    "message": "Đã gửi báo cáo. Cảm ơn bạn.",
+    "description": "Shown in place of the report form once the report went through."
+  },
+  "report_statusLabel": {
+    "message": "Trạng thái:",
+    "description": "Label before the report's status word on the report dialog's confirmation screen."
+  },
+  "report_statusPending": {
+    "message": "chờ duyệt",
+    "description": "A report's status: filed, and waiting for an admin to rule on it."
+  },
+  "report_statusApproved": {
+    "message": "đã duyệt",
+    "description": "A report's status: an admin agreed and the account is on the blocklist."
+  },
+  "report_countOne": {
+    "message": "1 báo cáo",
+    "description": "Badge on the report dialog's confirmation screen when this account has been reported exactly once."
+  },
+  "report_countMany": {
+    "message": "$1 báo cáo",
+    "description": "Badge on the report dialog's confirmation screen counting reports against this account. $1 is how many; never 1."
+  },
+  "report_adminReviews": {
+    "message": "Quản trị viên sẽ xét duyệt trước khi bất cứ điều gì được thêm vào danh sách chặn.",
+    "description": "Note on the report dialog's confirmation screen."
+  },
+  "report_done": {
+    "message": "Xong",
+    "description": "Button that closes the report dialog after a report went through."
+  },
+  "report_iconLabel": {
+    "message": "Báo cáo giả mạo",
+    "description": "Screen-reader label of the flag icon drawn inside the report button on a Threads post."
+  },
+  "report_buttonLabel": {
+    "message": "Báo cáo tài khoản giả mạo",
+    "description": "Screen-reader label and tooltip of the report button the extension adds to a Threads post's action row."
+  },
+  "report_notAProfile": {
+    "message": "Trang này không phải là một hồ sơ.",
+    "description": "Error returned to the popup when it asks the page to report whoever it is showing and the page shows nobody."
+  },
+  "report_ownProfile": {
+    "message": "Đó là hồ sơ của chính bạn.",
+    "description": "Error returned to the popup when it asks the page to report whoever it is showing and that turns out to be the signed-in user."
+  },
+
+  "hide_hiddenLabel": {
+    "message": "Đã ẩn — $1",
+    "description": "Text on the thin bar left in place of a hidden post or comment. $1 is the name or id of whoever wrote it."
+  },
+  "hide_showButton": {
+    "message": "Hiện",
+    "description": "Button on the bar left in place of a hidden post, which puts the post back. Named inside options_hideModePlaceholder, so the two must match."
+  },
+
+  "sw_noListUrl": {
+    "message": "Chưa cấu hình địa chỉ danh sách chặn. Hãy đặt một địa chỉ trong tùy chọn của tiện ích.",
+    "description": "Error surfaced in the popup and on the Activity page when no blocklist address is set."
+  },
+  "sw_noListPermission": {
+    "message": "Trình duyệt này không có quyền với địa chỉ đó. Địa chỉ danh sách tích hợp sẵn thì luôn được phép, nên chuyện này chỉ xảy ra khi listUrl đã bị trỏ sang nơi khác.",
+    "description": "Error surfaced in the popup when the blocklist address is outside what the extension may reach. 'listUrl' is a setting name and is not translated."
+  },
+  "sw_fetchFailed": {
+    "message": "Tải về thất bại: $1",
+    "description": "Error surfaced in the popup when the blocklist download never reached the server. $1 is the browser's own untranslated network error."
+  },
+  "sw_httpStatus": {
+    "message": "Máy chủ trả về HTTP $1",
+    "description": "Error surfaced in the popup when the blocklist server answered with a failure. $1 is a status code such as 500. 'HTTP' is not translated."
+  },
+  "sw_notAList": {
+    "message": "Phản hồi không phải JSON, cũng không phải danh sách theo dòng",
+    "description": "Error surfaced in the popup when the blocklist address returned something unreadable. 'JSON' is not translated."
+  },
+  "sw_notABlocklist": {
+    "message": "Phản hồi trông không giống một danh sách chặn (sai địa chỉ?)",
+    "description": "Error surfaced in the popup when the blocklist address returned readable data of the wrong shape — usually an error page. 'URL' is not translated."
+  },
+  "sw_noBlocklistCached": {
+    "message": "chưa lưu được danh sách chặn nào",
+    "description": "Error returned when something asks for the blocklist before one has ever been downloaded."
+  },
+  "sw_signedOutPaused": {
+    "message": "Đã đăng xuất khỏi trang — việc chặn trên nền tảng đã tạm dừng. Hãy đăng nhập lại rồi tiếp tục.",
+    "description": "Error banner in the popup and on the Activity page after a block failed because nobody is signed in to Facebook or Threads."
+  },
+  "sw_checkpoint": {
+    "message": "Phát hiện tài khoản bị đưa vào diện kiểm tra. Việc chặn trên nền tảng đã tạm dừng; hãy xử lý yêu cầu xác minh trên trang.",
+    "description": "Error banner in the popup and on the Activity page after Facebook or Threads put the account behind a security challenge."
+  },
+  "sw_noFirestoreBase": {
+    "message": "Không suy ra được địa chỉ Firestore từ URL của danh sách.",
+    "description": "Error in the report dialog when the report address cannot be worked out. 'Firestore' is a product name and 'URL' is not translated."
+  },
+  "sw_noReportPermission": {
+    "message": "Không có quyền với địa chỉ đó. Báo cáo được gửi tới backend mà listUrl trỏ đến, và địa chỉ này không nằm trong các nguồn được phép.",
+    "description": "Error in the report dialog when the report address is outside what the extension may reach. 'listUrl' is a setting name and is not translated."
+  },
+  "sw_needTarget": {
+    "message": "Cần mã số hồ sơ hoặc tên người dùng thì mới báo cáo được.",
+    "description": "Error in the report dialog when nothing identifies the account being reported."
+  },
+  "sw_firestoreUnreachable": {
+    "message": "Không kết nối được Firestore: $1",
+    "description": "Error in the report dialog when the report never reached the database. $1 is the browser's own untranslated network error. 'Firestore' is a product name."
+  },
+  "sw_rulesRefused": {
+    "message": "Quy tắc của máy chủ đã từ chối báo cáo này.",
+    "description": "Error in the report dialog when the database's security rules rejected the report."
+  },
+  "sw_firestoreHttp": {
+    "message": "Firestore trả về HTTP $1",
+    "description": "Error in the report dialog when the database answered with a failure. $1 is a status code such as 500. 'Firestore' and 'HTTP' are not translated."
+  },
+  "sw_noServer": {
+    "message": "Chưa cấu hình máy chủ. Hãy đặt URL của danh sách chặn trong tùy chọn.",
+    "description": "Error in the report dialog when no report address is set at all. 'URL' is not translated."
+  },
+  "sw_signInBefore": {
+    "message": "Hãy đăng nhập $1 trước khi báo cáo.",
+    "description": "Error in the report dialog when nobody is signed in. $1 is 'Facebook' or 'Threads' — a site name, never translated."
+  },
+  "sw_signInGeneric": {
+    "message": "Hãy đăng nhập trước khi báo cáo.",
+    "description": "Error in the report dialog when the server refused the report for want of a signed-in account and named no site."
+  },
+  "sw_serverUnreachable": {
+    "message": "Không kết nối được máy chủ: $1",
+    "description": "Error in the report dialog when the report never reached the server. $1 is the browser's own untranslated network error."
+  },
+  "sw_serverHttp": {
+    "message": "máy chủ trả về HTTP $1",
+    "description": "Error in the report dialog when the report server answered with a failure and named no reason. $1 is a status code such as 500. 'HTTP' is not translated."
+  }
+}

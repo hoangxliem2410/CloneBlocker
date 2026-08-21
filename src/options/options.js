@@ -11,6 +11,7 @@
   'use strict';
 
   const P = globalThis.CB_PROTOCOL;
+  const T = globalThis.CB_T;
   const KEYS = globalThis.CB_KEYS;
   const modeOf = globalThis.CB_MODE_OF;
   const $ = (id) => document.getElementById(id);
@@ -37,7 +38,7 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type, payload }, (res) => {
         if (chrome.runtime.lastError) { resolve({ ok: false, error: chrome.runtime.lastError.message }); return; }
-        resolve(res || { ok: false, error: 'no response' });
+        resolve(res || { ok: false, error: T('common_noResponse') });
       });
     });
   }
@@ -48,15 +49,23 @@
   }
 
   function ago(ts) {
-    if (!ts) return 'never';
+    if (!ts) return T('time_never');
     const s = Math.floor((Date.now() - ts) / 1000);
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
+    if (s < 60) return T('time_secondsAgo', s);
+    if (s < 3600) return T('time_minutesAgo', Math.floor(s / 60));
+    if (s < 86400) return T('time_hoursAgo', Math.floor(s / 3600));
+    return T('time_daysAgo', Math.floor(s / 86400));
   }
 
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  /**
+   * A count and the thing being counted, as one message per case.
+   *
+   * English needs the plural s and Vietnamese needs no agreement at all, which
+   * is exactly why the noun cannot be a fragment glued to a number here. Two
+   * keys per noun is the cheap version of a plural rule, and enough for
+   * counts that are only ever "one" or "more than one".
+   */
+  const counted = (n, one, many) => (n === 1 ? T(one) : T(many, n));
 
   /**
    * The "which kinds get blocked" boxes, built from the shared tag list.
@@ -168,21 +177,23 @@
     const state = await sw(P.SW.GET_STATE);
     const bl = state && state.ok && state.blocklist;
     if (!bl) {
-      $('listSynced').textContent = 'never';
-      $('listCounts').textContent = 'not loaded yet';
+      $('listSynced').textContent = T('time_never');
+      $('listCounts').textContent = T('options_listNotLoaded');
       return;
     }
     $('listSynced').textContent = ago(bl.fetchedAt);
     $('listSynced').title = bl.fetchedAt ? new Date(bl.fetchedAt).toLocaleString() : '';
     $('listCounts').textContent =
-      `${plural(bl.ids.length, 'profile id')} · ${plural(bl.usernames.length, 'username')}`;
+      counted(bl.ids.length, 'options_profileIdOne', 'options_profileIdMany') + ' · ' +
+      counted(bl.usernames.length, 'options_usernameOne', 'options_usernameMany');
   }
 
   $('refreshList').addEventListener('click', async () => {
-    setStatus($('listStatus'), 'Checking…');
+    setStatus($('listStatus'), T('options_checking'));
     const res = await sw(P.SW.REFRESH_NOW);
     setStatus($('listStatus'),
-      res.ok ? (res.unchanged ? 'Already up to date' : 'Updated') : (res.error || 'failed'),
+      res.ok ? T(res.unchanged ? 'options_upToDate' : 'options_updated')
+             : (res.error || T('options_failed')),
       res.ok ? 'ok' : 'bad');
     await refreshList();
     refreshDiag();
@@ -191,7 +202,7 @@
   // -- actions --------------------------------------------------------------
   $('clearLearned').addEventListener('click', async () => {
     await chrome.storage.local.remove(['learnedTemplate_facebook', 'learnedTemplate_threads']);
-    setStatus($('learnedStatus'), 'Cleared', 'ok');
+    setStatus($('learnedStatus'), T('options_cleared'), 'ok');
     refreshLearnedStatus();
   });
 
@@ -211,7 +222,7 @@
       const t = got['learnedTemplate_' + p];
       if (t) parts.push(`${p}: ${t.friendlyName || t.url}`);
     }
-    setStatus($('learnedStatus'), parts.length ? parts.join(' · ') : 'none captured yet',
+    setStatus($('learnedStatus'), parts.length ? parts.join(' · ') : T('options_noneCaptured'),
       parts.length ? 'ok' : '');
   }
 
@@ -231,14 +242,17 @@
       });
     } catch (e) { return { error: String((e && e.message) || e) }; }
     const tab = tabs && tabs[0];
-    if (!tab) return 'no Facebook or Threads tab open';
+    // These two are instructions to a reader, so they are translated. The rest
+    // of the dump below is field names and terse status words -- diagnostics,
+    // read by whoever is debugging, and not worth a translator's time.
+    if (!tab) return T('options_diagNoTab');
     const status = await new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, { type: 'tab:status' }, (res) => {
         if (chrome.runtime.lastError) { resolve(null); return; }
         resolve(res || null);
       });
     });
-    if (!status) return 'tab is open but the content script did not answer -- reload it';
+    if (!status) return T('options_diagNoAnswer');
 
     const cap = status.capability || {};
     const cands = cap.blockMutationCandidates || [];
@@ -258,7 +272,7 @@
 
   async function refreshDiag() {
     const state = await sw(P.SW.GET_STATE);
-    if (!state.ok) { $('diag').textContent = state.error || 'unavailable'; return; }
+    if (!state.ok) { $('diag').textContent = state.error || T('options_diagUnavailable'); return; }
     const bl = state.blocklist;
     const view = {
       mode: modeOf(state.settings || {}),

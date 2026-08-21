@@ -10,9 +10,14 @@ JavaScript — the module registry, the Relay runtime, and the Relay store — f
 MAIN-world content script. See [`docs/RESEARCH.md`](docs/RESEARCH.md) for what that means
 and why it was the right call.
 
+It speaks **English and Vietnamese**, and behind it sit two web pages on the
+same project: a moderation dashboard only the admin can open, and a
+[public list](#the-public-list) naming the accounts someone deliberately decided
+to name.
+
 ---
 
-## Two modes, plus hiding and reporting
+## Two modes, plus tags, hiding and reporting
 
 Real blocks are the product, and the only question worth putting to a user is
 how far the extension should go looking for them.
@@ -42,9 +47,28 @@ it loads. It ships **off** because a real block is what the extension is for;
 turn it on if you also want the list out of sight immediately, including the
 thousands of profiles you will never scroll past.
 
+**Which kinds — tags.** Every listed account carries one tag: *clone*,
+*impersonation*, *scam*, *harassment*, *spam*, *Bò đỏ* (red bull —
+state-aligned troll) or *other*. One vocabulary throughout, in which a
+reporter's reason is a vote and the target's tag is the verdict. Settings →
+**Which kinds get blocked** has a tick box per tag (`blockTags`, all ticked by
+default): untick *spam* and spam
+accounts stop being blocked, whether they were nominated by the list or walked
+past you on the page. It is an array matched by inclusion, so a tag introduced
+in a later release is never blocked by an existing install until its owner opts
+in — a new category must not start acting on its own. Hiding ignores tags
+entirely: hiding is free and reversible, so rationing it by kind would buy
+nothing.
+
 **Reporting.** Users flag clone accounts from the page itself; an admin reviews
 them and decides what reaches the blocklist. Nothing a user reports is blocked
 automatically.
+
+**English and Vietnamese.** Every surface — the popup, Settings, the activity
+page, the report chip and sheet, and the reasons inside it — is translated, and
+Chrome picks the language from the browser's own UI locale, so there is nothing
+to choose. The public list has its own toggle (see below); the moderation
+dashboard is English only, because it has one user.
 
 ---
 
@@ -80,6 +104,54 @@ It deliberately does **not** offer to report you to yourself, and ignores links
 in site navigation — the sidebar "Profile" entry is a link to a profile, but it
 is not someone you encountered in content.
 
+## The public list
+
+**https://clone-blocker2.web.app/** — a public page naming the accounts that
+were reported, read by a person, and then deliberately published. Vietnamese by
+default, because its audience is the people being impersonated, with an `en`
+toggle that remembers itself.
+
+**Being on the blocklist and being named here are two different decisions.**
+Approving a report puts an account on the list every installation polls;
+publishing puts a named accusation on a web page strangers will read, and
+conflating the two would mean every moderation call quietly became a
+publication. So publishing is **per-target opt-in**: the dashboard carries a
+separate *Publish publicly* control, and a profile appears here only if it is
+both approved **and** opted in. Most blocked accounts never appear at all, and
+the page prints both numbers side by side so a reader can see how small the
+named slice is.
+
+A published profile carries its display name, username, numeric id, tag, how
+many different people reported it, the day it was first reported and the day it
+was last active, up to three coarse regions, and links to the posts cited as
+evidence.
+
+What it never carries is the load-bearing part:
+
+- **No reporter identity, in any form.** Not the `acct_` pseudonyms, not
+  per-reporter counts, not trust weights — only a headcount. The pseudonyms are
+  stable across targets, so publishing even one would let anyone reconstruct who
+  reported what.
+- **No evidence without a link.** A quoted summary with no post behind it is an
+  unverifiable claim about a named person, so the entry is dropped rather than
+  published. The link must be https.
+- **No moderator notes, and no per-region counts** — "two reports from
+  `Asia/Ho_Chi_Minh`" narrows down a reporter in a way the bare region name
+  does not.
+
+The page says plainly that this is one person's judgement rather than a ruling
+by Facebook or Threads, and anyone who believes they are listed by mistake is
+pointed at the issue tracker; a profile whose case is not strong enough comes
+down.
+
+`blocklist/current` and `blocklist/publicView` are written in **one commit**, so
+the page can never name someone the list beside it has already dropped, and
+`tools/publish-static.js` mirrors both to the CDN together for the same reason.
+The page itself is two classic scripts with no framework and no build step —
+`hosting/i18n.js` for every word it says, `hosting/public.js` for the fetch and
+the rendering — putting strangers' text about named people on screen through
+`textContent` only, with every URL re-checked before it becomes an `href`.
+
 ## Moderation dashboard
 
 Served by **Firebase Hosting** from your own project — for this one,
@@ -104,7 +176,18 @@ It gives you:
   platform, by reason, and by reporter (which is what surfaces both your most
   useful reporters and anyone mass-reporting).
 - **Queue** — tabs for pending, approved, rejected, all, plus the live
-  blocklist. Free-text filter across name, @username, id and reason.
+  blocklist. Free-text filter across name, @username, id and reason, and a row
+  of tag chips to filter by verdict.
+- **Tags** — every row shows its tag and where the tag came from: `auto · clone`
+  is the modal reason across its reports, anything else is a decision someone
+  made. A retag control overrides it, and retagging republishes, because an
+  install that has narrowed its `blockTags` is acting on that word.
+- **Publish publicly** — the per-target opt-in for the public page, shown per
+  row alongside the approve/reject controls, so the rows that are merely blocked
+  and the rows that are named in public are visibly different things.
+- **Ranking dials** — the published `rankWeights`, tuned here with a live top-10
+  preview beside them, so what the admin sees is what clients compute. Tuning
+  them is a publish, not a setting.
 - **Evidence inline** — the posts people cited, with their text and links, shown
   in the row rather than hidden behind a detail view.
 - **Bulk actions** — select several and approve or reject in one request.
@@ -172,8 +255,8 @@ developer action on purpose: a URL field was the first thing a new user used to
 meet, and it asked a question most of them had no way to answer.
 
 The backend is a Firebase project on the **Spark (free) plan**: Firestore
-holds the data, Hosting serves the dashboard, Auth holds the one admin
-account. No Cloud Functions, and **no server code running anywhere** — every
+holds the data, Hosting serves the public page and the dashboard behind it,
+Auth holds the admin accounts. No Cloud Functions, and **no server code running anywhere** — every
 piece of the old Node server moved into the extension, into the dashboard's
 browser, or into the Firestore security rules:
 
@@ -219,9 +302,10 @@ console page to finish it on by hand and the rest of the run continues.
 | document | access | holds |
 |---|---|---|
 | `blocklist/current` | public read, admin write | the entire published payload as one JSON string, plus `rev` and `updatedAt` |
+| `blocklist/publicView` | public read, admin write | what the public page renders: opted-in profiles only, no reporter identities. Written in the same commit as `current` |
 | `reports/{platform~target~reporterHash}` | public **create only**; admin read/update/delete | one report per reporter×target — the doc id is the dedup key, so a repeat report is a create conflict, not a second row |
-| `decisions/{platform}~{target}` | admin only | `approved` / `rejected` / `pending` (revoke reopens as pending), by whom, when |
-| `admin/manual` | admin only | manually-added ids and usernames, and the `docIdOverrides` hot-patch map |
+| `decisions/{platform}~{target}` | admin only | `approved` / `rejected` / `pending` (revoke reopens as pending), by whom, when — plus the optional `tag` override and the `public` opt-in |
+| `admin/manual` | admin only | manually-added ids and usernames, the `docIdOverrides` hot-patch map, and the `rankWeights` dials |
 
 Report shape and limits are enforced in `firestore.rules`, with the same caps
 the old server had: display name 80, note and content summary 400 each, URLs
@@ -252,12 +336,20 @@ still has no path to the admin's session.
   "targets": [                          // per-target ranking METADATA (not ranked)
     { "platform": "threads", "id": "9100000001",
       "username": "x", "displayName": "Y",
+      "tag": "clone",                   // the verdict: admin override ‖ modal reason
       "trust": 1.5,                     // Σ reporter trust, computed at publish
+      "reporters": 2,                   // headcount that sum is spread across
       "last": "2026-08-21",             // UTC day of the last report
       "days":    { "2026-08-21": 3 },   // ≤14 daily buckets
       "regions": { "Asia/Ho_Chi_Minh": 4 },
       "langs":   { "vi-vn": 4 } }
-  ]
+  ],
+  "idTags": { "9100000001": "clone" },  // tag for every id in `ids`, for warm blocking
+  "rankWeights": {                      // the ranking dials, tuned from the dashboard
+    "halfLifeDays": 7, "velocityWeight": 1,
+    "localityFloor": 0.25, "localityLangFactor": 0.8,
+    "uniqueReporterBoost": 0
+  }
 }
 ```
 
@@ -266,6 +358,15 @@ still has no path to the admin's session.
 safety-critical invariant here — and it holds structurally, because the whole
 document is recomputed and rewritten after every decision rather than edited
 in place.
+
+`idTags` exists because the flat `ids` array is what warm blocking matches
+against, and a target resolved from the page you are looking at has no `targets`
+record to consult. An id with no reports behind it — one an admin added by
+hand — is published as `other`: the tag every install blocks by default, but the
+first one an owner narrowing their tags would drop, which is the right way round
+for an entry nobody voted on. Nothing in this document says who opted a profile
+into the public page; the `public` flag lives on the decision and reaches only
+`blocklist/publicView`.
 
 ### What changed vs the old server
 
@@ -390,13 +491,32 @@ The published list carries 14 daily buckets and a region tally per approved
 account, and the **extension ranks them locally**:
 
 ```
-rank = trust × recency × (1 + velocity7d) × locality
+rank = trust × recency × (1 + velocityWeight × velocity7d) × locality × boost
 
   trust      trust-weighted report score (see "Who filed the report")
-  recency    0.5 ^ (days since last report / 7)
+  recency    0.5 ^ (days since last report / halfLifeDays)
   velocity   reports in the last 7 days
-  locality   0.25 + 0.75 × how much of this clone's activity is near you
+  locality   localityFloor + (1 − localityFloor) × how much of this clone's
+             activity is near you
+  boost      1 + uniqueReporterBoost × log2(1 + unique reporters)
 ```
+
+**The dials are published, not compiled in.** `rankWeights` rides in the list —
+`halfLifeDays` 7, `velocityWeight` 1, `localityFloor` 0.25,
+`localityLangFactor` 0.8 (language counts a little less than region),
+`uniqueReporterBoost` 0 — so the owner can retune ranking from the dashboard
+without shipping an extension update, and the dashboard's preview ranks with
+exactly the numbers clients will. Those defaults are today's ranking, term for
+term: `uniqueReporterBoost` at 0 makes its factor exactly 1, so the formula is
+byte-identical to the one that predates the dials. A list published before they
+existed carries none, and a single nonsensical value falls back on its own
+rather than dragging the tuned ones down with it.
+
+The unique-reporter term is the one worth explaining. Trust is linear, so two
+reporters at 0.75 outrank one at 1.5 by nothing at all; raise the boost and four
+independent people saying the same thing start to outweigh one reporter with a
+long record. Which is right is an empirical question, which is exactly why it is
+a dial rather than a decision baked into a release.
 
 "Near you" is your own browser's time zone and language, compared against the
 published tallies **on your machine**. The fetch itself carries nothing about
@@ -479,7 +599,9 @@ account involved loses weight — including on reports they filed earlier.
 3. That is the whole setup. There is no address to enter and no permission
    prompt to accept: the list's origins are required permissions, so the list
    loads on the first refresh and active mode starts working at its cautious
-   paced defaults. Hiding waits in Settings for anyone who wants it.
+   paced defaults. Hiding waits in Settings for anyone who wants it, as do the
+   per-tag tick boxes, which start with every tag ticked. It comes up in
+   Vietnamese if that is what Chrome is running in, and in English otherwise.
 
 Requires Chrome 120+ (`"world": "MAIN"` needs 111; the 30-second `chrome.alarms` floor
 and MV3 behaviour here assume 120).
@@ -548,6 +670,10 @@ endpoint behind a token is still supported through the `listAuthHeader`
 setting, though — like the address itself — nothing in the UI writes it any
 more.
 
+A list in one of these shapes carries no tags, and nothing breaks: an id with no
+tag behind it counts as `other`, which every install blocks unless its owner has
+unticked that box.
+
 Reporting is the one thing a static file cannot carry: against a plain-JSON
 endpoint the extension still hides and blocks, but the report button needs
 somewhere to write, which is what the Firestore backend provides.
@@ -610,6 +736,7 @@ expando properties on DOM nodes.
 
 | File | Role |
 |---|---|
+| `src/common/i18n.js` | `CB_T` over `chrome.i18n`, and the `data-i18n` sweep every page runs |
 | `src/main/inject.js` | Module-registry hook, tokens, Relay, block strategies, request capture |
 | `src/content/bridge.js` | MAIN ↔ ISOLATED ↔ service-worker messaging |
 | `src/content/identity.js` | Blocklist index, id↔username alias cache |
@@ -640,12 +767,22 @@ it excludes the extension's own requests, so it cannot learn from its own failur
 ## Testing
 
 ```bash
-node tools/check.js         # static: syntax, manifest refs, MV3 CSP
-node tools/queue-test.js    # block queue + rate limiter (mocked chrome.*)
-node tools/firebase-test.js # security-rules matrix + ported logic, emulator
-node tools/e2e-test.js      # hiding + Relay discovery, browser
-npm test                    # all of the above
+node tools/check.js            # static: syntax, manifest refs, MV3 CSP, locales
+node tools/queue-test.js       # block queue + rate limiter (mocked chrome.*)
+node tools/firebase-test.js    # security-rules matrix + ported logic, emulator
+node tools/e2e-test.js         # hiding + Relay discovery, browser
+node tools/dashboard-visual.js # the dashboard, rendered against fixtures
+npm test                       # the first four
 ```
+
+`check.js` also holds the two rules that keep vocabulary from drifting back:
+the retired "Layer 1 / Layer 2" framing fails the build if it reappears in
+anything a user can read, and the locale checks fail it if the two message files
+disagree. Those are key parity in both directions, a non-empty message and a
+non-empty description on every key, matching `$1` placeholders across languages,
+every key the UI asks for existing in `en` — and no user-visible text anywhere in
+a page's markup outside a `data-i18n` element, so a string added later cannot
+quietly skip translation.
 
 `firebase-test.js` runs against the Firestore **emulator** and needs no real
 project or network. It drives the rules over plain REST — every accept and
@@ -659,13 +796,24 @@ reaching the blockable targets, the stats and trends shapes, and the
 day-quantised local ranking — including the regional flip in both directions,
 because a ranking that only flips one way is a ranking with a bug.
 
+It also holds the public view to its promises against the **serialised bytes**
+rather than the intent: that nothing unapproved or un-opted-in appears, that a
+search of the whole published JSON finds no `acct_` anywhere, that evidence
+without an https link is dropped while a summary behind one survives, that notes
+never appear and regions appear without their counts — and that `current` and
+`publicView` move together.
+
 `queue-test.js` drives the real service-worker message handler against a mocked
 `chrome.*`, covering the block queue, leases and rate limiter — logic the
 browser test deliberately never exercises, because it must never block anyone for
 real. It verifies that a failing target backs off instead of starving the queue,
 that failed *attempts* (not just successes) count toward the caps, that dry runs
 rotate without consuming the limit, and that two tabs cannot claim the same
-target. 12/12.
+target. It also covers the tag filter — that `blockTags` gates both cold seeding
+and warm enqueue, that an unticked tag is skipped in both, that an
+untagged id counts as `other`, and that the popup's user-initiated **Block now**
+goes through regardless — and that both rankers read the published weights the
+same way, at the defaults and at tuned values.
 
 `e2e-test.js` loads the extension into real Chrome and exercises it against live
 `threads.com` and `facebook.com`: manifest load, service-worker boot, a list
@@ -674,8 +822,8 @@ discovery, that content from a listed profile is genuinely hidden, and that the
 service worker derives its ranked targets locally from the published metadata.
 It asserts that **no real block is attempted**.
 
-Current status — **24/24 browser · 23/23 queue · static clean**, plus the
-firebase suite:
+Current status — **26/26 browser · 90/90 queue · 132/132 firebase · static
+clean**, and `dashboard-visual.js` green. A sample of the browser run:
 
 ```
 PASS  extension service worker started
@@ -751,20 +899,33 @@ Real blocking was tested end to end on a real Threads account:
 
 ```
 manifest.json
+_locales/  en/ vi/         messages.json each; the store name and description too
 src/  main/ content/ background/ popup/ options/ activity/ common/ ui/
+src/common/i18n.js        CB_T and the data-i18n sweep, loaded before everything
 firestore.rules           the whole trust model, enforced server-side
 firebase.json             Firestore + Hosting + emulator configuration
-hosting/                  the site: shared logic.js, admin/ dashboard
-tools/firebase-setup.js   one-command project provisioning
+hosting/index.html        the public transparency page (the site root)
+hosting/public.js         its fetch and rendering — textContent only, no strings
+hosting/public.css
+hosting/i18n.js           CB_T again, over a plain dictionary, for the hosted pages
+hosting/admin/            the moderation dashboard, served at /admin/ (English)
+hosting/logic.js          pure compute shared by the dashboard and the tests
+tools/firebase-setup.js   one-command project provisioning, --add-admin/--list-admins
 tools/firebase-test.js    rules matrix + ported logic, against the emulator
+tools/publish-static.js   mirrors both published docs to the CDN
 tools/fb.js               finds the Firebase CLI wherever it is installed
+tools/check.js            static checks, including locale parity
 tools/e2e-test.js         end-to-end browser test
+tools/dashboard-visual.js the dashboard rendered against fixtures
 tools/make-icons.js       dependency-free PNG generation
 tools/make-store-assets.js  listing tiles and screenshots, at exact sizes
 docs/RESEARCH.md          internals findings, with what is and isn't verified
 docs/FIREBASE-SPEC.md     the migration contract, formula by formula
+docs/PHASE23-SPEC.md      tags and the ranking dials, normative
+docs/PHASE45-SPEC.md      the public page and Google sign-in, normative
+docs/PHASE6-SPEC.md       English and Vietnamese, normative
 docs/CHROME-WEB-STORE.md  store requirements, listing copy, rejection risks
-docs/ROADMAP.md           what is built and what is planned, phase by phase
+docs/ROADMAP.md           what was built, phase by phase, and what is still open
 store/                    generated listing assets
 PRIVACY.md                privacy policy (required by the store)
 ```

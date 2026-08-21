@@ -20,154 +20,28 @@
  * No Firebase SDK: this is one GET of one document and needs no auth, so
  * pulling in the modular SDK would be a large dependency to do less.
  *
- * The dictionary is the whole top of the file on purpose. Phase 6 lifts it
- * into hosting/i18n.js as-is; keeping it in one object, with no string
- * anywhere below it, is what makes that a move rather than a rewrite.
+ * Not one string of its own: every word this page says lives in the shared
+ * dictionary in hosting/i18n.js and arrives through CB_T, the same call the
+ * extension makes. That is what keeps the two halves of the product readable
+ * as one thing, and what makes a language other than these two a table rather
+ * than a rewrite.
  */
 
-// -- strings ----------------------------------------------------------------
-
-const STRINGS = {
-  vi: {
-    lang: 'Tiếng Việt',
-    brand: 'clone-blocker / công khai',
-
-    introEyebrow: 'Danh sách công khai',
-    title: 'Những tài khoản đã bị báo cáo, xem xét và công bố',
-    lede: 'Đây là danh sách các tài khoản Facebook và Threads mà người dùng đã báo cáo là nhân bản, mạo danh, lừa đảo hoặc quấy rối. Mỗi hồ sơ trên trang này đều đã được một người đọc và quyết định công bố.',
-    lede2: 'Đây không phải là phán quyết của Facebook hay Threads, và cũng không phải kết quả của một thuật toán.',
-
-    howEyebrow: 'Một hồ sơ lên đây bằng cách nào',
-    step1t: 'Người dùng báo cáo',
-    step1b: 'Người cài tiện ích gửi báo cáo về một tài khoản, kèm đường dẫn tới bài viết làm bằng chứng.',
-    step2t: 'Một người xem xét',
-    step2b: 'Không có gì tự động lên đây. Một quản trị viên đọc báo cáo cùng bằng chứng rồi tự quyết định.',
-    step3t: 'Chỉ công bố khi có người quyết định công bố',
-    step3b: 'Bị chặn và bị nêu tên là hai quyết định khác nhau. Phần lớn tài khoản bị chặn không bao giờ xuất hiện ở đây.',
-
-    statPublished: 'Nêu tên tại đây',
-    statBlocked: 'Tổng số bị chặn',
-    statReports: 'Báo cáo đã nhận',
-    statNote: 'Con số ở giữa là toàn bộ danh sách chặn. Con số bên trái là phần đã có người quyết định nêu tên công khai — luôn nhỏ hơn nhiều, và đó là chủ ý.',
-
-    registerEyebrow: 'Hồ sơ',
-    filterLabel: 'Lọc theo nhãn',
-    filterAll: 'Tất cả',
-    searchPlaceholder: 'Tìm theo tên, @tên người dùng hoặc ID…',
-    searchLabel: 'Tìm trong danh sách',
-    resultCount: 'Đang hiện {n} trong {total} hồ sơ',
-    loading: 'Đang tải danh sách…',
-    loadError: 'Không đọc được danh sách. Hãy tải lại trang sau ít phút.',
-    emptyList: 'Chưa có hồ sơ nào được công bố.',
-    emptyFilter: 'Không có hồ sơ nào khớp. Hãy chọn lại nhãn hoặc tìm từ khoá khác.',
-
-    unnamed: 'Không có tên hiển thị',
-    noUsername: 'không có tên người dùng',
-    factReports: 'Số người báo cáo',
-    factFirst: 'Báo cáo lần đầu',
-    factLast: 'Hoạt động gần nhất',
-    factRegions: 'Khu vực',
-    evidenceEyebrow: 'Bằng chứng',
-    exhibit: 'Bài {n}',
-    noEvidence: 'Hồ sơ này không có đường dẫn bài viết nào được công bố.',
-    none: '—',
-
-    noticeTitle: 'Cần đọc trước khi tin trang này',
-    noticeAnon: 'Người báo cáo là ẩn danh. Trang này không bao giờ cho biết ai đã báo cáo một tài khoản, và chúng tôi cũng không công bố số liệu nào có thể chỉ ra họ — chỉ có tổng số người báo cáo khác nhau.',
-    noticeJudgement: 'Việc bị nêu tên ở đây là nhận định của một người, không phải phán quyết của Facebook hay Threads. Chúng tôi có thể sai, và đôi khi đã sai.',
-    noticeAppealBefore: 'Nếu bạn cho rằng mình bị nêu tên nhầm, hãy mở một issue tại ',
-    noticeAppealAfter: '. Chúng tôi sẽ xem lại và gỡ hồ sơ nếu không đủ căn cứ.',
-
-    footUpdated: 'Cập nhật lần cuối',
-    footSourceStatic: 'nguồn: bản sao tĩnh',
-    footSourceLive: 'nguồn: đọc trực tiếp',
-
-    tags: {
-      clone: 'Nhân bản',
-      impersonation: 'Mạo danh',
-      scam: 'Lừa đảo',
-      harassment: 'Quấy rối',
-      spam: 'Spam',
-      redbull: 'Bò đỏ',
-      other: 'Khác'
-    }
-  },
-
-  en: {
-    lang: 'English',
-    brand: 'clone-blocker / public',
-
-    introEyebrow: 'Public register',
-    title: 'Accounts that were reported, read by a person, and published',
-    lede: 'This is a list of Facebook and Threads accounts that people reported as clones, impersonators, scams or harassment. Every profile on this page was read by a person, who then decided to publish it.',
-    lede2: 'It is not a ruling by Facebook or Threads, and it is not the output of an algorithm.',
-
-    howEyebrow: 'How a profile gets here',
-    step1t: 'Someone reports it',
-    step1b: 'A person using the extension reports an account and links the posts that show why.',
-    step2t: 'A person reviews it',
-    step2b: 'Nothing arrives here automatically. A moderator reads the reports and the evidence and decides.',
-    step3t: 'Published only when someone decides to publish it',
-    step3b: 'Blocking an account and naming it are two different decisions. Most blocked accounts never appear here.',
-
-    statPublished: 'Named here',
-    statBlocked: 'Blocked in total',
-    statReports: 'Reports received',
-    statNote: 'The middle number is the whole blocklist. The left one is the part a person chose to name in public — far smaller, deliberately.',
-
-    registerEyebrow: 'Profiles',
-    filterLabel: 'Filter by tag',
-    filterAll: 'All',
-    searchPlaceholder: 'Search by name, @username or ID…',
-    searchLabel: 'Search the list',
-    resultCount: 'Showing {n} of {total} profiles',
-    loading: 'Loading the list…',
-    loadError: 'Could not read the list. Reload the page in a few minutes.',
-    emptyList: 'No profile has been published yet.',
-    emptyFilter: 'Nothing matches. Pick another tag or search for something else.',
-
-    unnamed: 'No display name',
-    noUsername: 'no username',
-    factReports: 'Unique reporters',
-    factFirst: 'First reported',
-    factLast: 'Last active',
-    factRegions: 'Regions',
-    evidenceEyebrow: 'Evidence',
-    exhibit: 'Post {n}',
-    noEvidence: 'No post links are published for this profile.',
-    none: '—',
-
-    noticeTitle: 'Read this before you believe this page',
-    noticeAnon: 'Reporters are anonymous. This page never says who reported an account, and publishes no figure that could narrow it down — only how many different people did.',
-    noticeJudgement: 'Being listed here is one person’s judgement, not a ruling by Facebook or Threads. We can be wrong, and we have been.',
-    noticeAppealBefore: 'If you believe you are listed here by mistake, open an issue at ',
-    noticeAppealAfter: '. We will look again and take the profile down if the case is not strong enough.',
-
-    footUpdated: 'Last updated',
-    footSourceStatic: 'source: static mirror',
-    footSourceLive: 'source: live read',
-
-    tags: {
-      clone: 'Clone',
-      impersonation: 'Impersonation',
-      scam: 'Scam',
-      harassment: 'Harassment',
-      spam: 'Spam',
-      redbull: 'Red bull',
-      other: 'Other'
-    }
-  }
-};
+// Which surface's strings CB_T answers with. Done before anything renders,
+// and never again: the language changes underneath this, the surface does not.
+CB_I18N.use('public');
 
 // Where a person who believes they are listed in error goes. Named as a
 // constant so the note and any future page can never quote different ones.
 const ISSUES_URL = 'https://github.com/hoangxliem2410/CloneBlocker/issues';
 
-// The tag order the chips follow, taken from the dictionary rather than
-// re-declared, so a tag added to the labels shows up in the filter by itself.
-// Anything in the data that is not in here still renders, appended, under its
-// raw name: an unlabelled tag must never make a profile invisible.
-const TAG_ORDER = Object.keys(STRINGS.vi.tags);
+// The tag order the chips follow, read off the dictionary rather than
+// re-declared, so a tag that gains a label gains a chip by itself. Anything in
+// the data that is not in here still renders, appended, under its raw name: an
+// unlabelled tag must never make a profile invisible.
+const TAG_ORDER = CB_I18N.keys()
+  .filter(k => k.startsWith('tag_'))
+  .map(k => k.slice(4));
 
 // -- where the data lives ---------------------------------------------------
 
@@ -185,7 +59,6 @@ const STATIC_MIRROR = 'transparency.json';
 
 // -- state ------------------------------------------------------------------
 
-let lang = 'vi';
 let view = null;        // the publicView payload, once read
 let source = null;      // 'static' | 'live', for the footer
 let tagFilter = '';     // '' means every tag
@@ -195,18 +68,19 @@ const $ = (id) => document.getElementById(id);
 
 // -- helpers ----------------------------------------------------------------
 
-function t(key, vars) {
-  const table = STRINGS[lang] || STRINGS.vi;
-  let s = table[key];
-  if (s == null) s = STRINGS.vi[key];
-  if (s == null) return key;
-  if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(String(vars[k]));
-  return s;
-}
-
+/**
+ * The label for a tag, or the tag itself.
+ *
+ * protocol.js reads the same key the same way in the extension, down to the
+ * idiom: CB_T hands back the key when nothing has translated it, so a key
+ * echoed straight back means "no label for this tag" and the raw name is
+ * shown. A tag the dictionary has never heard of must still name itself --
+ * rendering it as `tag_something` would be worse than plain.
+ */
 function tagLabel(tag) {
-  const table = (STRINGS[lang] || STRINGS.vi).tags;
-  return table[tag] || tag;
+  const key = 'tag_' + tag;
+  const label = CB_T(key);
+  return label === key ? tag : label;
 }
 
 /** A tag we have a colour for, or the neutral one. */
@@ -247,8 +121,8 @@ function link(href, cls) {
 
 function num(n) {
   const v = Number(n);
-  if (!isFinite(v)) return t('none');
-  try { return new Intl.NumberFormat(lang === 'vi' ? 'vi-VN' : 'en-US').format(v); }
+  if (!isFinite(v)) return CB_T('none');
+  try { return new Intl.NumberFormat(CB_I18N.lang() === 'vi' ? 'vi-VN' : 'en-US').format(v); }
   catch (e) { return String(v); }
 }
 
@@ -262,14 +136,16 @@ function num(n) {
  */
 function fmtDay(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
-  if (!m) return t('none');
-  return lang === 'vi' ? m[3] + '/' + m[2] + '/' + m[1] : m[1] + '-' + m[2] + '-' + m[3];
+  if (!m) return CB_T('none');
+  return CB_I18N.lang() === 'vi'
+    ? m[3] + '/' + m[2] + '/' + m[1]
+    : m[1] + '-' + m[2] + '-' + m[3];
 }
 
 /** An ISO instant down to the minute, in UTC, for the footer. */
 function fmtStamp(iso) {
   const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(String(iso || ''));
-  if (!m) return t('none');
+  if (!m) return CB_T('none');
   return fmtDay(m[1]) + ' ' + m[2] + ' UTC';
 }
 
@@ -340,11 +216,11 @@ async function load() {
 function renderLangToggle() {
   const box = $('langToggle');
   clear(box);
-  for (const code of ['vi', 'en']) {
+  for (const { code, label } of CB_I18N.locales()) {
     const b = el('button', null, code.toUpperCase());
     b.type = 'button';
-    b.setAttribute('aria-pressed', String(code === lang));
-    b.title = STRINGS[code].lang;
+    b.setAttribute('aria-pressed', String(code === CB_I18N.lang()));
+    b.title = label;
     b.addEventListener('click', () => setLang(code));
     box.appendChild(b);
   }
@@ -353,38 +229,38 @@ function renderLangToggle() {
 function renderIntro() {
   const box = $('intro');
   clear(box);
-  box.appendChild(el('p', 'eyebrow', t('introEyebrow')));
-  box.appendChild(el('h1', null, t('title')));
-  box.appendChild(el('p', 'lede', t('lede')));
-  box.appendChild(el('p', 'lede', t('lede2')));
+  box.appendChild(el('p', 'eyebrow', CB_T('introEyebrow')));
+  box.appendChild(el('h1', null, CB_T('title')));
+  box.appendChild(el('p', 'lede', CB_T('lede')));
+  box.appendChild(el('p', 'lede', CB_T('lede2')));
 
   const list = el('ol', 'steps');
   [['step1t', 'step1b'], ['step2t', 'step2b'], ['step3t', 'step3b']].forEach((pair, i) => {
     const li = el('li', 'step');
     li.appendChild(el('span', 'n', String(i + 1)));
-    li.appendChild(el('h3', null, t(pair[0])));
-    li.appendChild(el('p', null, t(pair[1])));
+    li.appendChild(el('h3', null, CB_T(pair[0])));
+    li.appendChild(el('p', null, CB_T(pair[1])));
     list.appendChild(li);
   });
-  box.appendChild(el('p', 'eyebrow howhd', t('howEyebrow')));
+  box.appendChild(el('p', 'eyebrow howhd', CB_T('howEyebrow')));
   box.appendChild(list);
 }
 
 function renderNotice() {
   const box = $('notice');
   clear(box);
-  box.appendChild(el('h2', null, t('noticeTitle')));
-  box.appendChild(el('p', null, t('noticeAnon')));
-  box.appendChild(el('p', null, t('noticeJudgement')));
+  box.appendChild(el('h2', null, CB_T('noticeTitle')));
+  box.appendChild(el('p', null, CB_T('noticeAnon')));
+  box.appendChild(el('p', null, CB_T('noticeJudgement')));
 
   // Built out of three nodes rather than one string with markup in it: the
   // whole page holds the line that no HTML is ever assembled from text.
   const appeal = el('p');
-  appeal.appendChild(document.createTextNode(t('noticeAppealBefore')));
+  appeal.appendChild(document.createTextNode(CB_T('noticeAppealBefore')));
   const a = link(ISSUES_URL);
   if (a) appeal.appendChild(a);
   else appeal.appendChild(document.createTextNode(ISSUES_URL));
-  appeal.appendChild(document.createTextNode(t('noticeAppealAfter')));
+  appeal.appendChild(document.createTextNode(CB_T('noticeAppealAfter')));
   box.appendChild(appeal);
 }
 
@@ -392,10 +268,10 @@ function renderFoot() {
   const box = $('foot');
   clear(box);
   if (!view) return;
-  box.appendChild(document.createTextNode(t('footUpdated') + ' ' + fmtStamp(view.updatedAt)));
+  box.appendChild(document.createTextNode(CB_T('footUpdated') + ' ' + fmtStamp(view.updatedAt)));
   box.appendChild(el('span', 'sep', '·'));
   box.appendChild(document.createTextNode(
-    source === 'static' ? t('footSourceStatic') : t('footSourceLive')));
+    source === 'static' ? CB_T('footSourceStatic') : CB_T('footSourceLive')));
 }
 
 // -- rendering: the data ----------------------------------------------------
@@ -411,14 +287,14 @@ function renderStats() {
   const tile = (cls, value, key) => {
     const d = el('div', 'stat' + (cls ? ' ' + cls : ''));
     d.appendChild(el('div', 'sv', num(value)));
-    d.appendChild(el('div', 'sk', t(key)));
+    d.appendChild(el('div', 'sk', CB_T(key)));
     return d;
   };
   grid.appendChild(tile('lead', counts.published, 'statPublished'));
   grid.appendChild(tile('', counts.blocked, 'statBlocked'));
   grid.appendChild(tile('', counts.reports, 'statReports'));
   box.appendChild(grid);
-  box.appendChild(el('p', 'statnote', t('statNote')));
+  box.appendChild(el('p', 'statnote', CB_T('statNote')));
 }
 
 /** Every tag actually present, in the canonical order, with its headcount. */
@@ -441,7 +317,7 @@ function renderControls() {
   box.hidden = false;
 
   const filter = el('div', 'tagfilter');
-  filter.appendChild(el('span', 'eyebrow', t('filterLabel')));
+  filter.appendChild(el('span', 'eyebrow', CB_T('filterLabel')));
 
   const chip = (tag, label, count) => {
     const b = el('button', 'tagchip ' + (tag ? tagClass(tag) : 'all'), label);
@@ -456,7 +332,7 @@ function renderControls() {
     return b;
   };
 
-  filter.appendChild(chip('', t('filterAll'), (view.profiles || []).length));
+  filter.appendChild(chip('', CB_T('filterAll'), (view.profiles || []).length));
   for (const [tag, n] of present) filter.appendChild(chip(tag, tagLabel(tag), n));
   box.appendChild(filter);
 
@@ -464,8 +340,8 @@ function renderControls() {
   const input = el('input');
   input.type = 'search';
   input.value = query;
-  input.placeholder = t('searchPlaceholder');
-  input.setAttribute('aria-label', t('searchLabel'));
+  input.placeholder = CB_T('searchPlaceholder');
+  input.setAttribute('aria-label', CB_T('searchLabel'));
   input.addEventListener('input', () => { query = input.value; renderCards(); });
   wrap.appendChild(input);
   box.appendChild(wrap);
@@ -494,14 +370,14 @@ function profileCard(p) {
   const head = el('div', 'head');
   const name = p.displayName
     ? el('h3', 'name', p.displayName)
-    : el('h3', 'name unnamed', t('unnamed'));
+    : el('h3', 'name unnamed', CB_T('unnamed'));
   head.appendChild(name);
   head.appendChild(el('span', 'tag ' + tagClass(tag), tagLabel(tag)));
   card.appendChild(head);
 
   const ident = el('p', 'ident');
   ident.appendChild(document.createTextNode(
-    p.username ? '@' + p.username : '(' + t('noUsername') + ')'));
+    p.username ? '@' + p.username : '(' + CB_T('noUsername') + ')'));
   ident.appendChild(el('span', 'sep', '·'));
   ident.appendChild(document.createTextNode(String(p.platform || '')));
   if (p.id) {
@@ -513,7 +389,7 @@ function profileCard(p) {
   const facts = el('div', 'facts');
   const fact = (key, value, big) => {
     const d = el('div', 'fact');
-    d.appendChild(el('div', 'k', t(key)));
+    d.appendChild(el('div', 'k', CB_T(key)));
     d.appendChild(el('div', 'v' + (big ? ' big' : ''), value));
     return d;
   };
@@ -523,18 +399,18 @@ function profileCard(p) {
   // Region identifiers are printed whole, underscores opened out: "Asia/Ho Chi
   // Minh" says where without inviting the guess that "Ho Chi Minh" alone does.
   const regions = (p.regions || []).map(r => String(r).replace(/_/g, ' '));
-  facts.appendChild(fact('factRegions', regions.length ? regions.join(', ') : t('none')));
+  facts.appendChild(fact('factRegions', regions.length ? regions.join(', ') : CB_T('none')));
   card.appendChild(facts);
 
   const ev = el('div', 'evidence');
-  ev.appendChild(el('p', 'eyebrow', t('evidenceEyebrow')));
+  ev.appendChild(el('p', 'eyebrow', CB_T('evidenceEyebrow')));
   const usable = (p.evidence || []).filter(e => e && link(e.url));
   if (!usable.length) {
-    ev.appendChild(el('p', 'noevidence', t('noEvidence')));
+    ev.appendChild(el('p', 'noevidence', CB_T('noEvidence')));
   } else {
     usable.forEach((e, i) => {
       const row = el('div', 'exhibit');
-      row.appendChild(el('span', 'en', t('exhibit', { n: i + 1 })));
+      row.appendChild(el('span', 'en', CB_T('exhibit', i + 1)));
       if (e.summary) row.appendChild(el('p', 'quote', String(e.summary)));
       const a = link(e.url);
       if (a) row.appendChild(a);
@@ -557,10 +433,10 @@ function renderCards() {
   for (const p of shown) box.appendChild(profileCard(p));
 
   line.hidden = !all.length;
-  line.textContent = t('resultCount', { n: num(shown.length), total: num(all.length) });
+  line.textContent = CB_T('resultCount', num(shown.length), num(all.length));
 
-  if (!all.length) { state.textContent = t('emptyList'); state.className = 'state'; }
-  else if (!shown.length) { state.textContent = t('emptyFilter'); state.className = 'state'; }
+  if (!all.length) { state.textContent = CB_T('emptyList'); state.className = 'state'; }
+  else if (!shown.length) { state.textContent = CB_T('emptyFilter'); state.className = 'state'; }
   else state.textContent = '';
 }
 
@@ -568,32 +444,39 @@ function renderCards() {
 
 const LANG_KEY = 'cb.public.lang';
 
+/**
+ * What the reader last chose, or nothing.
+ *
+ * Deliberately unvalidated: CB_I18N.setLang refuses a code the dictionary does
+ * not have and leaves the surface's own default in force -- Vietnamese,
+ * because the list is about Vietnamese-language accounts and is read
+ * overwhelmingly by their targets. Naming the two languages again here would
+ * be a second copy of the list, and the one nobody updates.
+ */
 function readLang() {
-  try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (saved === 'vi' || saved === 'en') return saved;
-  } catch (e) { /* private mode, or storage denied: fall through to the default */ }
-  // Vietnamese by default because the list is about Vietnamese-language
-  // accounts and is read overwhelmingly by their targets; English is the
-  // second language here, not the neutral one.
-  return 'vi';
+  try { return localStorage.getItem(LANG_KEY); }
+  catch (e) { return null; }   // private mode, or storage denied
 }
 
 function setLang(next) {
-  if (next !== 'vi' && next !== 'en') return;
-  lang = next;
-  try { localStorage.setItem(LANG_KEY, next); } catch (e) { /* nothing to do */ }
-  document.documentElement.lang = next;
+  // The module is the one that decides: a code it does not have is refused and
+  // the language in force comes back unchanged, so a stale value out of
+  // localStorage can never leave the page half-rendered in a language that
+  // does not exist.
+  const now = CB_I18N.setLang(next);
+  if (now !== next) return;
+  try { localStorage.setItem(LANG_KEY, now); } catch (e) { /* nothing to do */ }
+  document.documentElement.lang = now;
   renderAll();
 }
 
 function renderAll() {
   // The tab title is a string like any other: a reader who switches to English
   // and then looks at their tabs should not find the Vietnamese one there.
-  document.title = 'Clone Blocker — ' + t('introEyebrow');
+  document.title = 'Clone Blocker — ' + CB_T('introEyebrow');
   renderLangToggle();
-  $('brandName').textContent = t('brand');
-  $('registerHd').textContent = t('registerEyebrow');
+  $('brandName').textContent = CB_T('brand');
+  $('registerHd').textContent = CB_T('registerEyebrow');
   renderIntro();
   renderNotice();
   renderStats();
@@ -605,18 +488,17 @@ function renderAll() {
 // -- boot -------------------------------------------------------------------
 
 (async function boot() {
-  lang = readLang();
-  document.documentElement.lang = lang;
+  document.documentElement.lang = CB_I18N.setLang(readLang());
 
   // The prose renders before the fetch resolves: the explanation of what this
   // list is and the note about being listed in error are the parts a person who
   // believes they are on it needs, and they must not wait on a database.
   renderAll();
-  $('state').textContent = t('loading');
+  $('state').textContent = CB_T('loading');
 
   const ok = await load();
   if (!ok) {
-    $('state').textContent = t('loadError');
+    $('state').textContent = CB_T('loadError');
     $('state').className = 'state bad';
     return;
   }

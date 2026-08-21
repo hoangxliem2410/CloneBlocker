@@ -229,5 +229,53 @@ for (const page of ['popup', 'activity']) {
     offenders.join('; '));
 }
 
+// ---- 8. one tag vocabulary, spelled the same in all three places ---------
+//
+// TAGS lives three times over -- hosting/logic.js derives verdicts from it,
+// protocol.js labels them in the extension, firestore.rules refuses anything
+// outside it -- and no two of those copies can import each other. Every way
+// they can drift fails silently and in a different direction: a tag the rules
+// reject but the dashboard offers loses the admin's write with a 403 they will
+// read as a network blip; a tag the extension does not know is matched by
+// nobody's blockTags and simply stops being blocked; and a reordering changes
+// which tag wins a tied vote without changing a single value.
+{
+  const TAG_LIST = /const TAGS = \[([^\]]*)\]/;
+  const tagsIn = (rel) => {
+    const m = TAG_LIST.exec(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    if (!m) throw new Error('no TAGS array in ' + rel);
+    return [...m[1].matchAll(/'([^']+)'/g)].map(q => q[1]);
+  };
+
+  let tags = null;
+  try {
+    const logic = tagsIn('hosting/logic.js');
+    const protocol = tagsIn('src/common/protocol.js');
+    // Order and all: it is the tiebreak for equally popular reasons.
+    report(logic.join(',') === protocol.join(','),
+      'TAGS is identical in logic.js and protocol.js (' + logic.length + ')',
+      logic.join(',') === protocol.join(',') ? '' : logic.join(',') + ' vs ' + protocol.join(','));
+    tags = logic;
+  } catch (e) {
+    report(false, 'TAGS is identical in logic.js and protocol.js', e.message);
+  }
+
+  if (tags) {
+    // The rules name the vocabulary twice -- once for a report's `reason`,
+    // once for a decision's `tag` -- and both have to be complete, so every
+    // list in the file that looks like the vocabulary is held to it.
+    const rules = fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8');
+    const lists = [...rules.matchAll(/\[([^\]]*'clone'[^\]]*)\]/g)]
+      .map(m => [...m[1].matchAll(/'([^']+)'/g)].map(q => q[1]));
+    report(lists.length >= 2,
+      'firestore.rules lists the vocabulary for both reason and tag',
+      lists.length + ' list(s) found');
+    const short = lists.map(l => tags.filter(t => !l.includes(t))).flat();
+    report(lists.length >= 2 && short.length === 0,
+      'firestore.rules accepts every tag (' + tags.length + ')',
+      short.length ? 'missing: ' + [...new Set(short)].join(', ') : '');
+  }
+}
+
 console.log('\n' + (failures ? `${failures} problem(s)` : 'all checks passed'));
 process.exitCode = failures ? 1 : 0;

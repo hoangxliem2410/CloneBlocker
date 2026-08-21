@@ -48,7 +48,11 @@
       <div id="spark" class="spark"></div>
       <div class="breakdowns">
         <div><h3>By platform</h3><div id="byPlatform" class="bars"></div></div>
-        <div><h3>By reason</h3><div id="byReason" class="bars"></div></div>
+        <div><h3>By reason reported</h3><div id="byReason" class="bars"></div></div>
+        <!-- Reason is what the first reporter picked; tag is the verdict the
+             target ended up with. Side by side they show where the two
+             disagree, which is where retagging is actually happening. -->
+        <div><h3>By tag</h3><div id="byTag" class="bars tinted"></div></div>
         <div><h3>Top reporters</h3><div id="topReporters" class="bars"></div></div>
       </div>
     </section>
@@ -57,6 +61,29 @@
       <h2>Where clones are active</h2>
       <div id="trendMatrix"></div>
       <div id="trendTop" class="trendtop"></div>
+    </section>
+
+    <!-- The dials the published list carries, and what they do to it. The
+         preview ranks with whatever is in the form right now, so the effect of
+         a change is visible before anyone commits it to the served list. -->
+    <section class="card">
+      <h2>Ranking</h2>
+      <div class="ranking">
+        <form id="rankForm" class="rankform">
+          <div class="rankfields" id="rankFields"></div>
+          <div class="row-inline rankactions">
+            <button class="btn primary" type="submit">Save &amp; publish</button>
+            <button class="btn" type="button" id="rankReset">Reset to defaults</button>
+            <span id="rankMsg" class="note"></span>
+          </div>
+        </form>
+        <div class="rankpreview">
+          <h3>Top 10 with these values</h3>
+          <div id="rankPreview"></div>
+          <p class="note">No viewer region is assumed here, so locality is
+             neutral for every target; a real client ranks its own region up.</p>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -70,6 +97,10 @@
         </div>
         <input type="search" id="filter" placeholder="Filter by name, @username, id, reason…">
       </div>
+
+      <!-- Tag toggles, built from the one TAGS vocabulary in logic.js rather
+           than spelled out here, so a tag added there cannot go missing. -->
+      <div class="tagfilter" id="tagFilter"></div>
 
       <div class="bulkbar hidden" id="bulkbar">
         <label class="toggle"><input type="checkbox" id="selectAll"><span id="selCount">0 selected</span></label>

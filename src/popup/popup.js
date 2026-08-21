@@ -302,8 +302,13 @@
     // warm: this profile is on screen right now, which is the pattern the
     // platform finds unremarkable, so it is paced normally rather than being
     // held to the cold ceiling.
+    //
+    // userInitiated: somebody pressed a button labelled Block now while
+    // looking at this account. That outranks the "which kinds get blocked"
+    // preference, which is about what the extension does unprompted -- a
+    // filtered-out click would leave a dead button and no explanation.
     const res = await sw(P.SW.ENQUEUE_PLATFORM_BLOCK, {
-      platform: current.platform, ids: [p.profileId], warm: true
+      platform: current.platform, ids: [p.profileId], warm: true, userInitiated: true
     });
     if (res && res.ok !== false) {
       $('blockProfile').textContent = 'Queued';

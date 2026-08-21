@@ -18,7 +18,17 @@
   'use strict';
 
   // -- constants (verbatim) --------------------------------------------------
-  const REASONS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'other'];
+
+  // One vocabulary, two jobs: the reason a reporter picks is a vote, the tag a
+  // target carries is the verdict. Keeping them the same list is what lets a
+  // verdict be derived from the votes at all, so REASONS is an alias rather
+  // than a second list somebody has to remember to update.
+  //
+  // Order is load-bearing twice over: it breaks ties when several reasons are
+  // equally popular, and it is the order the dashboard and the report sheet
+  // show. New tags go before 'other', which stays the bucket of last resort.
+  const TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other'];
+  const REASONS = TAGS;
   const PLATFORMS = ['facebook', 'threads'];
   const DAY_BUCKETS = 14;    // days of history kept per account
   const REGION_CAP = 24;     // distinct regions remembered per account
@@ -26,6 +36,23 @@
   const HALF_LIFE_DAYS = 7;  // a clone reported a week ago counts half as much
   const TRUST_FLOOR = 0.25;
   const TARGET_PUBLISH_CAP = 2000;  // newest targets kept in the public doc
+
+  /**
+   * The ranking dials, published in the list so the owner can turn them
+   * without shipping an extension update.
+   *
+   * These values ARE today's ranking: velocityWeight 1 and localityFloor 0.25
+   * reproduce the old hardcoded expression term for term, and
+   * uniqueReporterBoost 0 makes the new boost factor exactly 1. This phase
+   * makes the dials exist; it deliberately does not turn any of them.
+   */
+  const RANK_WEIGHTS = {
+    halfLifeDays: HALF_LIFE_DAYS,  // recency = 0.5 ^ (ageDays / halfLifeDays)
+    velocityWeight: 1,             // (1 + velocityWeight * velocity7d)
+    localityFloor: 0.25,           // locality never falls below this
+    localityLangFactor: 0.8,       // language counts a little less than region
+    uniqueReporterBoost: 0         // 1 + boost * log2(1 + uniqueReporters)
+  };
 
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -75,6 +102,31 @@
     if (!key) return 1;                       // caller gave no region: stay neutral
     const here = (tally && hasOwn(tally, key)) ? tally[key] : 0;
     return (here + 0.5) / (total + 1);
+  }
+
+  // -- tags ------------------------------------------------------------------
+
+  /**
+   * The tag the reports themselves argue for: the most common reason.
+   *
+   * Ties go to whichever comes first in TAGS, which is why that order is not
+   * cosmetic. Scanning in TAGS order with a strict `>` gives that for free.
+   * A target with no usable reason at all falls back to 'clone' -- the reason
+   * this list exists, and the one that is never a surprise.
+   */
+  function modalTag(reasons) {
+    let best = null, bestN = 0;
+    for (const t of TAGS) {
+      const n = (reasons && hasOwn(reasons, t)) ? reasons[t] : 0;
+      if (n > bestN) { best = t; bestN = n; }
+    }
+    return best || 'clone';
+  }
+
+  /** The verdict: what the admin said, or failing that what the reports say. */
+  function effectiveTag(decision, reasons) {
+    const override = decision && decision.tag;
+    return TAGS.includes(override) ? override : modalTag(reasons);
   }
 
   // -- reputation (verbatim) -------------------------------------------------
@@ -170,6 +222,10 @@
         platform: first.platform,
         profileId: null, username: null, displayName: null, url: null,
         reason: REASONS.includes(first.reason) ? first.reason : 'clone',
+        // Every vote, not just the first reporter's: `reason` above is what
+        // opened the case, `reasons` is what the case has come to be about.
+        reasons: Object.create(null),
+        tag: 'clone',
         status: 'pending',
         count: 0,
         reporters: [],
@@ -190,6 +246,12 @@
         if (!rec.username && d.username) rec.username = normUser(d.username);
         if (!rec.displayName && d.displayName) rec.displayName = d.displayName;
         if (!rec.url && d.url) rec.url = d.url;
+
+        // Unknown reasons are dropped rather than tallied: a key outside the
+        // vocabulary could win the vote and become a tag nothing can match.
+        if (REASONS.includes(d.reason)) {
+          rec.reasons[d.reason] = (rec.reasons[d.reason] || 0) + 1;
+        }
 
         if (!rec.reporters.includes(d.reporterHash)) {
           rec.reporters.push(d.reporterHash);
@@ -225,6 +287,9 @@
           rec.status = 'pending';
         }
       }
+      // The admin's tag survives a reopening: a verdict about what an account
+      // IS does not stop being true because one more person reported it.
+      rec.tag = effectiveTag(dec, rec.reasons);
       records.push(rec);
     }
     return records;
@@ -233,14 +298,43 @@
   // -- ranking (verbatim formulas) -------------------------------------------
 
   /**
+   * Fill a partial or absent weight set from the defaults.
+   *
+   * A list published before rankWeights existed carries none, and must rank
+   * exactly as it did then -- so "absent" and "the defaults" are the same
+   * thing here. A single nonsensical dial falls back on its own rather than
+   * discarding the rest: a half-life of zero would divide by zero and take
+   * every other tuned value down with it.
+   */
+  function rankWeightsOf(weights) {
+    const src = (weights && typeof weights === 'object') ? weights : {};
+    const num = (k) => {
+      const v = Number(src[k]);
+      return Number.isFinite(v) ? v : RANK_WEIGHTS[k];
+    };
+    const halfLifeDays = num('halfLifeDays');
+    return {
+      halfLifeDays: halfLifeDays > 0 ? halfLifeDays : RANK_WEIGHTS.halfLifeDays,
+      velocityWeight: num('velocityWeight'),
+      localityFloor: num('localityFloor'),
+      localityLangFactor: num('localityLangFactor'),
+      uniqueReporterBoost: num('uniqueReporterBoost')
+    };
+  }
+
+  /**
    * Rank published target metadata for one client.
    *
    * On the server this ran per-request with the caller's region; now it runs
    * where the region already lives -- the client -- and nothing is sent.
    * Everything is quantised to whole days on purpose, so recomputation within
    * a day is deterministic and the queue does not churn between polls.
+   *
+   * `weights` is whatever the published list carried; omitting it ranks with
+   * RANK_WEIGHTS, which is the ranking as it has always been.
    */
-  function rankTargets(targets, ctx) {
+  function rankTargets(targets, ctx, weights) {
+    const w = rankWeightsOf(weights);
     const region = ctx && ctx.region ? String(ctx.region) : null;
     const lang = ctx && ctx.lang ? String(ctx.lang).toLowerCase() : null;
     const platform = ctx && PLATFORMS.includes(ctx.platform) ? ctx.platform : null;
@@ -259,16 +353,23 @@
       const trust = Number(t.trust) || 0;
       const ageDays = Math.max(0,
         Math.floor((today - Date.parse(t.last || 0)) / 86400000));
-      const recency = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
+      const recency = Math.pow(0.5, ageDays / w.halfLifeDays);
       const vel = velocity(days, 7);
       const regionAff = affinity(t.regions, region, total);
       const langAff = affinity(t.langs, lang, total);
+      const reporters = Math.max(0, Number(t.reporters) || 0);
 
       // Region never zeroes a target out -- a clone that is merely hot
       // elsewhere should still be reachable -- but it dominates the ordering
       // when it fits.
-      const locality = 0.25 + 0.75 * Math.max(regionAff, langAff * 0.8);
-      const rank = trust * recency * (1 + vel) * locality;
+      const locality = w.localityFloor
+        + (1 - w.localityFloor) * Math.max(regionAff, langAff * w.localityLangFactor);
+      // Trust is linear in the number of reporters, so one confident voice can
+      // outweigh several independent ones. This says how much independence is
+      // worth on top of that -- and at the shipped 0 it is exactly 1, i.e. it
+      // says nothing at all until an owner decides otherwise.
+      const boost = 1 + w.uniqueReporterBoost * Math.log2(1 + reporters);
+      const rank = trust * recency * (1 + w.velocityWeight * vel) * locality * boost;
 
       out.push({
         platform: t.platform,
@@ -281,7 +382,8 @@
           recentDays: ageDays,
           velocity7d: vel,
           region: Math.round(regionAff * 100) / 100,
-          lang: Math.round(langAff * 100) / 100
+          lang: Math.round(langAff * 100) / 100,
+          reporters
         }
       });
     }
@@ -325,14 +427,34 @@
       .filter(r => r.status === 'approved' && isId(r.profileId))
       .sort((a, b) => (b.lastReportAt < a.lastReportAt ? -1 : 1))
       .slice(0, TARGET_PUBLISH_CAP);
+    // The tag of every id that gets published, not just the capped slice of
+    // targets: warm blocking meets an id with no target record behind it and
+    // still has to decide whether this user wants that kind of account blocked.
+    const tagById = new Map();
+    for (const r of records) {
+      if (r.status !== 'approved' || !isId(r.profileId)) continue;
+      const id = String(r.profileId);
+      if (!tagById.has(id)) tagById.set(id, TAGS.includes(r.tag) ? r.tag : 'clone');
+    }
+    const idTags = {};
+    // A manually listed id has no reports and so no verdict to derive. 'other'
+    // rather than 'clone': it is the tag every install blocks by default but
+    // the one an owner narrowing their tags would drop first, which is the
+    // right way round for an entry nobody voted on.
+    for (const id of ids) idTags[id] = tagById.has(id) ? tagById.get(id) : 'other';
+
     for (const r of eligible) {
       targets.push({
         platform: r.platform,
         id: String(r.profileId),
         username: r.username || null,
         displayName: r.displayName || null,
+        tag: TAGS.includes(r.tag) ? r.tag : 'clone',
         trust: Math.round((r.reporters || [])
           .reduce((n, who) => n + trustOf(rep, who), 0) * 100) / 100,
+        // The headcount behind the trust score. Trust already sums their
+        // weights; this is how many people that sum is spread across.
+        reporters: (r.reporters || []).length,
         last: String(r.lastReportAt || r.updatedAt || r.createdAt).slice(0, 10),
         days: Object.assign({}, r.days),
         regions: Object.assign({}, r.regions),
@@ -347,7 +469,12 @@
       docIdOverrides: (m.docIdOverrides && typeof m.docIdOverrides === 'object')
         ? m.docIdOverrides : {},
       pending,
-      targets
+      targets,
+      idTags,
+      // Shipped with the list so both rankers agree without an extension
+      // update. Whatever the admin doc holds wins; absent, these are the
+      // values every ranker already falls back to.
+      rankWeights: rankWeightsOf(m.rankWeights)
     };
   }
 
@@ -471,8 +598,10 @@
   // -- exports ---------------------------------------------------------------
 
   const API = {
-    REASONS, PLATFORMS, DAY_BUCKETS, HALF_LIFE_DAYS, TRUST_FLOOR,
+    REASONS, TAGS, PLATFORMS, DAY_BUCKETS, HALF_LIFE_DAYS, TRUST_FLOOR,
+    RANK_WEIGHTS,
     dayKey, normUser, isId, bump, trimDays, velocity, affinity,
+    modalTag, effectiveTag, rankWeightsOf,
     weightOf, reputation, trustOf, withTrust, sortQueue,
     aggregate, rankTargets, buildPublish, buildStats, trendMatrix
   };

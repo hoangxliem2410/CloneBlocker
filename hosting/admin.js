@@ -36,11 +36,23 @@ let rows = [];
 let blocklist = [];
 const selected = new Set();
 
+// Every tag on to start with: the filter is there to narrow a queue somebody
+// is already looking at, not to hide part of it before they have looked.
+const selectedTags = new Set(LOGIC.TAGS);
+
 // The last full read, kept so decisions and the publish step work from the
 // same records the admin is looking at.
 let records = [];
 let rep = Object.create(null);
 let manual = {};
+// The decision documents as stored, which is NOT what `records` carry: a
+// record's tag is the effective one and its status may have been reopened by a
+// later report. Writing a decision has to start from what is actually in the
+// document or it silently undoes the half it was not asked about.
+let decisions = new Map();
+// The payload the current read would publish. The ranking preview ranks these
+// targets, so what the admin previews is the array clients receive.
+let payload = null;
 
 // -- Firestore REST ---------------------------------------------------------
 
@@ -142,11 +154,67 @@ function decisionPath(key) {
   return 'decisions/' + encodeURIComponent(key.slice(0, i) + '~' + key.slice(i + 1));
 }
 
-function writeDecision(key, status) {
-  return patchDocument(decisionPath(key), {
+/** The admin's override for a key, or null when the tag is still inferred. */
+function overrideTag(key) {
+  const t = (decisions.get(key) || {}).tag;
+  return LOGIC.TAGS.includes(t) ? t : null;
+}
+
+/**
+ * Write decisions/{key}, carrying over whatever this call is not about.
+ *
+ * A PATCH without an updateMask replaces the document, and the document now
+ * holds two independent verdicts: a status (should this be blocked) and a tag
+ * (what is it). Sending only one of them would erase the other — approving a
+ * target would throw away the tag an admin chose for it, and retagging one
+ * would revoke its approval. So both are always written, and `patch` says only
+ * which of them is changing.
+ *
+ * `at` and `by` describe the STATUS decision, so a retag leaves them alone.
+ * That matters beyond tidiness: aggregate() reopens a rejected case when a
+ * report arrives after `at`, and moving `at` forward for an unrelated retag
+ * would quietly re-close it.
+ */
+function writeDecision(key, patch) {
+  const prev = decisions.get(key) || {};
+  const prevStatus = ['approved', 'rejected', 'pending'].includes(prev.status)
+    ? prev.status : 'pending';
+  const status = patch.status !== undefined ? patch.status : prevStatus;
+  const tag = patch.tag !== undefined ? patch.tag : overrideTag(key);
+  const same = status === prevStatus;
+
+  const fields = {
     status: { stringValue: status },
-    by: { stringValue: 'dashboard' },
-    at: { timestampValue: new Date().toISOString() }
+    by: { stringValue: (same && prev.by) ? String(prev.by) : 'dashboard' },
+    at: { timestampValue: (same && prev.at) ? String(prev.at) : new Date().toISOString() }
+  };
+  // Absent rather than empty when there is no override: `tag` is an optional
+  // field and effectiveTag() reads its absence as "let the reports decide".
+  if (LOGIC.TAGS.includes(tag)) fields.tag = { stringValue: tag };
+  return patchDocument(decisionPath(key), fields);
+}
+
+/**
+ * Write admin/manual whole.
+ *
+ * Same replacement hazard as a decision, one document up: the manual list and
+ * the ranking weights live side by side here, so a write that mentions only
+ * one of them drops the other. Every caller goes through this and passes the
+ * complete next state.
+ */
+function writeManual(next) {
+  const ids = (next.ids || []).map(String);
+  const usernames = (next.usernames || []).map(v => LOGIC.normUser(v));
+  const overrides = (next.docIdOverrides && typeof next.docIdOverrides === 'object')
+    ? next.docIdOverrides : {};
+  const weights = LOGIC.rankWeightsOf(next.rankWeights);
+  return patchDocument('admin/manual', {
+    ids: { arrayValue: { values: ids.map(v => ({ stringValue: v })) } },
+    usernames: { arrayValue: { values: usernames.map(v => ({ stringValue: v })) } },
+    docIdOverrides: { mapValue: { fields: Object.fromEntries(
+      Object.keys(overrides).map(k => [k, { stringValue: String(overrides[k]) }])) } },
+    rankWeights: { mapValue: { fields: Object.fromEntries(
+      Object.keys(weights).map(k => [k, { doubleValue: weights[k] }])) } }
   });
 }
 
@@ -174,9 +242,25 @@ async function publishList() {
 }
 
 async function decideAndPublish(key, decision) {
-  const out = await writeDecision(key, STATUS_OF[decision]);
+  const out = await writeDecision(key, { status: STATUS_OF[decision] });
   if (!out.ok) return out;
   await refresh();       // re-read so the publish is computed from what is stored
+  await publishList();
+  return { ok: true };
+}
+
+/**
+ * Set (or clear) a target's tag and republish.
+ *
+ * The same write-then-reread-then-publish path a decision takes, because a tag
+ * IS published: it rides on every target and in idTags, and an install that
+ * has narrowed its blockTags is acting on it. A retag that did not republish
+ * would leave the served list disagreeing with the dashboard.
+ */
+async function retagAndPublish(key, tag) {
+  const out = await writeDecision(key, { tag: tag || null });
+  if (!out.ok) return out;
+  await refresh();
   await publishList();
   return { ok: true };
 }
@@ -211,6 +295,25 @@ function link(href, cls) {
   a.target = '_blank';
   a.rel = 'noreferrer noopener';
   return a;
+}
+
+// -- tags -------------------------------------------------------------------
+
+/**
+ * The tag chip.
+ *
+ * Filled means inferred — this is what the reports add up to, and it will move
+ * on its own as more arrive. Outlined means a person decided it, and no volume
+ * of later reports will change it. An admin scanning the queue needs to know
+ * which of their tags are actually theirs, so the two never look the same.
+ */
+function tagChip(tag, overridden) {
+  const t = LOGIC.TAGS.includes(tag) ? tag : 'other';
+  const chip = el('span', 'tag tag-' + t + (overridden ? ' over' : ''), t);
+  chip.title = overridden
+    ? 'tag set by an admin — reports no longer move it'
+    : 'tag inferred from the reports';
+  return chip;
 }
 
 // -- sign-in ----------------------------------------------------------------
@@ -265,6 +368,46 @@ for (const tab of document.querySelectorAll('.tab')) {
     refresh();
   });
 }
+/**
+ * The tag toggles, drawn from TAGS so the row cannot drift from the vocabulary.
+ *
+ * Purely client-side: everything is already in memory, and a tag filter that
+ * needed a round trip would stop being the quick "show me the scams" it is for.
+ * Counts come from the rows currently loaded, so they say how much of THIS tab
+ * each tag accounts for rather than quoting a global total the list contradicts.
+ */
+function renderTagFilter() {
+  const host = $('tagFilter');
+  host.textContent = '';
+  // The blocklist tab lists published ids and usernames, not queue records;
+  // most of them have no record left to carry a tag, so the row would filter
+  // against something half the entries do not have.
+  if (currentStatus === '__blocklist') { host.classList.add('hidden'); return; }
+  host.classList.remove('hidden');
+
+  const counts = Object.create(null);
+  for (const r of rows) counts[r.tag] = (counts[r.tag] || 0) + 1;
+
+  host.appendChild(el('span', 'flbl', 'Tags'));
+  for (const tag of LOGIC.TAGS) {
+    const on = selectedTags.has(tag);
+    const b = el('button', 'tagchip tag-' + tag + (on ? ' on' : ''), tag);
+    if (counts[tag]) b.appendChild(el('span', 'n', String(counts[tag])));
+    b.addEventListener('click', () => {
+      if (on) selectedTags.delete(tag); else selectedTags.add(tag);
+      render();
+    });
+    host.appendChild(b);
+  }
+  const all = el('button', 'tagchip all' + (selectedTags.size === LOGIC.TAGS.length ? ' on' : ''),
+    'all');
+  all.addEventListener('click', () => {
+    for (const tag of LOGIC.TAGS) selectedTags.add(tag);
+    render();
+  });
+  host.appendChild(all);
+}
+
 $('refresh').addEventListener('click', refresh);
 $('publish').addEventListener('click', async () => {
   $('publish').disabled = true;
@@ -292,7 +435,7 @@ async function bulk(decision) {
   $('bulkApprove').disabled = $('bulkReject').disabled = true;
   let decided = 0, lastErr = null;
   for (const key of keys) {
-    const out = await writeDecision(key, STATUS_OF[decision]);
+    const out = await writeDecision(key, { status: STATUS_OF[decision] });
     if (out.ok) decided++; else lastErr = out.error;
   }
   $('bulkApprove').disabled = $('bulkReject').disabled = false;
@@ -304,6 +447,152 @@ async function bulk(decision) {
   await refresh();
   await publishList();
 }
+
+// -- ranking dials ----------------------------------------------------------
+//
+// The weights ride in the published list, so tuning them is a publish, not a
+// deploy. The preview beside the form is the point of the card: a half-life is
+// an abstraction, and the only thing anyone actually wants to know is which
+// accounts move to the top if they change it.
+
+const RANK_FIELDS = [
+  ['halfLifeDays', 0.5,
+   'A report counts half as much once it is this many days old. Smaller means the list forgets faster.'],
+  ['velocityWeight', 0.1,
+   'How much each report from the last 7 days multiplies rank. 0 ignores how busy a target is right now.'],
+  ['localityFloor', 0.05,
+   'The share of its rank a target keeps for someone far from it. 1 ignores locality; 0 makes a distant target worthless.'],
+  ['localityLangFactor', 0.05,
+   'A matching language counts this much of a matching region.'],
+  ['uniqueReporterBoost', 0.1,
+   // The honest reading, not the flattering one: this term is switched off in
+   // production, and saying so is what stops it being tuned by accident.
+   'Extra weight for independent reporters, on top of the trust their reports already carry. 0 means off — ranking is exactly what it was before this dial existed.']
+];
+
+// True while the form holds values nobody has saved. A refresh must not
+// overwrite what the admin is in the middle of typing.
+let rankDirty = false;
+
+function buildRankForm() {
+  const host = $('rankFields');
+  host.textContent = '';
+  for (const [key, step, help] of RANK_FIELDS) {
+    const row = el('div', 'rankfield');
+    const label = el('label', 'fname', key);
+    label.htmlFor = 'rw_' + key;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = 'rw_' + key;
+    input.step = String(step);
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(el('div', 'fhelp', help));
+    host.appendChild(row);
+  }
+}
+
+/**
+ * What the form says right now, sanitised the way a published list would be.
+ *
+ * A cleared box reads as NaN rather than as 0, because rankWeightsOf treats an
+ * unusable value as "not set" and falls back to the default — and "I emptied
+ * this field" means "leave it alone", not "turn this term off". `Number('')`
+ * is 0, which would have meant the opposite.
+ */
+function formWeights() {
+  const raw = {};
+  for (const [key] of RANK_FIELDS) {
+    const v = $('rw_' + key).value.trim();
+    raw[key] = v === '' ? NaN : Number(v);
+  }
+  return LOGIC.rankWeightsOf(raw);
+}
+
+function fillRankForm(weights) {
+  const w = LOGIC.rankWeightsOf(weights);
+  for (const [key] of RANK_FIELDS) $('rw_' + key).value = String(w[key]);
+  rankDirty = false;
+  setRankMsg();
+}
+
+function setRankMsg() {
+  const msg = $('rankMsg');
+  msg.textContent = rankDirty ? 'unsaved — preview only' : '';
+  msg.className = 'note' + (rankDirty ? ' dirty' : '');
+}
+
+/**
+ * The top of the ranked list under the form's current values.
+ *
+ * Ranked with logic.js rankTargets over the very array buildPublish would
+ * ship, so this is not a model of what clients compute — it is the same
+ * function over the same data. No ctx is passed: with no region and no
+ * language, affinity() stays neutral, which is the only honest default for a
+ * dashboard that has no particular viewer.
+ */
+function renderRankPreview() {
+  const host = $('rankPreview');
+  host.textContent = '';
+  const targets = (payload && payload.targets) || [];
+  if (!targets.length) {
+    host.appendChild(el('div', 'note', 'Nothing published yet — approve a target with a numeric id.'));
+    return;
+  }
+  const tagOf = new Map(targets.map(t => [t.id, t.tag]));
+  const ranked = LOGIC.rankTargets(targets, {}, formWeights()).slice(0, 10);
+  ranked.forEach((t, i) => {
+    const row = el('div', 'prow');
+    row.appendChild(el('div', 'pos', String(i + 1)));
+    const name = el('div', 'pnamewrap');
+    name.appendChild(el('span', 'pname',
+      t.displayName || (t.username ? '@' + t.username : t.id)));
+    name.appendChild(tagChip(tagOf.get(t.id), false));
+    row.appendChild(name);
+    row.appendChild(el('div', 'prank', t.rank.toFixed(3)));
+    row.appendChild(el('div', 'pwhy', [
+      'trust ' + t.why.trust,
+      t.why.reporters + ' reporter' + (t.why.reporters === 1 ? '' : 's'),
+      t.why.recentDays + 'd old',
+      t.why.velocity7d + '/7d'
+    ].join('  ·  ')));
+    host.appendChild(row);
+  });
+}
+
+buildRankForm();
+// The defaults until the first read says otherwise, so the card is never blank
+// while the queue behind it is loading.
+fillRankForm(null);
+$('rankForm').addEventListener('input', () => {
+  rankDirty = true;
+  setRankMsg();
+  renderRankPreview();
+});
+$('rankReset').addEventListener('click', () => {
+  fillRankForm(LOGIC.RANK_WEIGHTS);
+  rankDirty = true;      // the defaults are not saved until someone saves them
+  setRankMsg();
+  renderRankPreview();
+});
+$('rankForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('rankForm').querySelector('button[type="submit"]');
+  btn.disabled = true;
+  // Stored on admin/manual next to the manual list, because buildPublish
+  // already takes that document as "everything the admin has decided that is
+  // not a per-target decision" — and publishing is what makes a weight real.
+  const out = await writeManual(Object.assign({}, manual, { rankWeights: formWeights() }));
+  btn.disabled = false;
+  if (!out.ok) {
+    if (out.unauthorized) { unauthorized(); return; }
+    setConn(out.error || 'could not save the weights', 'bad');
+    return;
+  }
+  rankDirty = false;
+  await refresh();
+  await publishList();
+});
 
 // -- stats ------------------------------------------------------------------
 function renderStats(d) {
@@ -336,15 +625,32 @@ function renderStats(d) {
 
   bars($('byPlatform'), d.byPlatform || []);
   bars($('byReason'), d.byReason || []);
+  // Tallied here rather than in buildStats: the tag breakdown is a dashboard
+  // view, and buildStats' shape is asserted field for field by the test suite
+  // as the contract the old server published.
+  bars($('byTag'), tagTally(), (label) => 'tag-' + label);
   bars($('topReporters'), d.topReporters || []);
 }
 
-function bars(host, pairs) {
+/**
+ * Every record by its effective tag, biggest first.
+ *
+ * Ties break on TAGS order — the same order that breaks ties when the modal
+ * reason is chosen — so two equal tags do not swap places between refreshes.
+ */
+function tagTally() {
+  const m = Object.create(null);
+  for (const r of records) m[r.tag] = (m[r.tag] || 0) + 1;
+  return Object.entries(m)
+    .sort((a, b) => (b[1] - a[1]) || (LOGIC.TAGS.indexOf(a[0]) - LOGIC.TAGS.indexOf(b[0])));
+}
+
+function bars(host, pairs, tint) {
   host.textContent = '';
   if (!pairs.length) { host.appendChild(el('div', 'note', 'No data yet.')); return; }
   const max = Math.max(...pairs.map(p => p[1]));
   for (const pair of pairs) {
-    const row = el('div', 'barrow');
+    const row = el('div', 'barrow' + (tint ? ' ' + tint(pair[0]) : ''));
     row.appendChild(el('span', 'lbl', pair[0]));
     // A third element, when present, is the reporter's trust weight. Volume
     // alone flatters a mass-reporter; the weight is what separates them.
@@ -464,7 +770,7 @@ async function removeFromBlocklist(entry) {
       ? (rec.profileId && String(rec.profileId) === value)
       : (rec.username && LOGIC.normUser(rec.username) === value);
     if (!hit) continue;
-    const out = await writeDecision(rec.key, 'pending');
+    const out = await writeDecision(rec.key, { status: 'pending' });
     if (!out.ok) return out;
   }
 
@@ -473,14 +779,8 @@ async function removeFromBlocklist(entry) {
   const nextIds = isIdKind ? mIds.filter(v => v !== value) : mIds;
   const nextNames = isIdKind ? mNames : mNames.filter(v => v !== value);
   if (nextIds.length !== mIds.length || nextNames.length !== mNames.length) {
-    const overrides = (manual.docIdOverrides && typeof manual.docIdOverrides === 'object')
-      ? manual.docIdOverrides : {};
-    const out = await patchDocument('admin/manual', {
-      ids: { arrayValue: { values: nextIds.map(v => ({ stringValue: v })) } },
-      usernames: { arrayValue: { values: nextNames.map(v => ({ stringValue: v })) } },
-      docIdOverrides: { mapValue: { fields: Object.fromEntries(
-        Object.keys(overrides).map(k => [k, { stringValue: String(overrides[k]) }])) } }
-    });
+    const out = await writeManual(Object.assign({}, manual,
+      { ids: nextIds, usernames: nextNames }));
     if (!out.ok) return out;
   }
   return { ok: true };
@@ -500,14 +800,22 @@ async function refresh() {
   records = LOGIC.aggregate(reportsOut.docs, decisionsOut.docs);
   rep = LOGIC.reputation(records);
   manual = manualOut.doc ? manualOut.doc.data : {};
+  // Keyed the way records are (platform:target), so a row can ask what its own
+  // decision document actually holds.
+  decisions = new Map(decisionsOut.docs.map(d => [d.id.replace('~', ':'), d.data || {}]));
 
   setConn('Connected', 'ok');
 
   // The stats' blocklist column counts what WOULD be served right now — the
   // same derivation publishList() writes, so the tiles and the list agree.
-  const payload = LOGIC.buildPublish(records, rep, manual);
+  payload = LOGIC.buildPublish(records, rep, manual);
   renderStats(LOGIC.buildStats(records, rep, { ids: payload.ids, usernames: payload.usernames }));
   renderTrends(LOGIC.trendMatrix(records, {}));
+  // Only when the admin is not mid-edit: a refresh fires after every decision,
+  // and pulling the published values back into a half-typed form would lose
+  // work with no warning.
+  if (!rankDirty) fillRankForm(manual.rankWeights);
+  renderRankPreview();
 
   if (currentStatus === '__blocklist') {
     blocklist = deriveBlocklist(payload, records);
@@ -522,8 +830,10 @@ async function refresh() {
 
 function visibleRows() {
   const q = $('filter').value.trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(r => [r.displayName, r.username, r.profileId, r.platform, r.reason, r.key]
+  const byTag = rows.filter(r => selectedTags.has(r.tag));
+  if (!q) return byTag;
+  return byTag.filter(r => [r.displayName, r.username, r.profileId, r.platform,
+                            r.reason, r.tag, r.key]
     .filter(Boolean).join(' ').toLowerCase().includes(q));
 }
 
@@ -531,6 +841,7 @@ function visibleRows() {
 function render() {
   const host = $('rows');
   host.textContent = '';
+  renderTagFilter();
 
   if (currentStatus === '__blocklist') {
     $('bulkbar').classList.add('hidden');
@@ -563,7 +874,10 @@ function reportRow(r) {
   if (r.score != null && Math.abs(r.score - r.count) >= 0.05) {
     top.appendChild(el('span', 'score', 'score ' + r.score.toFixed(2)));
   }
-  top.appendChild(el('span', 'reason', r.reason));
+  top.appendChild(tagChip(r.tag, overrideTag(r.key) !== null));
+  // The opening reason stays visible next to the tag: when they disagree, the
+  // case has moved on from what the first reporter thought it was.
+  if (r.reason !== r.tag) top.appendChild(el('span', 'reason', 'reported as ' + r.reason));
   if (r.held) top.appendChild(el('span', 'pill held', 'held: no trusted reporter'));
   if (r.status !== 'pending') top.appendChild(el('span', 'pill ' + r.status, r.status));
   box.appendChild(top);
@@ -642,8 +956,49 @@ function reportRow(r) {
     add('Approve → block', 'good', 'approve');
     if (r.status !== 'rejected') add('Reject', 'danger', 'reject');
   }
+  actions.appendChild(retagControl(r));
   box.appendChild(actions);
   return box;
+}
+
+/**
+ * The retag select.
+ *
+ * The empty option is the important one: it clears the override rather than
+ * setting a seventh tag, and the tag goes back to following the reports. An
+ * admin who has changed their mind needs a way back to "let the votes decide",
+ * or every accidental retag is permanent.
+ */
+function retagControl(r) {
+  const wrap = el('div', 'retag');
+  wrap.appendChild(el('span', null, 'tag'));
+
+  const sel = document.createElement('select');
+  const auto = el('option', null, 'auto · ' + LOGIC.modalTag(r.reasons));
+  auto.value = '';
+  sel.appendChild(auto);
+  for (const tag of LOGIC.TAGS) {
+    const o = el('option', null, tag);
+    o.value = tag;
+    sel.appendChild(o);
+  }
+  const current = overrideTag(r.key);
+  sel.value = current || '';
+
+  sel.addEventListener('change', async () => {
+    const next = sel.value;
+    sel.disabled = true;
+    const out = await retagAndPublish(r.key, next);
+    if (!out.ok) {
+      if (out.unauthorized) { unauthorized(); return; }
+      sel.disabled = false;
+      sel.value = current || '';
+      setConn(out.error || 'retag failed', 'bad');
+    }
+    // On success refresh() has already redrawn this row from what is stored.
+  });
+  wrap.appendChild(sel);
+  return wrap;
 }
 
 function renderBlocklist(host) {
@@ -659,6 +1014,12 @@ function renderBlocklist(host) {
     const top = el('div', 'top');
     top.appendChild(el('span', 'name', e.displayName || e.value));
     top.appendChild(el('span', 'pill', e.kind));
+    // The tag as PUBLISHED, straight out of idTags — this tab is a view of the
+    // served document, so it should show what the served document says rather
+    // than re-deriving it. Usernames are not in idTags and carry no tag.
+    if (e.kind === 'id' && payload && payload.idTags[e.value]) {
+      top.appendChild(tagChip(payload.idTags[e.value], false));
+    }
     if (e.reports) top.appendChild(el('span', 'count', e.reports + ' reports'));
     box.appendChild(top);
     box.appendChild(el('div', 'meta',

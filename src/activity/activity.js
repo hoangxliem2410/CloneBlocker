@@ -95,6 +95,29 @@
   }
 
   /**
+   * What kind of account this is, when the published list says.
+   *
+   * Two places know: the ranked target record, and the flat `idTags` map that
+   * covers every published id including the ones no target record was kept
+   * for. Nothing is shown when neither knows -- a chip reading "Something
+   * else" on every row of a list published before tags existed would be
+   * inventing a verdict nobody reached.
+   */
+  function tagFor(id) {
+    const bl = state && state.blocklist;
+    if (!bl) return null;
+    const t = (bl.targets || []).find(x => String(x.id) === String(id));
+    const tag = (t && t.tag) || (bl.idTags || {})[String(id)] || null;
+    return (globalThis.CB_TAGS || []).includes(tag) ? tag : null;
+  }
+
+  /** The tag chip for a target, or nothing at all. */
+  function tagChip(id) {
+    const tag = tagFor(id);
+    return tag ? chip((globalThis.CB_TAG_LABELS || {})[tag] || tag, 'tag') : null;
+  }
+
+  /**
    * The honest reason line. A warm target is on the list AND was on screen;
    * a cold one was suggested by the published trending metadata, and its
    * `why` says with what force.
@@ -253,6 +276,7 @@
         reasonFor({ warm: e.warm, rank: e.rank, why: meta.why }),
         [
           chip(e.platform, 'plat'),
+          tagChip(e.id),
           chip(e.warm ? 'seen on screen' : 'suggested', e.warm ? 'warm' : 'cold'),
           cool ? chip('retry in ' + inMs(cool), 'warn') : null,
           failures[key] ? chip(failures[key] + ' failed tries', 'bad') : null
@@ -279,6 +303,7 @@
         reasonFor(e) + (e.detail ? ' — ' + e.detail : ''),
         [
           chip(e.platform, 'plat'),
+          tagChip(e.id),
           e.dryRun ? chip('dry run', 'dry')
             : e.ok ? chip('blocked', 'ok') : chip('failed', 'bad'),
           chip(ago(e.at), 'time')

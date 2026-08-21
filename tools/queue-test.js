@@ -845,6 +845,234 @@ async function reset(settings) {
       badge.text === '!', JSON.stringify(badge.text));
   }
 
+  // -- 18. blockTags: which kinds of account get blocked ---------------------
+  //
+  // The setting rations BLOCKS, not the list: an unticked kind stays listed
+  // and stays hidden. Both queueing paths have to honour it -- cold seeding
+  // from the ranked slice, and the warm sweep the content script drives -- and
+  // exactly one thing has to get past it, the button a person pressed.
+  {
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const today = new Date().toISOString().slice(0, 10);
+    const published = {
+      v: 1, updatedAt: new Date().toISOString(),
+      ids: ['8500000001', '8500000002', '8500000003'],
+      usernames: [], docIdOverrides: {}, pending: [],
+      // The flat map covers ids with no target record behind them, which is
+      // the only thing warm blocking has to go on.
+      idTags: { '8500000001': 'clone', '8500000002': 'redbull', '8500000003': 'spam' },
+      targets: [
+        { platform: 'facebook', id: '8500000001', tag: 'clone', trust: 2, last: today,
+          days: { [today]: 2 }, regions: {}, langs: {}, reporters: 2 },
+        { platform: 'facebook', id: '8500000002', tag: 'redbull', trust: 1, last: today,
+          days: {}, regions: {}, langs: {}, reporters: 1 }
+      ]
+    };
+    const envelope = {
+      name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+      fields: { json: { stringValue: JSON.stringify(published) } },
+      createTime: '2026-08-21T00:00:00Z', updateTime: '2026-08-21T12:00:00Z'
+    };
+    global.fetch = async () => ({
+      ok: true, status: 200, headers: { get: () => null },
+      text: async () => JSON.stringify(envelope), json: async () => envelope
+    });
+    const queuedIds = async () =>
+      ((await state()).queue.facebook || []).map(e => (typeof e === 'string' ? e : e.id));
+    const ALL_BUT_REDBULL =
+      ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'other'];
+
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50 });
+    const rAll = await send('sw:refresh-now');
+    check('with every kind ticked -- the shipped default -- all of them seed',
+      rAll.ok && (await queuedIds()).length === 2, JSON.stringify(await queuedIds()));
+    check('the published tag map is cached with the list',
+      (rAll.blocklist.idTags || {})['8500000002'] === 'redbull',
+      JSON.stringify(rAll.blocklist.idTags));
+    check('and ranking does not strip a target of its tag',
+      (rAll.blocklist.targets || []).every(t => t.tag),
+      JSON.stringify((rAll.blocklist.targets || []).map(t => [t.id, t.tag])));
+
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50,
+                  blockTags: ALL_BUT_REDBULL });
+    await send('sw:refresh-now');
+    const seeded = await queuedIds();
+    check('an unticked kind is left out of the cold queue',
+      seeded.includes('8500000001') && !seeded.includes('8500000002'),
+      JSON.stringify(seeded));
+
+    // The content script forwards every listed id it sees. Scrolling past one
+    // is not a decision about it, so the filter applies.
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8500000002'], warm: true });
+    check('nor is it queued when the page sweep runs into it',
+      !(await queuedIds()).includes('8500000002'), JSON.stringify(await queuedIds()));
+
+    // Pressing Block now is. Dropping that click would leave a dead button and
+    // nothing on screen to explain it.
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8500000002'], warm: true, userInitiated: true });
+    check('but an explicit Block now goes through anyway',
+      (await queuedIds()).includes('8500000002'), JSON.stringify(await queuedIds()));
+
+    // An id the list published no tag for -- or a whole list published before
+    // tags existed -- counts as 'other', which every install blocks until its
+    // owner narrows the set.
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50 });
+    await send('sw:refresh-now');
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8500000009'], warm: true });
+    check("an untagged id counts as 'other' and is still blocked",
+      (await queuedIds()).includes('8500000009'), JSON.stringify(await queuedIds()));
+    await setSettings({ blockTags: ['clone'] });
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8500000008'], warm: true });
+    check("...and is refused once 'other' is unticked",
+      !(await queuedIds()).includes('8500000008'), JSON.stringify(await queuedIds()));
+
+    // Ticking nothing is a real answer -- "hide them, block nobody" -- and has
+    // to be distinguishable from a settings object that has never met the key.
+    await reset({ mode: 'active', listUrl: FS_URL, maxColdBlocksPerHour: 50,
+                  blockTags: [] });
+    await send('sw:refresh-now');
+    await send('sw:enqueue-platform-block',
+      { platform: 'facebook', ids: ['8500000001'], warm: true });
+    check('ticking no kinds at all blocks nobody unprompted',
+      (await queuedIds()).length === 0, JSON.stringify(await queuedIds()));
+    check('and the list itself is untouched: hiding is tag-blind',
+      ((await state()).blocklist.ids || []).length === 3,
+      JSON.stringify((await state()).blocklist.ids));
+
+    delete global.fetch;
+  }
+
+  // -- 19. the two rankers must stay in step --------------------------------
+  //
+  // The same formula is written out twice: rankPublishedTargets() in the
+  // service worker, and rankTargets() in hosting/logic.js, which the worker
+  // cannot import and which is what the dashboard preview and the Firebase
+  // suite rank with. Nothing would announce them drifting -- both would go on
+  // returning a plausible order, and the admin's preview would quietly stop
+  // describing what any client actually does.
+  //
+  // So the worker's real output, read back off the stored list, is compared
+  // against the module's on the same fixture: with the privacy setting off
+  // (neutral locality), with it on (the machine's own region and language),
+  // and with the published dials turned away from their defaults.
+  {
+    const L = require(path.join(__dirname, '..', 'hosting', 'logic.js'));
+    const FS_URL = 'http://127.0.0.1:8080/v1/projects/demo-clone/databases/(default)/documents/blocklist/current';
+    const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+
+    // The worker reads its context from Intl and navigator; the module takes
+    // it as an argument. Deriving both from the same two calls is what makes
+    // "the same input" true -- and keying part of the fixture on it is what
+    // stops locality collapsing to a constant on whatever machine this runs.
+    const region = (() => {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; }
+    })();
+    const lang = (() => {
+      try { return ((globalThis.navigator && navigator.language) || '').trim().toLowerCase() || null; }
+      catch (e) { return null; }
+    })();
+    const HERE = region || 'Asia/Ho_Chi_Minh';
+    const THERE = HERE === 'America/Sao_Paulo' ? 'Europe/Paris' : 'America/Sao_Paulo';
+    const MINE = lang || 'vi-vn';
+    const FOREIGN = MINE === 'pt-br' ? 'fr-fr' : 'pt-br';
+
+    const fixture = [
+      { platform: 'threads', id: '7700000001', tag: 'clone', trust: 2.5, last: day(0),
+        days: { [day(0)]: 4, [day(1)]: 2 }, regions: { [HERE]: 6 }, langs: { [MINE]: 6 }, reporters: 6 },
+      { platform: 'threads', id: '7700000002', tag: 'clone', trust: 2.5, last: day(0),
+        days: { [day(0)]: 4 }, regions: { [THERE]: 6 }, langs: { [FOREIGN]: 6 }, reporters: 6 },
+      { platform: 'facebook', id: '7700000003', tag: 'spam', trust: 0.75, last: day(9),
+        days: { [day(9)]: 1 }, regions: { [HERE]: 1 }, langs: { [MINE]: 1 }, reporters: 1 },
+      { platform: 'facebook', id: '7700000004', tag: 'redbull', trust: 1.5, last: day(3),
+        days: { [day(3)]: 2, [day(2)]: 1 }, regions: { [HERE]: 2, [THERE]: 1 },
+        langs: { [MINE]: 2, [FOREIGN]: 1 }, reporters: 3 },
+      // No tallies at all: the smoothed affinities have to agree on an empty
+      // denominator too, which is where the ported divide-by-region quirk bites.
+      { platform: 'threads', id: '7700000005', tag: 'other', trust: 1, last: day(1),
+        days: {}, regions: {}, langs: {}, reporters: 0 },
+      { platform: 'threads', id: '7700000006', tag: 'scam', trust: 1, last: day(1),
+        days: { [day(1)]: 3 }, regions: { [THERE]: 2 }, langs: { [MINE]: 5 }, reporters: 2 }
+    ];
+
+    const listOf = (weights) => {
+      const published = {
+        v: 1, updatedAt: new Date().toISOString(),
+        ids: fixture.map(t => t.id), usernames: [], docIdOverrides: {}, pending: [],
+        idTags: Object.fromEntries(fixture.map(t => [t.id, t.tag])),
+        targets: fixture
+      };
+      if (weights) published.rankWeights = weights;
+      return {
+        name: 'projects/demo-clone/databases/(default)/documents/blocklist/current',
+        fields: { json: { stringValue: JSON.stringify(published) } },
+        createTime: '2026-08-21T00:00:00Z', updateTime: new Date().toISOString()
+      };
+    };
+
+    // Both round to three decimals, so exact agreement is the expectation and
+    // the epsilon only forgives the last bit of a double.
+    const near = (a, b) => Math.abs(a - b) < 1e-9;
+    const agree = (mine, theirs) =>
+      mine.length === theirs.length && mine.every((t, i) => {
+        const o = theirs[i];
+        return t.id === o.id && near(t.rank, o.rank) &&
+          t.why.recentDays === o.why.recentDays &&
+          t.why.velocity7d === o.why.velocity7d &&
+          near(t.why.trust, o.why.trust) &&
+          near(t.why.region, o.why.region) &&
+          near(t.why.lang, o.why.lang) &&
+          t.why.reporters === o.why.reporters;
+      });
+    const shown = (rows) => JSON.stringify(rows.map(t => [t.id, t.rank]));
+
+    async function rankedByWorker(settings, weights) {
+      global.fetch = async () => {
+        const envelope = listOf(weights);
+        return { ok: true, status: 200, headers: { get: () => null },
+                 text: async () => JSON.stringify(envelope), json: async () => envelope };
+      };
+      await reset(Object.assign({ mode: 'active', listUrl: FS_URL,
+        maxColdBlocksPerHour: 50, targetBudget: 50 }, settings));
+      const r = await send('sw:refresh-now');
+      return (r.blocklist && r.blocklist.targets) || [];
+    }
+
+    const blind = await rankedByWorker({ shareRegion: false });
+    check('the worker ranks every published target, none dropped',
+      blind.length === fixture.length, String(blind.length));
+    check('with shareRegion off both rankers agree on neutral locality',
+      agree(blind, L.rankTargets(fixture, {})),
+      shown(blind) + ' vs ' + shown(L.rankTargets(fixture, {})));
+
+    const local = await rankedByWorker({ shareRegion: true });
+    check('with shareRegion on both rankers agree on this machine\'s context',
+      agree(local, L.rankTargets(fixture, { region, lang })),
+      shown(local) + ' vs ' + shown(L.rankTargets(fixture, { region, lang })));
+    check('and the local context actually changed the ordering it agreed on',
+      shown(local) !== shown(blind) || !region,
+      shown(local) + ' vs ' + shown(blind));
+
+    // The dials are published so the owner can turn them without shipping an
+    // extension update; a worker that ignored one would go on ranking sensibly
+    // while disagreeing with everything the dashboard showed.
+    const tuned = { halfLifeDays: 3, velocityWeight: 2, localityFloor: 0.5,
+                    localityLangFactor: 0.5, uniqueReporterBoost: 1 };
+    const dialled = await rankedByWorker({ shareRegion: true }, tuned);
+    check('both rankers read the published weights the same way',
+      agree(dialled, L.rankTargets(fixture, { region, lang }, tuned)),
+      shown(dialled) + ' vs ' + shown(L.rankTargets(fixture, { region, lang }, tuned)));
+    check('and the tuned weights are not silently the defaults',
+      shown(dialled) !== shown(local) ||
+      dialled.some((t, i) => !near(t.rank, local[i].rank)),
+      shown(dialled) + ' vs ' + shown(local));
+
+    delete global.fetch;
+  }
+
   finish();
 })().catch((e) => { console.error('harness error:', e); process.exitCode = 1; });
 

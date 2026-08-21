@@ -28,14 +28,12 @@
   const PLATFORM = bridge.state.platform;
   const settings = { reportUiEnabled: true, reportHoverDelayMs: 350, debug: false };
 
-  const REASONS = [
-    ['clone', 'Clone / fake account'],
-    ['impersonation', 'Impersonating someone'],
-    ['scam', 'Scam or fraud'],
-    ['harassment', 'Harassment'],
-    ['spam', 'Spam'],
-    ['other', 'Something else']
-  ];
+  // The reasons offered here ARE the tag vocabulary, in its order: a reason is
+  // a vote for a tag, so one the tags do not contain is a vote nothing can
+  // ever count. Built from the shared list rather than written out again --
+  // a second copy is the copy that goes stale when a category is added.
+  const REASONS = (globalThis.CB_TAGS || [])
+    .map(t => [t, (globalThis.CB_TAG_LABELS || {})[t] || t]);
 
   function log(...a) { if (settings.debug) console.debug('[CloneBlocker/report]', ...a); }
 

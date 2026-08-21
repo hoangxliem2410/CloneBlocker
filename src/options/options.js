@@ -28,6 +28,11 @@
     'reportUiEnabled', 'debug'];
   const SELECT_FIELDS = ['hideMode'];
 
+  // `blockTags` is none of the above: an array of tags, rendered as one
+  // checkbox per tag and read back as the list of ticked ones.
+  const TAGS = globalThis.CB_TAGS || [];
+  const TAG_LABELS = globalThis.CB_TAG_LABELS || {};
+
   function sw(type, payload) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type, payload }, (res) => {
@@ -53,6 +58,35 @@
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+  /**
+   * The "which kinds get blocked" boxes, built from the shared tag list.
+   *
+   * Generated rather than written into the HTML because protocol.js is where
+   * the vocabulary lives; a hand-written copy here would be the one that
+   * forgets a category the day one is added. Insertion order is TAGS order, so
+   * the boxes read in the same order as the report sheet's reasons.
+   */
+  const tagInputs = new Map();
+  for (const tag of TAGS) {
+    const label = document.createElement('label');
+    label.className = 'toggle';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.id = 'blockTag_' + tag;
+    const text = document.createElement('span');
+    text.textContent = TAG_LABELS[tag] || tag;
+    label.appendChild(box);
+    label.appendChild(text);
+    $('blockTags').appendChild(label);
+    tagInputs.set(tag, box);
+  }
+
+  /** Ticking none of them is a real choice, but a silent one. Say it out loud. */
+  function renderTagNote() {
+    const none = [...tagInputs.values()].every(b => !b.checked);
+    $('blockTagsNote').classList.toggle('hidden', !none);
+  }
+
   async function load() {
     const res = await sw(P.SW.GET_SETTINGS);
     const s = (res && res.settings) || {};
@@ -73,6 +107,13 @@
     $('pauseBlocking').checked = s.platformBlockEnabled === false;
     renderPaused();
 
+    // An install written before this setting existed blocks every kind, which
+    // is exactly what it did then. An empty array is a deliberate "block
+    // nothing", so it is not treated as missing.
+    const chosen = Array.isArray(s.blockTags) ? s.blockTags : TAGS;
+    for (const [tag, box] of tagInputs) box.checked = chosen.includes(tag);
+    renderTagNote();
+
     await refreshList();
     await refreshDiag();
     await refreshLearnedStatus();
@@ -90,12 +131,16 @@
 
     patch.mode = $('modeActive').checked ? 'active' : 'passive';
     patch.platformBlockEnabled = !$('pauseBlocking').checked;
+    // Filtered through TAGS so the stored array is always vocabulary, in
+    // vocabulary order, whatever the DOM happens to contain.
+    patch.blockTags = TAGS.filter(t => tagInputs.get(t).checked);
 
     // Keep the delay range coherent rather than letting it invert.
     if (patch.maxDelayMs <= patch.minDelayMs) patch.maxDelayMs = patch.minDelayMs + 5000;
 
     await sw(P.SW.SET_SETTINGS, patch);
     renderPaused();
+    renderTagNote();
   }
 
   for (const f of TEXT_FIELDS.concat(NUM_FIELDS)) {
@@ -107,6 +152,7 @@
   for (const f of ['modePassive', 'modeActive', 'pauseBlocking']) {
     $(f).addEventListener('change', save);
   }
+  for (const box of tagInputs.values()) box.addEventListener('change', save);
 
   /**
    * Pause lives in Advanced, so on a collapsed page the mode picker would

@@ -29,6 +29,16 @@ service cloud.firestore {
       return !(f in d) || (d[f] is string && d[f].size() >= 1 && d[f].size() <= max);
     }
 
+    // The one tag vocabulary. A report's `reason` is a vote cast from it and a
+    // decision's `tag` is the verdict, so both are checked against this list --
+    // if the two ever drift apart, a target's verdict stops being sayable in
+    // the same words its reports used.
+    function optTag(d, f) {
+      return !(f in d)
+          || d[f] in ['clone', 'impersonation', 'scam', 'harassment', 'spam',
+                      'redbull', 'other'];
+    }
+
     // A URL a stranger typed. http(s) only -- one javascript: href rendered as
     // a link in the dashboard would run with the admin's session.
     function optUrl(d, f) {
@@ -55,7 +65,7 @@ service cloud.firestore {
         && request.resource.data.target is string
         && request.resource.data.target.matches('([0-9]{4,24}|@[a-z0-9._]{1,64})')
         && request.resource.data.reason in
-             ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'other']
+             ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other']
         // Reporter binding: the pseudonym, and the doc id that makes a repeat
         // report from the same account a structural no-op.
         && request.resource.data.reporterHash is string
@@ -96,7 +106,13 @@ service cloud.firestore {
     }
 
     match /decisions/{key} {
-      allow read, write: if isAdmin();
+      allow read, delete: if isAdmin();
+      // Still admin-only; the tag check is not a gate but a typo guard. A tag
+      // outside the vocabulary would publish an idTags entry no extension has
+      // ever heard of, and blockTags matches by inclusion -- so a misspelt
+      // verdict silently stops being blocked by anyone rather than failing
+      // loudly here.
+      allow create, update: if isAdmin() && optTag(request.resource.data, 'tag');
     }
 
     match /admin/{doc} {

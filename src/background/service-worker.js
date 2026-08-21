@@ -24,6 +24,7 @@ const P = globalThis.CB_PROTOCOL;
 const KEYS = globalThis.CB_KEYS;
 const modeOf = globalThis.CB_MODE_OF;
 const DEFAULTS = globalThis.CB_DEFAULT_SETTINGS;
+const TAGS = globalThis.CB_TAGS;
 
 const ALARM_REFRESH = 'cb-refresh-blocklist';
 const LEASE_MS = 90 * 1000;          // a claimed target is reserved this long
@@ -201,6 +202,37 @@ async function sha256Hex(text) {
 const RANK_HALF_LIFE_DAYS = 7;
 const rankDayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+// The dials the published list may carry, and what they mean when it carries
+// none. These values ARE the ranking as it shipped: velocityWeight 1 and
+// localityFloor 0.25 rebuild the old hardcoded expression term for term, and
+// uniqueReporterBoost 0 makes the boost factor exactly 1, so a list published
+// before rankWeights existed ranks here identically to the day it was made.
+// Keep them equal to RANK_WEIGHTS in hosting/logic.js.
+const RANK_WEIGHTS = {
+  halfLifeDays: RANK_HALF_LIFE_DAYS,
+  velocityWeight: 1,
+  localityFloor: 0.25,
+  localityLangFactor: 0.8,
+  uniqueReporterBoost: 0
+};
+
+/** Fill a partial or absent weight set from the defaults, dial by dial. */
+function rankWeightsOf(weights) {
+  const src = (weights && typeof weights === 'object') ? weights : {};
+  const num = (k) => {
+    const v = Number(src[k]);
+    return Number.isFinite(v) ? v : RANK_WEIGHTS[k];
+  };
+  const halfLifeDays = num('halfLifeDays');
+  return {
+    halfLifeDays: halfLifeDays > 0 ? halfLifeDays : RANK_WEIGHTS.halfLifeDays,
+    velocityWeight: num('velocityWeight'),
+    localityFloor: num('localityFloor'),
+    localityLangFactor: num('localityLangFactor'),
+    uniqueReporterBoost: num('uniqueReporterBoost')
+  };
+}
+
 function rankVelocity(days, n) {
   const cutoff = rankDayKey(Date.now() - (n - 1) * 86400000);
   let total = 0;
@@ -220,8 +252,13 @@ function rankAffinity(tally, key, total) {
  * The server used to do this per-request from query params; now the region
  * and language never leave the machine. `shareRegion` keeps its user-visible
  * meaning -- off means suggestions are not localised to you.
+ *
+ * `weights` is payload.rankWeights when the list carries it, so the owner can
+ * retune ranking without shipping a new extension; an old list carries none
+ * and gets the defaults, which are the values it was ranked with all along.
  */
-function rankPublishedTargets(meta, settings) {
+function rankPublishedTargets(meta, settings, weights) {
+  const w = rankWeightsOf(weights);
   let region = null, lang = null;
   if (settings.shareRegion !== false) {
     const c = clientContext();
@@ -235,13 +272,18 @@ function rankPublishedTargets(meta, settings) {
     const total = Object.values(t.regions || {}).reduce((n, v) => n + v, 0);
     const trust = Number(t.trust) || 0;
     const ageDays = Math.max(0, Math.floor((today - Date.parse(t.last || 0)) / 86400000));
-    const recency = Math.pow(0.5, ageDays / RANK_HALF_LIFE_DAYS);
+    const recency = Math.pow(0.5, ageDays / w.halfLifeDays);
     const vel = rankVelocity(t.days, 7);
     const regionAff = rankAffinity(t.regions, region, total);
     const langAff = rankAffinity(t.langs, lang, total);
+    const reporters = Math.max(0, Number(t.reporters) || 0);
     // Region never zeroes a target out; it dominates the ordering when it fits.
-    const locality = 0.25 + 0.75 * Math.max(regionAff, langAff * 0.8);
-    const rank = trust * recency * (1 + vel) * locality;
+    const locality = w.localityFloor
+      + (1 - w.localityFloor) * Math.max(regionAff, langAff * w.localityLangFactor);
+    // What independence is worth on top of trust, which is already linear in
+    // the number of reporters. At the shipped boost of 0 this is exactly 1.
+    const boost = 1 + w.uniqueReporterBoost * Math.log2(1 + reporters);
+    const rank = trust * recency * (1 + w.velocityWeight * vel) * locality * boost;
     out.push({
       id: String(t.id),
       platform: String(t.platform || ''),
@@ -251,7 +293,8 @@ function rankPublishedTargets(meta, settings) {
         recentDays: ageDays,
         velocity7d: vel,
         region: Math.round(regionAff * 100) / 100,
-        lang: Math.round(langAff * 100) / 100
+        lang: Math.round(langAff * 100) / 100,
+        reporters
       }
     });
   }
@@ -307,6 +350,60 @@ async function remainingBudget(settings) {
   return Math.max(1, Math.min(perHour * 4 || 4, settings.targetBudget | 0 || 25));
 }
 
+// ---------------------------------------------------------------------------
+// tags: which kinds of account this install agreed to block
+// ---------------------------------------------------------------------------
+//
+// Blocking is rationed and irreversible-ish; hiding is neither. So the tag
+// filter applies only to blocks -- everything approved stays on the list and
+// stays hidden whatever is ticked here, which is why nothing in the hide path
+// consults any of this.
+
+/**
+ * The tag of a target, tolerating everything that might not have one.
+ *
+ * A list published before tags existed, an id the published `idTags` map does
+ * not name, a tag from a future release this build has never heard of: all of
+ * them land on 'other'. That is the bucket every install blocks by default and
+ * the first one an owner narrowing their tags would drop -- the right way
+ * round for something nobody has actually voted on.
+ */
+function tagOf(value) {
+  return TAGS.includes(value) ? value : 'other';
+}
+
+/**
+ * The tags this user is willing to block.
+ *
+ * An install that has never met the setting blocks all of them, which is what
+ * it did before the setting existed. An EMPTY array is a real answer -- "block
+ * nothing, just hide" -- so it is not folded in with "unset".
+ */
+function blockTagsOf(settings) {
+  const chosen = settings && settings.blockTags;
+  if (!Array.isArray(chosen)) return TAGS.slice();
+  return chosen.filter(t => TAGS.includes(t));
+}
+
+/**
+ * Drop ids whose kind this user does not want blocked.
+ *
+ * `idTags` is the published tag of every listed id, cached with the list
+ * exactly so this decision can be made without the whole target record.
+ * Entries may be bare ids or {id, rank} objects, as enqueue() accepts.
+ */
+async function filterByBlockTags(ids, settings) {
+  const allowed = new Set(blockTagsOf(settings));
+  // Nothing is excluded -- the shipped default -- so skip the storage read.
+  if (TAGS.every(t => allowed.has(t))) return ids || [];
+  const bl = await getLocal(KEYS.BLOCKLIST, null);
+  const idTags = (bl && bl.idTags) || {};
+  return (ids || []).filter((raw) => {
+    const id = String(raw && typeof raw === 'object' ? raw.id : raw);
+    return allowed.has(tagOf(idTags[id]));
+  });
+}
+
 /**
  * Queue what the server nominated, as cold work.
  *
@@ -320,9 +417,14 @@ async function seedServerTargets(record) {
   // strangers is not something to queue.
   if (modeOf(settings) === 'passive') return { ok: true, added: 0 };
   if (!settings.platformBlockEnabled) return { ok: true, added: 0 };
+  const allowed = new Set(blockTagsOf(settings));
   const byPlatform = {};
   for (const t of record.targets || []) {
     if (!t.platform) continue;
+    // Cold work is the extension acting on its own initiative, so a kind the
+    // user turned off never gets here at all. The profile stays on the list
+    // and stays hidden; it simply does not spend one of their blocks.
+    if (!allowed.has(tagOf(t.tag))) continue;
     (byPlatform[t.platform] = byPlatform[t.platform] || []).push({ id: t.id, rank: t.rank });
   }
   let added = 0;
@@ -444,15 +546,34 @@ async function refreshBlocklist(force) {
   let targets = [], targetsAvailable = Number(payload.targetsAvailable) || 0;
   if (modeOf(settings) === 'active' && Array.isArray(payload.targets)) {
     const raw = payload.targets.filter(t => t && ID_RE.test(String(t.id)));
+    // Ranking is about how urgent a target is, not what kind of account it is,
+    // so the tag is carried alongside the ranked entry rather than through it.
+    // The queue, the seeding filter and the activity page all read it here.
+    const tagById = new Map(raw.map(t => [String(t.id), tagOf(t.tag)]));
+    const withTag = (t) => Object.assign({}, t, { tag: tagById.get(String(t.id)) || 'other' });
     if (raw.some(t => t.days || t.regions || t.langs)) {
       const budget = Math.max(1, Math.min(await remainingBudget(settings), 200));
-      const ranked = rankPublishedTargets(raw, settings);
-      targets = ranked.slice(0, budget);
+      const ranked = rankPublishedTargets(raw, settings, payload.rankWeights);
+      targets = ranked.slice(0, budget).map(withTag);
       targetsAvailable = ranked.length;
     } else {
       targets = raw.map(t => ({ id: String(t.id), platform: String(t.platform || ''),
-                                rank: Number(t.rank) || 0, why: t.why || null }));
+                                rank: Number(t.rank) || 0, why: t.why || null,
+                                tag: tagOf(t.tag) }));
     }
+  }
+
+  // The tag of every published id, kept with the list.
+  //
+  // Warm blocking meets ids that have no target record behind them -- the
+  // ranked slice is capped, and the flat id list is not -- and still has to
+  // decide whether this user wants that kind of account blocked. Caching the
+  // map is what lets that decision be made from storage instead of a fetch.
+  const idTags = {};
+  const publishedTags = (payload && payload.idTags && typeof payload.idTags === 'object')
+    ? payload.idTags : {};
+  for (const id of norm.ids) {
+    if (publishedTags[id] != null) idTags[id] = tagOf(publishedTags[id]);
   }
 
   const record = {
@@ -460,6 +581,7 @@ async function refreshBlocklist(force) {
     usernames: norm.usernames,
     targets,
     targetsAvailable,
+    idTags,
     // Report keys still awaiting a decision, so the report chip can say
     // "already reported" without asking anyone.
     pending: Array.isArray(payload.pending) ? payload.pending.slice(0, 5000) : [],
@@ -952,11 +1074,28 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         break;
       }
 
-      case P.SW.ENQUEUE_PLATFORM_BLOCK:
+      case P.SW.ENQUEUE_PLATFORM_BLOCK: {
         // warm: these ids were resolved from the page the user is looking at.
-        respond(await serialize(() => enqueue(payload.platform, payload.ids,
+        //
+        // The tag filter belongs here because this is the extension's own
+        // sweep talking: the content script forwards every listed id it can
+        // see, and somebody who unticked "spam" did not want spam accounts
+        // blocked merely because one scrolled past.
+        //
+        // `userInitiated` is the way out of that, and the popup's "Block now"
+        // button sets it. Someone looking at a profile and pressing a button
+        // labelled Block now has made a decision about THIS account; silently
+        // dropping the click because of a category preference would leave them
+        // with a button that does nothing and no way to find out why. A
+        // deliberate act outranks the standing preference.
+        const settings = await getSettings();
+        const ids = payload.userInitiated
+          ? payload.ids
+          : await filterByBlockTags(payload.ids, settings);
+        respond(await serialize(() => enqueue(payload.platform, ids,
           { warm: payload.warm !== false })));
         break;
+      }
 
       case P.SW.QUEUE_CLAIM:
         // Serialised so two tabs cannot be handed the same target: the lease

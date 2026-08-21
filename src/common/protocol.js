@@ -55,6 +55,36 @@
     }
   };
 
+  /**
+   * The one tag vocabulary, shared with hosting/logic.js and firestore.rules.
+   *
+   * A reporter's `reason` is a vote and a target's `tag` is the verdict, but
+   * they are the same words -- which is what lets a verdict be derived from
+   * the votes at all. Order is load-bearing: it breaks ties between equally
+   * popular reasons on the server, and it is the order every list of them is
+   * shown in here. New tags go before 'other', which stays the bucket of last
+   * resort.
+   */
+  const TAGS = ['clone', 'impersonation', 'scam', 'harassment', 'spam', 'redbull', 'other'];
+
+  /**
+   * English for each tag. One dictionary rather than one per page, because
+   * three copies of "Scam or fraud" is three chances for the report sheet, the
+   * options page and the activity chips to end up naming the same thing
+   * differently -- and a user who ticks a box has to be able to recognise it
+   * in the sheet they filled in. (Vietnamese arrives with every other string
+   * in the i18n phase; nothing here is translated yet.)
+   */
+  const TAG_LABELS = {
+    clone: 'Clone / fake account',
+    impersonation: 'Impersonating someone',
+    scam: 'Scam or fraud',
+    harassment: 'Harassment',
+    spam: 'Spam',
+    redbull: 'Red bull (state-aligned troll)',
+    other: 'Something else'
+  };
+
   // Storage keys (chrome.storage.local unless noted).
   const KEYS = {
     SETTINGS: 'settings',          // sync
@@ -103,6 +133,19 @@
      * than the choice being made.
      */
     mode: 'active',          // 'passive' | 'active'
+
+    /**
+     * Which kinds of account this install is willing to spend a block on.
+     *
+     * An array matched by inclusion rather than a map of flags, so a tag added
+     * in a later release is NOT blocked by an existing install until its owner
+     * ticks it. A new category must never start acting on its own.
+     *
+     * Hiding ignores this entirely: everything approved is hidden regardless.
+     * Hiding is free and reversible, so rationing it by kind would buy nothing
+     * and only make the list look incomplete.
+     */
+    blockTags: TAGS.slice(),
 
     // DOM suppression: hide a listed profile's content without touching your
     // account. Off by default -- real blocks are the product; this is for
@@ -165,6 +208,8 @@
 
   globalThis.CB_LIST_URL = LIST_URL;
   globalThis.CB_MODE_OF = modeOf;
+  globalThis.CB_TAGS = TAGS;
+  globalThis.CB_TAG_LABELS = TAG_LABELS;
   globalThis.CB_PROTOCOL = PROTOCOL;
   globalThis.CB_KEYS = KEYS;
   globalThis.CB_DEFAULT_SETTINGS = DEFAULT_SETTINGS;

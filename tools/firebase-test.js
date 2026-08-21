@@ -19,7 +19,9 @@
  * Suite 2 (logic) requires hosting/logic.js directly and asserts the ported
  * formulas against fixture documents: the same aggregation, reputation,
  * publish, stats, trends and ranking behaviors the old server suite proved
- * over HTTP.
+ * over HTTP, plus the tag vocabulary layered on top of them and the ranking
+ * dials, whose expected numbers are worked out by hand here so that a change
+ * to the formula cannot pass as a rounding difference.
  */
 'use strict';
 
@@ -189,6 +191,12 @@ async function swapRules() {
   const ok2 = await createReport(reportBody('@nguyenvana.clone', H1, { reason: 'impersonation' }));
   check('a username-target report is accepted', ok2.status === 200, String(ok2.status));
 
+  // `redbull` is the tag this phase added, and the enum is the only place a
+  // vote can be refused -- an extension that offers the reason against rules
+  // that do not know it would fail silently at submit time.
+  const okRb = await createReport(reportBody('9100000009', H1, { reason: 'redbull' }));
+  check('a report with the redbull reason is accepted', okRb.status === 200, String(okRb.status));
+
   // Every rejection case below mutates one field of an otherwise valid
   // report, so a FAIL points at the named validation and never at a broken
   // fixture. The dedup key is recomputed after the mutation on purpose: the
@@ -221,6 +229,9 @@ async function swapRules() {
   await rejects('a 500-digit profile id is rejected',
     b => { b.target = '1'.repeat(500); b.profileId = b.target; });
   await rejects('an unknown extra field is rejected', b => { b.extra = 'x'; });
+  // A near miss on a real tag is the failure mode that matters now that the
+  // vocabulary is growing: the enum, not the spelling, is what decides.
+  await rejects('a reason that only looks like a tag is rejected', b => { b.reason = 'red-bull'; });
 
   const claims = reportBody('@claimsanid', H2, {});
   claims.profileId = '12345678';
@@ -271,6 +282,26 @@ async function swapRules() {
     (await api('PATCH', '/decisions/threads~9100000001', decision)).status === 403);
   check('the admin can write a decision',
     (await api('PATCH', '/decisions/threads~9100000001', decision, ADMIN)).status === 200);
+
+  // The verdict half of the tag vocabulary. The rules do not gate WHO may
+  // retag -- that is already admin-only -- they gate the spelling, because a
+  // tag outside the list would publish an idTags entry no install matches and
+  // so would quietly stop being blocked by anybody.
+  const tagged = (tag) => ({ fields: {
+    status: { stringValue: 'approved' },
+    by: { stringValue: 'admin' },
+    at: { timestampValue: new Date().toISOString() },
+    tag: { stringValue: tag }
+  } });
+  const tagOk = await api('PATCH', '/decisions/threads~9600000001', tagged('redbull'), ADMIN);
+  check('the admin can set a decision tag from the vocabulary',
+    tagOk.status === 200, String(tagOk.status));
+  const tagStranger = await api('PATCH', '/decisions/threads~9600000002', tagged('redbull'));
+  check('a stranger cannot set a decision tag either',
+    tagStranger.status === 403, String(tagStranger.status));
+  const tagBad = await api('PATCH', '/decisions/threads~9600000003', tagged('bo-do'), ADMIN);
+  check('a decision tag outside the vocabulary is refused',
+    tagBad.status === 403, String(tagBad.status));
 
   const manual = { fields: {
     ids: { arrayValue: { values: [{ stringValue: '63082166531' }] } },
@@ -554,6 +585,234 @@ async function swapRules() {
   }], { lang: 'vi-vn' });
   check('language affinity divides by the region total, as the server did',
     quirk[0].why.lang === 4.5, String(quirk[0].why.lang));
+
+  // -- 13. tags: the verdict derived from the votes -------------------------
+  //
+  // A report's reason is a vote and a target's tag is the verdict, drawn from
+  // the same vocabulary. These pin the resolution order -- admin, then modal
+  // reason, then TAGS order, then 'clone' -- because every one of those steps
+  // is a place where a wrong answer would still look like a plausible tag.
+  const decTag = (key, tag, status, atIso) => ({
+    id: key.replace(':', '~'),
+    data: { status: status || 'approved', by: 'admin', at: atIso || at(0), tag }
+  });
+  const H3 = hashOf('threads:70000051111');
+  // The case is OPENED as harassment and then out-voted: reason and tag are
+  // deliberately different here, so a tag taken from the wrong one fails.
+  const voteDocs = (id) => [
+    doc(id, H1, { at: at(3), reason: 'harassment' }),
+    doc(id, H2, { at: at(2), reason: 'scam' }),
+    doc(id, H3, { at: at(1), reason: 'scam' })
+  ];
+
+  const modal = L.aggregate(voteDocs('3100000001'), [])[0];
+  check('every reason is tallied, not just the one that opened the case',
+    modal.reasons.scam === 2 && modal.reasons.harassment === 1 &&
+    modal.reason === 'harassment',
+    JSON.stringify(modal.reasons));
+  check('the most common reason becomes the tag, not the first one filed',
+    modal.tag === 'scam', modal.tag);
+
+  const override = L.aggregate(voteDocs('3100000002'),
+    [decTag('threads:3100000002', 'redbull')])[0];
+  check('an admin tag beats the modal reason', override.tag === 'redbull', override.tag);
+
+  const nonsense = L.aggregate(voteDocs('3100000003'),
+    [decTag('threads:3100000003', 'bo-do')])[0];
+  check('an admin tag outside the vocabulary falls back to the votes',
+    nonsense.tag === 'scam', nonsense.tag);
+
+  const tied = L.aggregate([
+    doc('3100000004', H1, { reason: 'spam' }),
+    doc('3100000004', H2, { reason: 'scam' })
+  ], [])[0];
+  check('a tie breaks toward whichever tag comes first in TAGS',
+    tied.tag === 'scam' && L.modalTag({ other: 3, redbull: 3 }) === 'redbull',
+    tied.tag);
+  check('TAGS order is the tiebreak, not insertion order',
+    L.TAGS.indexOf('scam') < L.TAGS.indexOf('spam') &&
+    L.TAGS.indexOf('redbull') < L.TAGS.indexOf('other'),
+    JSON.stringify(L.TAGS));
+
+  const unusable = L.aggregate([doc('3100000005', H1, { reason: 'because' })], [])[0];
+  check('a target with no usable reason falls back to clone',
+    unusable.tag === 'clone' && Object.keys(unusable.reasons).length === 0,
+    unusable.tag);
+  check('effectiveTag resolves the same way when asked directly',
+    L.effectiveTag(null, {}) === 'clone' &&
+    L.effectiveTag({ tag: 'redbull' }, { scam: 9 }) === 'redbull' &&
+    L.effectiveTag({ tag: '' }, { scam: 9 }) === 'scam');
+
+  // A verdict about what an account IS does not expire because one more
+  // person reported it, so the tag has to outlive the reopening.
+  const retagged = L.aggregate([
+    doc('3100000006', H1, { at: at(3), reason: 'scam' }),
+    doc('3100000006', H2, { at: at(0), reason: 'scam' })
+  ], [decTag('threads:3100000006', 'redbull', 'rejected', at(2))])[0];
+  check('an admin tag survives a case reopening',
+    retagged.status === 'pending' && retagged.tag === 'redbull',
+    retagged.status + '/' + retagged.tag);
+
+  // -- 14. publish: the tag map the extension filters on --------------------
+  const tagRecs = L.aggregate([
+    doc('2100000001', H1, { reason: 'redbull' }),
+    doc('2100000001', H2, { reason: 'redbull' }),
+    doc('2100000002', H1, { reason: 'scam' }),
+    doc('2100000003', H1, { reason: 'spam' }),          // never decided
+    doc('@tagnameonly', H2, { reason: 'scam' })
+  ], [
+    dec('threads:2100000001', 'approved'),
+    decTag('threads:2100000002', 'impersonation'),
+    dec('threads:@tagnameonly', 'approved')
+  ]);
+  const tagPub = L.buildPublish(tagRecs, L.reputation(tagRecs), { ids: ['2900000009'] });
+  const pubById = Object.fromEntries(tagPub.targets.map(t => [t.id, t]));
+  check('a published target carries its tag and its headcount',
+    pubById['2100000001'].tag === 'redbull' && pubById['2100000001'].reporters === 2 &&
+    pubById['2100000002'].tag === 'impersonation' && pubById['2100000002'].reporters === 1,
+    JSON.stringify(tagPub.targets.map(t => [t.id, t.tag, t.reporters])));
+  check('idTags covers exactly the published ids',
+    Object.keys(tagPub.idTags).sort().join(',') === tagPub.ids.slice().sort().join(','),
+    JSON.stringify(tagPub.idTags));
+  check('a manually listed id is tagged, nobody having voted on it',
+    tagPub.idTags['2900000009'] === 'other', String(tagPub.idTags['2900000009']));
+  check('idTags agrees with the target records it overlaps',
+    tagPub.idTags['2100000001'] === 'redbull' &&
+    tagPub.idTags['2100000002'] === 'impersonation',
+    JSON.stringify([tagPub.idTags['2100000001'], tagPub.idTags['2100000002']]));
+  check('an undecided id is in neither ids nor idTags',
+    !tagPub.ids.includes('2100000003') && !('2100000003' in tagPub.idTags),
+    JSON.stringify(tagPub.ids));
+
+  const SPEC_WEIGHTS = {
+    halfLifeDays: 7, velocityWeight: 1, localityFloor: 0.25,
+    localityLangFactor: 0.8, uniqueReporterBoost: 0
+  };
+  check('rankWeights ships with the documented defaults',
+    Object.keys(SPEC_WEIGHTS).every(k => tagPub.rankWeights[k] === SPEC_WEIGHTS[k]) &&
+    Object.keys(tagPub.rankWeights).length === Object.keys(SPEC_WEIGHTS).length,
+    JSON.stringify(tagPub.rankWeights));
+  const tunedPub = L.buildPublish(tagRecs, L.reputation(tagRecs),
+    { rankWeights: { velocityWeight: 3, halfLifeDays: 0 } });
+  check('a tuned dial is published and a nonsensical one falls back alone',
+    tunedPub.rankWeights.velocityWeight === 3 &&
+    tunedPub.rankWeights.halfLifeDays === 7 &&
+    tunedPub.rankWeights.localityFloor === 0.25,
+    JSON.stringify(tunedPub.rankWeights));
+
+  // -- 15. the ranking dials, term by term ----------------------------------
+  //
+  // Every expected number here is worked out by hand from the spec formula
+  // rather than read back from the implementation, so a change to the maths
+  // has to be argued for in this file before it can ship.
+  //
+  //   RT: trust 2, 7 days old, 3 reports today, 3 reporters, all local.
+  //   recency   = 0.5 ^ (7/7)                       = 0.5
+  //   regionAff = langAff = (3 + 0.5) / (3 + 1)     = 0.875
+  //   locality  = 0.25 + 0.75 * max(0.875, 0.7)     = 0.90625
+  //   rank      = 2 * 0.5 * (1 + 1*3) * 0.90625 * 1 = 3.625
+  const rctx = { region: VN, lang: 'vi-vn', platform: 'threads' };
+  const RT = {
+    platform: 'threads', id: '1100000007', username: null, displayName: null,
+    trust: 2, last: L.dayKey(Date.now() - 7 * DAY), days: { [L.dayKey(Date.now())]: 3 },
+    regions: { [VN]: 3 }, langs: { 'vi-vn': 3 }, reporters: 3
+  };
+  const withDial = (dial, value, t) =>
+    L.rankTargets([t || RT], rctx, dial ? { [dial]: value } : undefined)[0].rank;
+
+  check('the default weights reproduce the hand-computed rank exactly',
+    withDial() === 3.625, String(withDial()));
+  check('passing the documented defaults explicitly changes nothing',
+    L.rankTargets([RT], rctx, SPEC_WEIGHTS)[0].rank === 3.625);
+
+  // Doubling the velocity weight doubles what the 3 reports contribute:
+  // (1 + 2*3) = 7 in place of 4, so 2 * 0.5 * 7 * 0.90625 = 6.34375.
+  check('doubling velocityWeight reprices the velocity term, nothing else',
+    withDial('velocityWeight', 2) === 6.344, String(withDial('velocityWeight', 2)));
+  check('a velocity weight of zero takes the term out of the formula',
+    withDial('velocityWeight', 0) === 0.906, String(withDial('velocityWeight', 0)));
+
+  // Halving the half-life halves the recency window: a 7-day-old target under
+  // a 3.5-day half-life must rank exactly as a 14-day-old one does under 7.
+  const RT14 = Object.assign({}, RT,
+    { id: '1100000014', last: L.dayKey(Date.now() - 14 * DAY) });
+  check('halving halfLifeDays halves the recency window',
+    withDial('halfLifeDays', 3.5) === withDial(null, null, RT14) &&
+    withDial('halfLifeDays', 3.5) === 1.813,
+    withDial('halfLifeDays', 3.5) + ' vs ' + withDial(null, null, RT14));
+
+  // A target nobody local reported: regionAff = langAff = 0.5/(4+1) = 0.1, so
+  // locality is almost all floor. 0.25 + 0.75*0.1 = 0.325, and rank 2*0.325 =
+  // 0.65; a floor of 0.5 gives 0.5 + 0.5*0.1 = 0.55; a floor of 1 leaves
+  // locality no say at all.
+  const FOREIGN = {
+    platform: 'threads', id: '1100000009', username: null, displayName: null,
+    trust: 2, last: L.dayKey(Date.now()), days: {},
+    regions: { [BR]: 4 }, langs: { 'pt-br': 4 }, reporters: 1
+  };
+  check('the default floor keeps a foreign target reachable at 0.325 locality',
+    withDial(null, null, FOREIGN) === 0.65, String(withDial(null, null, FOREIGN)));
+  check('raising localityFloor lifts the target it was holding down',
+    L.rankTargets([FOREIGN], rctx, { localityFloor: 0.5 })[0].rank === 1.1,
+    String(L.rankTargets([FOREIGN], rctx, { localityFloor: 0.5 })[0].rank));
+  check('a floor of 1 leaves locality nothing to say',
+    L.rankTargets([FOREIGN], rctx, { localityFloor: 1 })[0].rank === 2,
+    String(L.rankTargets([FOREIGN], rctx, { localityFloor: 1 })[0].rank));
+
+  // The term this phase added. At the shipped 0 it is exactly 1 -- the
+  // headcount is carried and ignored -- and turning it to 1 makes three
+  // reporters worth 1 + log2(4) = 3.
+  const RT0 = Object.assign({}, RT, { id: '1100000008', reporters: 0 });
+  check('at the shipped boost of zero the reporter count changes nothing',
+    withDial(null, null, RT0) === withDial() && RT0.reporters !== RT.reporters,
+    withDial(null, null, RT0) + ' vs ' + withDial());
+  check('a boost of one makes three reporters worth log2(4)',
+    withDial('uniqueReporterBoost', 1) === 10.875,
+    String(withDial('uniqueReporterBoost', 1)));
+  check('the unique reporter count rides along in why',
+    L.rankTargets([RT], rctx)[0].why.reporters === 3,
+    String(L.rankTargets([RT], rctx)[0].why.reporters));
+
+  /**
+   * The ranking formula EXACTLY as it stood before the dials existed.
+   *
+   * Written out here rather than imported, because the whole point of the
+   * comparison is that it cannot drift when logic.js does. If this stops
+   * agreeing with rankTargets under the default weights then either a dial
+   * moved or the formula did, and neither is allowed to happen quietly.
+   */
+  function preDialRank(t, region, lang) {
+    const total = Object.values(t.regions || {}).reduce((n, v) => n + v, 0);
+    const aff = (tally, key) => {
+      if (!key) return 1;
+      const here = (tally && Object.prototype.hasOwnProperty.call(tally, key)) ? tally[key] : 0;
+      return (here + 0.5) / (total + 1);
+    };
+    const cutoff = L.dayKey(Date.now() - 6 * DAY);
+    let vel = 0;
+    for (const k of Object.keys(t.days || {})) if (k >= cutoff) vel += t.days[k];
+    const ageDays = Math.max(0, Math.floor((Date.now() - Date.parse(t.last || 0)) / 86400000));
+    const recency = Math.pow(0.5, ageDays / 7);
+    const locality = 0.25 + 0.75 * Math.max(aff(t.regions, region), aff(t.langs, lang) * 0.8);
+    return Math.round((Number(t.trust) || 0) * recency * (1 + vel) * locality * 1000) / 1000;
+  }
+
+  const parityTargets = [RT, RT14, RT0, FOREIGN, {
+    platform: 'threads', id: '1100000011', trust: 0.75,
+    last: L.dayKey(Date.now() - 2 * DAY), days: { [L.dayKey(Date.now() - 1 * DAY)]: 1 },
+    regions: { [VN]: 1, [BR]: 5 }, langs: { 'vi-vn': 1 }, reporters: 6
+  }];
+  for (const ctx of [rctx, { region: BR, lang: 'pt-br', platform: 'threads' }, {}]) {
+    const now = L.rankTargets(parityTargets, ctx);
+    const before = parityTargets
+      .map(t => ({ id: t.id, rank: preDialRank(t, ctx.region || null, ctx.lang || null) }))
+      .sort((a, b) => (b.rank - a.rank) || (a.id < b.id ? -1 : 1));
+    check('the default weights rank identically to the pre-dial formula ('
+      + (ctx.region || 'no context') + ')',
+      now.length === before.length &&
+      now.every((r, i) => r.id === before[i].id && r.rank === before[i].rank),
+      JSON.stringify([now.map(r => [r.id, r.rank]), before.map(r => [r.id, r.rank])]));
+  }
 
   const failed = results.filter(r => !r.pass);
   console.log('\n' + '='.repeat(60));

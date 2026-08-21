@@ -77,6 +77,10 @@ body.activity { max-width: 760px; margin: 0 auto; padding: 28px 22px 60px; }
 .pill.warn { background: rgba(183, 121, 31, .14); color: var(--warn); border-color: transparent; }
 .pill.dry  { background: rgba(150, 150, 160, .14); color: var(--muted); border-color: transparent; }
 .pill.plat, .pill.time { color: var(--muted); }
+/* The kind of account, when the list says. Outlined rather than filled: it
+   describes the target, where the filled chips describe what is happening to
+   it, and those are the ones a reader is scanning for. */
+.pill.tag { color: var(--fg); border-color: var(--line); }
 
 /* activity: key/value sync block */
 .kv-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px 14px; }
@@ -209,6 +213,12 @@ footer a:hover { text-decoration: underline; }
 .field input[type="number"] { max-width: 120px; }
 
 .inline-row { display: flex; gap: 8px; align-items: center; }
+
+/* options: the tag checkboxes. Two columns so the whole vocabulary is one
+   glance rather than a scroll -- the point of the group is comparing the
+   kinds against each other, not reading them in turn. Falls to one column
+   where there is no room for two. */
+.taglist { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 16px; }
 
 /* options: the mode picker.
    This is the page's one primary decision, so the two choices are cards you

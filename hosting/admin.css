@@ -4,12 +4,35 @@
   --bg: #ffffff; --fg: #16181c; --muted: #5b6470;
   --line: #e3e6ea; --card: #f7f8fa;
   --accent: #1d6fe0; --danger: #c0392b; --warn: #b7791f; --good: #2e7d32;
+
+  /* One channel per tag, as an unwrapped rgb triple so a single rule can
+     derive both the text colour and a soft fill from it. Hues are spread
+     round the wheel so the seven read apart at chip size, and every one is
+     desaturated: these are labels on a moderation queue, not warnings.
+     `redbull` gets the true red — it is the tag an admin most needs to spot —
+     but a dulled brick red, because a lurid one would editorialise. */
+  --tag-clone: 74 111 165;          /* steel blue  */
+  --tag-impersonation: 118 88 168;  /* violet      */
+  --tag-scam: 161 116 42;           /* ochre       */
+  --tag-harassment: 142 74 119;     /* plum        */
+  --tag-spam: 60 126 104;           /* moss        */
+  --tag-redbull: 168 58 50;         /* brick red   */
+  --tag-other: 110 118 128;         /* grey        */
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #16181c; --fg: #e8eaed; --muted: #9aa4b2;
     --line: #2b2f36; --card: #1e2127;
     --accent: #6ea8fe; --danger: #ff6b5e; --warn: #e0b341; --good: #6fbf73;
+
+    /* Same hues, lifted: on a dark card the light versions go muddy. */
+    --tag-clone: 138 175 226;
+    --tag-impersonation: 182 154 230;
+    --tag-scam: 222 180 100;
+    --tag-harassment: 213 141 190;
+    --tag-spam: 122 194 168;
+    --tag-redbull: 235 129 120;
+    --tag-other: 163 171 181;
   }
 }
 
@@ -45,11 +68,31 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 .btn.good { border-color: var(--good); color: var(--good); }
 
-input[type="password"], input[type="search"], input[type="text"] {
+input[type="password"], input[type="search"], input[type="text"],
+input[type="number"], select {
   padding: 8px 10px; font: inherit; font-size: 13px;
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg); color: var(--fg);
 }
+
+/* -- tag chips ------------------------------------------------------------ */
+/* An inferred tag is a reading of the reports; an overridden one is a person's
+   verdict. They must not look alike, or the admin cannot tell which of the two
+   they are looking at -- so inferred is a soft fill and overridden is drawn
+   with an outline in the same colour. */
+.tag {
+  border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 600;
+  color: rgb(var(--t)); background: rgb(var(--t) / 0.15);
+  border: 1px solid transparent; white-space: nowrap;
+}
+.tag.over { background: transparent; border-color: rgb(var(--t) / 0.9); font-weight: 700; }
+.tag-clone         { --t: var(--tag-clone); }
+.tag-impersonation { --t: var(--tag-impersonation); }
+.tag-scam          { --t: var(--tag-scam); }
+.tag-harassment    { --t: var(--tag-harassment); }
+.tag-spam          { --t: var(--tag-spam); }
+.tag-redbull       { --t: var(--tag-redbull); }
+.tag-other         { --t: var(--tag-other); }
 
 /* -- sign-in ------------------------------------------------------------- */
 .gate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -97,6 +140,10 @@ input[type="password"], input[type="search"], input[type="text"] {
 .barrow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .track { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 999px; }
 .barrow .fill { height: 100%; background: var(--accent); border-radius: 999px; }
+/* The tag breakdown carries the same colours as the chips, so the bar and the
+   row it explains are recognisably about the same thing. */
+.bars.tinted .barrow .lbl { color: rgb(var(--t)); font-weight: 600; }
+.bars.tinted .barrow .fill { background: rgb(var(--t)); }
 
 /* -- toolbar ------------------------------------------------------------- */
 .toolbar { display: flex; align-items: center; justify-content: space-between;
@@ -109,6 +156,27 @@ input[type="password"], input[type="search"], input[type="text"] {
 }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 #filter { flex: 1; min-width: 200px; }
+
+/* -- tag filter ----------------------------------------------------------- */
+/* A second axis under the status tabs: status is what has been decided about a
+   target, tag is what it is. They filter independently because the questions
+   are independent -- "what is still pending" and "what are the scams" are not
+   the same question. */
+.tagfilter { display: flex; align-items: center; gap: 6px;
+             flex-wrap: wrap; margin-bottom: 12px; }
+.tagfilter .flbl { font-size: 11px; text-transform: uppercase;
+                   letter-spacing: .06em; color: var(--muted); margin-right: 2px; }
+.tagchip {
+  padding: 3px 10px; font: inherit; font-size: 11px; font-weight: 600;
+  border-radius: 999px; cursor: pointer;
+  /* Off is not "greyed out but still readable": an unselected tag is
+     genuinely excluding rows, so it drops to the page's muted colour. */
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.tagchip.on { color: rgb(var(--t)); border-color: rgb(var(--t) / 0.55);
+              background: rgb(var(--t) / 0.15); }
+.tagchip .n { opacity: .65; margin-left: 4px; font-weight: 400; }
+.tagchip.all { --t: var(--tag-other); }
 
 .bulkbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -145,6 +213,10 @@ input[type="password"], input[type="search"], input[type="text"] {
                  border-left: 2px solid var(--line); font-size: 12px; color: var(--muted); }
 .report .notes div { margin: 3px 0; }
 .report .actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.report .retag { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.report .retag span { font-size: 11px; text-transform: uppercase;
+                      letter-spacing: .06em; color: var(--muted); }
+.report .retag select { padding: 5px 8px; font-size: 12px; }
 
 /* -- trust ---------------------------------------------------------------- */
 .report .score { border: 1px solid var(--accent); color: var(--accent);
@@ -158,6 +230,32 @@ input[type="password"], input[type="search"], input[type="text"] {
 }
 .report .rep.good { border-color: var(--good); color: var(--good); }
 .report .rep.bad  { border-color: var(--danger); color: var(--danger); }
+
+/* -- ranking dials -------------------------------------------------------- */
+/* The form and the preview sit side by side deliberately: a weight is
+   meaningless as a number, and only means something as the order it produces. */
+.ranking { display: grid; gap: 20px; grid-template-columns: minmax(260px, 1fr) minmax(280px, 1.1fr); }
+@media (max-width: 760px) { .ranking { grid-template-columns: 1fr; } }
+.rankfields { display: flex; flex-direction: column; gap: 10px; }
+.rankfield { display: grid; grid-template-columns: 1fr 92px; gap: 4px 10px; align-items: center; }
+.rankfield .fname { font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                    font-size: 12px; }
+.rankfield .fhelp { grid-column: 1 / -1; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.rankfield input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+.rankactions { margin-top: 12px; flex-wrap: wrap; }
+#rankMsg { font-size: 11px; }
+#rankMsg.dirty { color: var(--warn); }
+
+.prow { display: grid; grid-template-columns: 20px 1fr auto; gap: 4px 8px;
+        align-items: baseline; padding: 4px 0; border-top: 1px solid var(--line); }
+.prow:first-child { border-top: none; }
+.prow .pos { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prow .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .prank { font-weight: 700; font-variant-numeric: tabular-nums; }
+.prow .pwhy { grid-column: 2 / -1; font-size: 11px; color: var(--muted); }
+/* The chip has to sit on the baseline of the name it labels, and a grid item
+   cannot; wrapping the two keeps the row a three-column grid. */
+.prow .pnamewrap { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
 
 /* -- trending matrix ------------------------------------------------------ */
 /* A wide matrix scrolls inside its own box; the page must never scroll
